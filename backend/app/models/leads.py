@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""
+Lead generation models
+"""
+
+from sqlalchemy import Column, String, Boolean, Text, JSON, ForeignKey, Integer, Enum, DateTime, Float
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+import enum
+import uuid
+from .base import Base, BaseModel
+
+
+class LeadGenerationStatus(enum.Enum):
+    """Lead generation campaign status"""
+    DRAFT = "draft"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class LeadStatus(enum.Enum):
+    """Lead status enumeration"""
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUALIFIED = "qualified"
+    CONVERTED = "converted"
+    REJECTED = "rejected"
+    DUPLICATE = "duplicate"
+
+
+class LeadSource(enum.Enum):
+    """Lead source enumeration"""
+    AI_GENERATED = "ai_generated"
+    MANUAL_ENTRY = "manual_entry"
+    IMPORT = "import"
+    REFERRAL = "referral"
+    CAMPAIGN = "campaign"
+
+
+class LeadGenerationCampaign(BaseModel):
+    """Lead generation campaign model"""
+    __tablename__ = "lead_generation_campaigns"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    
+    # Campaign details
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    prompt_type = Column(String(100), nullable=False)
+    custom_prompt = Column(Text, nullable=True)
+    
+    # Search parameters
+    postcode = Column(String(20), nullable=False)
+    distance_miles = Column(Integer, default=20)
+    max_results = Column(Integer, default=100)
+    
+    # Campaign settings
+    include_existing_customers = Column(Boolean, default=False)
+    exclude_duplicates = Column(Boolean, default=True)
+    minimum_company_size = Column(Integer, nullable=True)
+    business_sectors = Column(JSON, nullable=True)
+    
+    # Status and tracking
+    status = Column(Enum(LeadGenerationStatus), default=LeadGenerationStatus.DRAFT, nullable=False)
+    total_found = Column(Integer, default=0)
+    leads_created = Column(Integer, default=0)
+    duplicates_found = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0)
+    
+    # Results
+    ai_analysis_summary = Column(Text, nullable=True)
+    search_criteria_used = Column(JSON, nullable=True)
+    data_sources_used = Column(JSON, nullable=True)
+    
+    # Timestamps
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relationships
+    leads = relationship("Lead", back_populates="campaign", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<LeadGenerationCampaign {self.name}>"
+
+
+class Lead(BaseModel):
+    """Lead model"""
+    __tablename__ = "leads"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    campaign_id = Column(String(36), ForeignKey("lead_generation_campaigns.id"), nullable=True, index=True)
+    
+    # Basic information
+    company_name = Column(String(255), nullable=False, index=True)
+    website = Column(String(500), nullable=True)
+    
+    # Address information
+    address = Column(Text, nullable=True)
+    postcode = Column(String(20), nullable=True)
+    
+    # Business details
+    business_sector = Column(String(100), nullable=True)
+    company_size = Column(String(50), nullable=True)
+    
+    # Contact information
+    contact_name = Column(String(200), nullable=True)
+    contact_email = Column(String(255), nullable=True)
+    contact_phone = Column(String(50), nullable=True)
+    contact_title = Column(String(200), nullable=True)
+    
+    # Lead details
+    status = Column(Enum(LeadStatus), default=LeadStatus.NEW, nullable=False)
+    lead_score = Column(Integer, default=50)
+    source = Column(Enum(LeadSource), default=LeadSource.AI_GENERATED, nullable=False)
+    
+    # Project information
+    potential_project_value = Column(Float, nullable=True)
+    timeline_estimate = Column(String(100), nullable=True)
+    
+    # External data
+    ai_analysis = Column(JSON, nullable=True)
+    linkedin_url = Column(String(500), nullable=True)
+    linkedin_data = Column(JSON, nullable=True)
+    companies_house_data = Column(JSON, nullable=True)
+    website_data = Column(JSON, nullable=True)
+    
+    # Conversion tracking
+    converted_to_customer_id = Column(String(36), ForeignKey("customers.id"), nullable=True)
+    
+    # Relationships
+    campaign = relationship("LeadGenerationCampaign", back_populates="leads")
+    interactions = relationship("LeadInteraction", back_populates="lead", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<Lead {self.company_name}>"
+
+
+class LeadInteraction(BaseModel):
+    """Lead interaction model"""
+    __tablename__ = "lead_interactions"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    lead_id = Column(String(36), ForeignKey("leads.id"), nullable=False, index=True)
+    
+    # Interaction details
+    interaction_type = Column(String(50), nullable=False)
+    subject = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    
+    # Follow-up
+    follow_up_date = Column(DateTime(timezone=True), nullable=True)
+    follow_up_completed = Column(Boolean, default=False)
+    
+    # Metadata
+    duration_minutes = Column(Integer, nullable=True)
+    outcome = Column(String(100), nullable=True)
+    
+    # Relationships
+    lead = relationship("Lead", back_populates="interactions")
+    
+    def __repr__(self):
+        return f"<LeadInteraction {self.interaction_type} - {self.subject}>"
+
+
+class LeadGenerationPrompt(BaseModel):
+    """Lead generation prompt template model"""
+    __tablename__ = "lead_generation_prompts"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    
+    # Prompt details
+    name = Column(String(255), nullable=False)
+    prompt_type = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    content = Column(Text, nullable=False)
+    
+    # Settings
+    is_active = Column(Boolean, default=True, nullable=False)
+    requires_company_name = Column(Boolean, default=False, nullable=False)
+    
+    # Relationships
+    pass  # No relationships needed for now
+    
+    def __repr__(self):
+        return f"<LeadGenerationPrompt {self.name}>"
