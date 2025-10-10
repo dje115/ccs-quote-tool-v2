@@ -17,6 +17,8 @@ import LeadDetail from './pages/LeadDetail';
 import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
 import Quotes from './pages/Quotes';
+import Users from './pages/Users';
+import Settings from './pages/Settings';
 
 const theme = createTheme({
   palette: {
@@ -104,6 +106,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Quotes />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <Users />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
               </ProtectedRoute>
             }
           />

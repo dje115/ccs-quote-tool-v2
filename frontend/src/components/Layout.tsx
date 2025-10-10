@@ -25,7 +25,8 @@ import {
   Description as QuotesIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
-  AccountCircle
+  AccountCircle,
+  Group as GroupIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -66,6 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Leads', icon: <LeadsIcon />, path: '/leads' },
     { text: 'Campaigns', icon: <CampaignIcon />, path: '/campaigns' },
     { text: 'Quotes', icon: <QuotesIcon />, path: '/quotes' },
+    { text: 'Users', icon: <GroupIcon />, path: '/users' },
   ];
 
   const drawer = (
