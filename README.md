@@ -1,12 +1,20 @@
 # CCS Quote Tool v2 - Multi-Tenant SaaS Platform
 ## Modern CRM & Quoting Platform with AI-Powered Features
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/your-repo/ccs-quote-tool-v2)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/dje115/ccs-quote-tool-v2)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://docker.com)
 [![Multi-tenant](https://img.shields.io/badge/multi--tenant-enabled-green.svg)](#)
 [![AI-Powered](https://img.shields.io/badge/AI--powered-orange.svg)](#)
 
-A modern, scalable, multi-tenant SaaS platform for customer relationship management and quoting with AI-powered lead generation, multilingual support, and real-time collaboration.
+A modern, scalable, multi-tenant SaaS platform for customer relationship management and quoting with AI-powered lead generation, **multilingual support with 10 languages**, **Argon2 security**, and real-time collaboration.
+
+## ✨ **Latest Features (v2.1.0)**
+
+- 🌍 **Multilingual Support**: 10 languages (EN, ES, FR, DE, IT, PT, NL, RU, JA, ZH) with AI-powered translation
+- 🛡️ **Argon2 Security**: Industry-leading password hashing (winner of Password Hashing Competition 2015)
+- 🤖 **AI Integration**: GPT-5-powered features and dynamic translations
+- 🏢 **Multi-Tenant SaaS**: Complete tenant isolation with row-level security
+- 📱 **Modern UI**: Material-UI with responsive design and working language selector
 
 ## 🚀 **Quick Start**
 
