@@ -143,17 +143,29 @@ const Settings: React.FC = () => {
         }
       });
       
+      // Clone the response to avoid "body stream already read" error
+      const responseClone = response.clone();
+      const contentType = response.headers.get('content-type');
+      
       let result;
-      try {
-        result = await response.json();
-      } catch (jsonError) {
-        // Handle cases where response is not valid JSON (proxy errors)
-        const textResponse = await response.text();
-        setTestResult({
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          result = await response.json();
+        } catch (jsonError) {
+          // Fallback to text if JSON parsing fails
+          const textResponse = await responseClone.text();
+          result = {
+            success: false,
+            message: `Invalid JSON response: ${textResponse.substring(0, 200)}...`
+          };
+        }
+      } else {
+        // Handle non-JSON responses (proxy errors, HTML pages, etc.)
+        const textResponse = await responseClone.text();
+        result = {
           success: false,
           message: `Server returned non-JSON response. This may indicate a proxy or network issue. Response: ${textResponse.substring(0, 200)}...`
-        });
-        return;
+        };
       }
       
       setTestResult(result);
