@@ -7,6 +7,9 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
+import Customers from './pages/Customers';
+import Leads from './pages/Leads';
+import Campaigns from './pages/Campaigns';
 
 const theme = createTheme({
   palette: {
@@ -38,6 +41,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute>
+                <Customers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/leads"
+            element={
+              <ProtectedRoute>
+                <Leads />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns"
+            element={
+              <ProtectedRoute>
+                <Campaigns />
               </ProtectedRoute>
             }
           />
