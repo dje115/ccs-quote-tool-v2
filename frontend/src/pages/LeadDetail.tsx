@@ -287,7 +287,7 @@ const LeadDetail: React.FC = () => {
               <Chip
                 label={lead.lead_score || 0}
                 color={lead.lead_score >= 70 ? 'success' : lead.lead_score >= 40 ? 'warning' : 'default'}
-                size="large"
+                sx={{ fontSize: '1.2rem', padding: '20px 12px' }}
               />
 
               <Typography variant="caption" display="block" sx={{ mt: 2 }} color="text.secondary">
