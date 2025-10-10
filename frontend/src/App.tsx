@@ -3,13 +3,19 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
+// Components
+import Layout from './components/Layout';
+
 // Pages
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
+import CustomerDetail from './pages/CustomerDetail';
 import Leads from './pages/Leads';
 import Campaigns from './pages/Campaigns';
+import CampaignCreate from './pages/CampaignCreate';
+import Quotes from './pages/Quotes';
 
 const theme = createTheme({
   palette: {
@@ -22,10 +28,10 @@ const theme = createTheme({
   },
 });
 
-// Protected route wrapper
+// Protected route wrapper with layout
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem('access_token');
-  return token ? <>{children}</> : <Navigate to="/login" />;
+  return token ? <Layout>{children}</Layout> : <Navigate to="/login" />;
 };
 
 function App() {
@@ -53,6 +59,14 @@ function App() {
             }
           />
           <Route
+            path="/customers/:id"
+            element={
+              <ProtectedRoute>
+                <CustomerDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/leads"
             element={
               <ProtectedRoute>
@@ -65,6 +79,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Campaigns />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns/new"
+            element={
+              <ProtectedRoute>
+                <CampaignCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quotes"
+            element={
+              <ProtectedRoute>
+                <Quotes />
               </ProtectedRoute>
             }
           />
