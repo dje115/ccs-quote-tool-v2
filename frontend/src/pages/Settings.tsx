@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -12,19 +12,40 @@ import {
   Card,
   CardContent,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress
 } from '@mui/material';
 import {
   Save as SaveIcon,
   Key as KeyIcon,
   Business as BusinessIcon,
-  Notifications as NotificationsIcon
+  Notifications as NotificationsIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Science as ScienceIcon
 } from '@mui/icons-material';
 
 const Settings: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // API Status
+  const [apiStatus, setApiStatus] = useState({
+    openai: { configured: false, status: 'not_configured' },
+    google_maps: { configured: false, status: 'not_configured' },
+    companies_house: { configured: false, status: 'not_configured' }
+  });
+
+  // Test Modal
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
 
   // Profile settings
   const [profileData, setProfileData] = useState({
@@ -48,6 +69,30 @@ const Settings: React.FC = () => {
     email_on_campaign_complete: true,
     daily_summary: false
   });
+
+  // Load API status on component mount
+  useEffect(() => {
+    loadApiStatus();
+  }, []);
+
+  const loadApiStatus = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/v1/settings/api-status', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const status = await response.json();
+        setApiStatus(status);
+      }
+    } catch (error) {
+      console.error('Error loading API status:', error);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -74,11 +119,61 @@ const Settings: React.FC = () => {
       // API call to save API keys
       await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
       setSuccess('API settings updated successfully!');
+      // Reload API status after saving
+      loadApiStatus();
     } catch (err) {
       setError('Failed to update API settings');
     } finally {
       setSaving(false);
     }
+  };
+
+  const testAPI = async (apiType: string) => {
+    setTesting(true);
+    setTestModalOpen(true);
+    setTestResult(null);
+    
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`/api/v1/settings/test-${apiType}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        // Handle cases where response is not valid JSON (proxy errors)
+        const textResponse = await response.text();
+        setTestResult({
+          success: false,
+          message: `Server returned non-JSON response. This may indicate a proxy or network issue. Response: ${textResponse.substring(0, 200)}...`
+        });
+        return;
+      }
+      
+      setTestResult(result);
+      
+      // Reload API status after test
+      loadApiStatus();
+    } catch (error) {
+      console.error('API Test Error:', error);
+      setTestResult({
+        success: false,
+        message: `Network error: ${error}. Please check your internet connection and try again.`
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const closeTestModal = () => {
+    setTestModalOpen(false);
+    setTestResult(null);
   };
 
   const handleSaveNotifications = async () => {
@@ -313,6 +408,83 @@ const Settings: React.FC = () => {
           </Card>
         </Grid>
 
+        {/* API Status */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                <ScienceIcon color="primary" />
+                <Typography variant="h6">API Status</Typography>
+              </Box>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body1">OpenAI API</Typography>
+                    <Chip
+                      icon={apiStatus.openai.configured ? <CheckCircleIcon /> : <CancelIcon />}
+                      label={apiStatus.openai.configured ? 'Configured' : 'Not Configured'}
+                      color={apiStatus.openai.configured ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ScienceIcon />}
+                    onClick={() => testAPI('openai')}
+                    fullWidth
+                  >
+                    Test Connection
+                  </Button>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body1">Google Maps API</Typography>
+                    <Chip
+                      icon={apiStatus.google_maps.configured ? <CheckCircleIcon /> : <CancelIcon />}
+                      label={apiStatus.google_maps.configured ? 'Configured' : 'Not Configured'}
+                      color={apiStatus.google_maps.configured ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ScienceIcon />}
+                    onClick={() => testAPI('google-maps')}
+                    fullWidth
+                  >
+                    Test Connection
+                  </Button>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body1">Companies House API</Typography>
+                    <Chip
+                      icon={apiStatus.companies_house.configured ? <CheckCircleIcon /> : <CancelIcon />}
+                      label={apiStatus.companies_house.configured ? 'Configured' : 'Not Configured'}
+                      color={apiStatus.companies_house.configured ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ScienceIcon />}
+                    onClick={() => testAPI('companies-house')}
+                    fullWidth
+                  >
+                    Test Connection
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
         {/* Password Change */}
         <Grid item xs={12} md={6}>
           <Card>
@@ -362,6 +534,36 @@ const Settings: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Test Results Modal */}
+      <Dialog open={testModalOpen} onClose={closeTestModal} maxWidth="sm" fullWidth>
+        <DialogTitle>API Test Results</DialogTitle>
+        <DialogContent>
+          {testing ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 3 }}>
+              <CircularProgress size={40} sx={{ mb: 2 }} />
+              <Typography variant="body1">Testing API connection...</Typography>
+            </Box>
+          ) : testResult ? (
+            <Alert 
+              severity={testResult.success ? 'success' : 'error'}
+              sx={{ mt: 2 }}
+            >
+              <Typography variant="h6" gutterBottom>
+                {testResult.success ? 'API Test Successful!' : 'API Test Failed'}
+              </Typography>
+              <Typography variant="body2">
+                {testResult.message}
+              </Typography>
+            </Alert>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeTestModal}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

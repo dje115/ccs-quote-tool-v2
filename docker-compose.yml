@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: ccs-postgres
     environment:
       POSTGRES_DB: ccs_quote_tool
@@ -44,6 +44,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: development
     container_name: ccs-backend
     environment:
       - DATABASE_URL=postgresql://postgres:postgres_password_2025@postgres:5432/ccs_quote_tool

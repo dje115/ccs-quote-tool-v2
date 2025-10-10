@@ -20,8 +20,8 @@ from passlib.context import CryptContext
 import uuid
 
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - using Argon2 (most secure and modern algorithm)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # Create database engine
 engine = create_engine(

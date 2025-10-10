@@ -29,6 +29,8 @@ import {
   Group as GroupIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import SimpleLanguageSelector from './SimpleLanguageSelector';
 
 const drawerWidth = 240;
 
@@ -39,6 +41,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -62,12 +65,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    { text: 'Customers', icon: <PeopleIcon />, path: '/customers' },
-    { text: 'Leads', icon: <LeadsIcon />, path: '/leads' },
-    { text: 'Campaigns', icon: <CampaignIcon />, path: '/campaigns' },
-    { text: 'Quotes', icon: <QuotesIcon />, path: '/quotes' },
-    { text: 'Users', icon: <GroupIcon />, path: '/users' },
+    { text: t('navigation.dashboard'), icon: <DashboardIcon />, path: '/dashboard' },
+    { text: t('navigation.customers'), icon: <PeopleIcon />, path: '/customers' },
+    { text: t('navigation.leads'), icon: <LeadsIcon />, path: '/leads' },
+    { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
+    { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
+    { text: t('navigation.users'), icon: <GroupIcon />, path: '/users' },
+    { text: t('navigation.settings'), icon: <SettingsIcon />, path: '/settings' },
   ];
 
   const drawer = (
@@ -128,6 +132,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {menuItems.find(item => item.path === location.pathname)?.text || 'CCS Quote Tool'}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <SimpleLanguageSelector />
             <Typography variant="body2">
               {user.email || 'User'}
             </Typography>
@@ -160,11 +165,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 Profile
               </MenuItem>
               <MenuItem onClick={() => { handleClose(); navigate('/settings'); }}>
-                Settings
+                {t('navigation.settings')}
               </MenuItem>
               <Divider />
               <MenuItem onClick={handleLogout}>
-                <LogoutIcon sx={{ mr: 1 }} /> Logout
+                <LogoutIcon sx={{ mr: 1 }} /> {t('navigation.logout')}
               </MenuItem>
             </Menu>
           </Box>
