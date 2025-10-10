@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
 import CustomerDetail from './pages/CustomerDetail';
 import Leads from './pages/Leads';
+import LeadDetail from './pages/LeadDetail';
 import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
 import Quotes from './pages/Quotes';
@@ -71,6 +72,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Leads />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/leads/:id"
+            element={
+              <ProtectedRoute>
+                <LeadDetail />
               </ProtectedRoute>
             }
           />
