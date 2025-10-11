@@ -37,9 +37,9 @@ const Settings: React.FC = () => {
 
   // API Status
   const [apiStatus, setApiStatus] = useState({
-    openai: { configured: false, status: 'not_configured' },
-    google_maps: { configured: false, status: 'not_configured' },
-    companies_house: { configured: false, status: 'not_configured' }
+    openai: { configured: false, status: 'not_configured', source: 'none' },
+    google_maps: { configured: false, status: 'not_configured', source: 'none' },
+    companies_house: { configured: false, status: 'not_configured', source: 'none' }
   });
 
   // Test Modal
@@ -62,6 +62,13 @@ const Settings: React.FC = () => {
     google_maps_key: ''
   });
 
+  // API keys for saving (matching the form fields)
+  const [apiKeys, setApiKeys] = useState({
+    openai: '',
+    companiesHouse: '',
+    googleMaps: ''
+  });
+
   // Notification settings
   const [notifications, setNotifications] = useState({
     email_on_new_lead: true,
@@ -70,15 +77,17 @@ const Settings: React.FC = () => {
     daily_summary: false
   });
 
-  // Load API status on component mount
+  // Load API status and profile data on component mount
   useEffect(() => {
     loadApiStatus();
+    loadProfileData();
   }, []);
 
   const loadApiStatus = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('/api/v1/settings/api-status', {
+      // Use direct API call like the admin portal instead of proxy
+      const response = await fetch('http://localhost:8000/api/v1/settings/api-status', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -91,6 +100,23 @@ const Settings: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading API status:', error);
+    }
+  };
+
+  const loadProfileData = async () => {
+    try {
+      // Get user data from localStorage (set during login)
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      
+      // Set profile data from user data
+      setProfileData({
+        first_name: userData.first_name || '',
+        last_name: userData.last_name || '',
+        email: userData.email || '',
+        phone: userData.phone || '' // This should be phone, not email
+      });
+    } catch (error) {
+      console.error('Error loading profile data:', error);
     }
   };
 
@@ -116,11 +142,29 @@ const Settings: React.FC = () => {
     setSuccess('');
     
     try {
-      // API call to save API keys
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
-      setSuccess('API settings updated successfully!');
-      // Reload API status after saving
-      loadApiStatus();
+      const token = localStorage.getItem('access_token');
+      // Use direct API call like the admin portal instead of proxy
+      const response = await fetch('http://localhost:8000/api/v1/settings/api-keys', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          openai_api_key: apiKeys.openai,
+          companies_house_api_key: apiKeys.companiesHouse,
+          google_maps_api_key: apiKeys.googleMaps
+        })
+      });
+      
+      if (response.ok) {
+        setSuccess('API settings updated successfully!');
+        // Reload API status after saving
+        loadApiStatus();
+      } else {
+        const errorData = await response.json();
+        setError(errorData.detail || 'Failed to update API settings');
+      }
     } catch (err) {
       setError('Failed to update API settings');
     } finally {
@@ -135,7 +179,8 @@ const Settings: React.FC = () => {
     
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`/api/v1/settings/test-${apiType}`, {
+      // Use direct API call like the admin portal instead of proxy
+      const response = await fetch(`http://localhost:8000/api/v1/settings/test-${apiType}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -378,8 +423,8 @@ const Settings: React.FC = () => {
                     fullWidth
                     label="OpenAI API Key"
                     type="password"
-                    value={apiData.openai_key}
-                    onChange={(e) => setApiData({ ...apiData, openai_key: e.target.value })}
+                    value={apiKeys.openai}
+                    onChange={(e) => setApiKeys({ ...apiKeys, openai: e.target.value })}
                     helperText="For AI-powered lead generation"
                   />
                 </Grid>
@@ -388,10 +433,8 @@ const Settings: React.FC = () => {
                     fullWidth
                     label="Companies House API Key"
                     type="password"
-                    value={apiData.companies_house_key}
-                    onChange={(e) =>
-                      setApiData({ ...apiData, companies_house_key: e.target.value })
-                    }
+                    value={apiKeys.companiesHouse}
+                    onChange={(e) => setApiKeys({ ...apiKeys, companiesHouse: e.target.value })}
                     helperText="For UK company data"
                   />
                 </Grid>
@@ -400,8 +443,8 @@ const Settings: React.FC = () => {
                     fullWidth
                     label="Google Maps API Key"
                     type="password"
-                    value={apiData.google_maps_key}
-                    onChange={(e) => setApiData({ ...apiData, google_maps_key: e.target.value })}
+                    value={apiKeys.googleMaps}
+                    onChange={(e) => setApiKeys({ ...apiKeys, googleMaps: e.target.value })}
                     helperText="For location services"
                   />
                 </Grid>
@@ -435,7 +478,11 @@ const Settings: React.FC = () => {
                     <Typography variant="body1">OpenAI API</Typography>
                     <Chip
                       icon={apiStatus.openai.configured ? <CheckCircleIcon /> : <CancelIcon />}
-                      label={apiStatus.openai.configured ? 'Configured' : 'Not Configured'}
+                      label={
+                        apiStatus.openai.configured 
+                          ? (apiStatus.openai.source === 'system_wide' ? 'Using System-wide Key' : 'Configured')
+                          : 'Not Configured'
+                      }
                       color={apiStatus.openai.configured ? 'success' : 'error'}
                       size="small"
                     />
@@ -456,7 +503,11 @@ const Settings: React.FC = () => {
                     <Typography variant="body1">Google Maps API</Typography>
                     <Chip
                       icon={apiStatus.google_maps.configured ? <CheckCircleIcon /> : <CancelIcon />}
-                      label={apiStatus.google_maps.configured ? 'Configured' : 'Not Configured'}
+                      label={
+                        apiStatus.google_maps.configured 
+                          ? (apiStatus.google_maps.source === 'system_wide' ? 'Using System-wide Key' : 'Configured')
+                          : 'Not Configured'
+                      }
                       color={apiStatus.google_maps.configured ? 'success' : 'error'}
                       size="small"
                     />
@@ -477,7 +528,11 @@ const Settings: React.FC = () => {
                     <Typography variant="body1">Companies House API</Typography>
                     <Chip
                       icon={apiStatus.companies_house.configured ? <CheckCircleIcon /> : <CancelIcon />}
-                      label={apiStatus.companies_house.configured ? 'Configured' : 'Not Configured'}
+                      label={
+                        apiStatus.companies_house.configured 
+                          ? (apiStatus.companies_house.source === 'system_wide' ? 'Using System-wide Key' : 'Configured')
+                          : 'Not Configured'
+                      }
                       color={apiStatus.companies_house.configured ? 'success' : 'error'}
                       size="small"
                     />

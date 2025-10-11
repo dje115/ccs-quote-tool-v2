@@ -83,11 +83,13 @@ class Customer(BaseModel):
     
     # AI analysis and external data
     ai_analysis_raw = Column(JSON, nullable=True)
+    lead_score = Column(Integer, nullable=True)
     companies_house_data = Column(JSON, nullable=True)
     google_maps_data = Column(JSON, nullable=True)
     website_data = Column(JSON, nullable=True)
     linkedin_url = Column(String(500), nullable=True)
     linkedin_data = Column(JSON, nullable=True)
+    known_facts = Column(Text, nullable=True)  # User-provided facts to improve AI analysis
     
     # Address management
     excluded_addresses = Column(JSON, nullable=True)
@@ -115,8 +117,10 @@ class Contact(BaseModel):
     role = Column(Enum(ContactRole), default=ContactRole.OTHER, nullable=False)
     
     # Contact information
-    email = Column(String(255), nullable=True)
-    phone = Column(String(50), nullable=True)
+    email = Column(String(255), nullable=True)  # Primary email
+    phone = Column(String(50), nullable=True)   # Primary phone
+    emails = Column(JSON, nullable=True)  # Additional emails: [{"email": "...", "type": "work/personal", "is_primary": bool}]
+    phones = Column(JSON, nullable=True)  # Additional phones: [{"number": "...", "type": "mobile/work/home", "is_primary": bool}]
     
     # Additional details
     notes = Column(Text, nullable=True)

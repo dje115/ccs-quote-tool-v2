@@ -24,8 +24,10 @@ class ContactCreate(BaseModel):
     last_name: str
     job_title: str | None = None
     role: ContactRole = ContactRole.OTHER
-    email: EmailStr | None = None
-    phone: str | None = None
+    email: str | None = None  # Primary email
+    phone: str | None = None  # Primary phone
+    emails: list | None = None  # Additional emails
+    phones: list | None = None  # Additional phones
     notes: str | None = None
     is_primary: bool = False
 
@@ -39,8 +41,12 @@ class ContactResponse(BaseModel):
     role: str
     email: str | None
     phone: str | None
+    emails: list | None = None
+    phones: list | None = None
+    notes: str | None = None
     is_primary: bool
     created_at: datetime
+    updated_at: datetime
     
     class Config:
         from_attributes = True
@@ -53,11 +59,15 @@ async def list_customer_contacts(
     db: Session = Depends(get_db)
 ):
     """List all contacts for a customer"""
-    contacts = db.query(Contact).filter_by(
-        customer_id=customer_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).all()
+    from sqlalchemy import select
+    
+    stmt = select(Contact).where(
+        Contact.customer_id == customer_id,
+        Contact.tenant_id == current_user.tenant_id,
+        Contact.is_deleted == False
+    )
+    result = db.execute(stmt)
+    contacts = result.scalars().all()
     
     return contacts
 
@@ -81,6 +91,8 @@ async def create_contact(
             role=contact_data.role,
             email=contact_data.email,
             phone=contact_data.phone,
+            emails=contact_data.emails,
+            phones=contact_data.phones,
             notes=contact_data.notes,
             is_primary=contact_data.is_primary
         )
@@ -99,6 +111,45 @@ async def create_contact(
         )
 
 
+@router.put("/{contact_id}", response_model=ContactResponse)
+async def update_contact(
+    contact_id: str,
+    contact_data: ContactCreate,
+    current_user: User = Depends(check_permission("contact:update")),
+    db: Session = Depends(get_db)
+):
+    """Update contact"""
+    from sqlalchemy import select
+    
+    stmt = select(Contact).where(
+        Contact.id == contact_id,
+        Contact.tenant_id == current_user.tenant_id,
+        Contact.is_deleted == False
+    )
+    result = db.execute(stmt)
+    contact = result.scalars().first()
+    
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    
+    # Update fields
+    contact.first_name = contact_data.first_name
+    contact.last_name = contact_data.last_name
+    contact.job_title = contact_data.job_title
+    contact.role = contact_data.role
+    contact.email = contact_data.email
+    contact.phone = contact_data.phone
+    contact.emails = contact_data.emails
+    contact.phones = contact_data.phones
+    contact.notes = contact_data.notes
+    contact.is_primary = contact_data.is_primary
+    
+    db.commit()
+    db.refresh(contact)
+    
+    return contact
+
+
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_contact(
     contact_id: str,
@@ -106,11 +157,15 @@ async def delete_contact(
     db: Session = Depends(get_db)
 ):
     """Soft delete contact"""
-    contact = db.query(Contact).filter_by(
-        id=contact_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    from sqlalchemy import select
+    
+    stmt = select(Contact).where(
+        Contact.id == contact_id,
+        Contact.tenant_id == current_user.tenant_id,
+        Contact.is_deleted == False
+    )
+    result = db.execute(stmt)
+    contact = result.scalars().first()
     
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")

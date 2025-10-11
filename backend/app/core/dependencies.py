@@ -45,7 +45,7 @@ async def get_current_user(
                 detail="Could not validate credentials"
             )
         
-    except jwt.PyJWTError:
+    except jwt.JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"

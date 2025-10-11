@@ -53,6 +53,9 @@ services:
       - DEFAULT_TENANT=ccs
       - SUPER_ADMIN_EMAIL=admin@ccs.com
       - SUPER_ADMIN_PASSWORD=admin123
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -72,12 +75,24 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: ccs-frontend
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
     ports:
-      - "3000:3000"
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - ccs-network
+    restart: unless-stopped
+
+  # Vue.js Admin Portal
+  admin-portal:
+    build:
+      context: ./admin-portal
+      dockerfile: Dockerfile
+    container_name: ccs-admin-portal
+    ports:
+      - "3010:3010"
     volumes:
-      - ./frontend:/app
+      - ./admin-portal:/app
       - /app/node_modules
     depends_on:
       - backend

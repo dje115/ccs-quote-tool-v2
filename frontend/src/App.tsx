@@ -15,6 +15,9 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
 import CustomerDetail from './pages/CustomerDetail';
+import CustomerEdit from './pages/CustomerEdit';
+import CustomerNew from './pages/CustomerNew';
+import CustomerAnalysis from './pages/CustomerAnalysis';
 import Leads from './pages/Leads';
 import LeadDetail from './pages/LeadDetail';
 import Campaigns from './pages/Campaigns';
@@ -65,10 +68,34 @@ function App() {
             }
           />
           <Route
+            path="/customers/new"
+            element={
+              <ProtectedRoute>
+                <CustomerNew />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id/edit"
+            element={
+              <ProtectedRoute>
+                <CustomerEdit />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/customers/:id"
             element={
               <ProtectedRoute>
                 <CustomerDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id/analysis"
+            element={
+              <ProtectedRoute>
+                <CustomerAnalysis />
               </ProtectedRoute>
             }
           />

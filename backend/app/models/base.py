@@ -32,13 +32,13 @@ class SoftDeleteMixin:
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
 
-class BaseModel(TenantMixin, TimestampMixin, SoftDeleteMixin):
-    """Base model with tenant isolation, timestamps, and soft delete"""
-    pass
-
-
 # Create base class
 Base = declarative_base()
+
+
+class BaseModel(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
+    """Base model with tenant isolation, timestamps, and soft delete"""
+    __abstract__ = True  # This is an abstract base class
 
 
 def get_current_tenant_id() -> str:

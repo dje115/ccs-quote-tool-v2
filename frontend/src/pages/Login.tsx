@@ -33,12 +33,8 @@ const Login: React.FC = () => {
       localStorage.setItem('refresh_token', refresh_token);
       localStorage.setItem('user', JSON.stringify(user));
 
-      // Redirect based on role
-      if (user.role === 'super_admin') {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+      // Redirect to dashboard for all users
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
     } finally {
@@ -118,4 +114,6 @@ const Login: React.FC = () => {
 };
 
 export default Login;
+
+
 

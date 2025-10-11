@@ -5,7 +5,7 @@ Main API router for v1
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis
+from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin
 
 # Create main API router
 api_router = APIRouter()
@@ -22,4 +22,5 @@ api_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
 api_router.include_router(translation.router, prefix="/translation", tags=["translation"])
 api_router.include_router(ai_analysis.router, prefix="/ai-analysis", tags=["ai-analysis"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 

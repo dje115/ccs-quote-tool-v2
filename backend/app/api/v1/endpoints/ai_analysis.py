@@ -240,3 +240,5 @@ async def get_ai_prompts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting prompts: {str(e)}"
         )
+
+

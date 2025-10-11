@@ -84,6 +84,8 @@ export const customerAPI = {
   get: (id: string) => apiClient.get(`/customers/${id}`),
   update: (id: string, data: any) => apiClient.put(`/customers/${id}`, data),
   delete: (id: string) => apiClient.delete(`/customers/${id}`),
+  runAiAnalysis: (id: string) => apiClient.post(`/customers/${id}/ai-analysis`),
+  confirmRegistration: (id: string, confirmed: boolean) => apiClient.post(`/customers/${id}/confirm-registration?confirmed=${confirmed}`),
 };
 
 // Lead API
@@ -106,6 +108,7 @@ export const campaignAPI = {
 export const contactAPI = {
   list: (customerId: string) => apiClient.get(`/contacts/customer/${customerId}`),
   create: (data: any) => apiClient.post('/contacts/', data),
+  update: (id: string, data: any) => apiClient.put(`/contacts/${id}`, data),
   delete: (id: string) => apiClient.delete(`/contacts/${id}`),
 };
 
@@ -126,4 +129,6 @@ export const userAPI = {
   update: (id: string, data: any) => apiClient.put(`/users/${id}`, data),
   delete: (id: string) => apiClient.delete(`/users/${id}`),
 };
+
+
 

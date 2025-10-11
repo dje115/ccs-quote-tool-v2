@@ -14,22 +14,28 @@ import {
   Chip,
   IconButton,
   TextField,
-  InputAdornment
+  InputAdornment,
+  LinearProgress,
+  Tooltip
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Visibility as ViewIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  Assessment as AssessmentIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { customerAPI } from '../services/api';
+import CustomerFormSimple from '../components/CustomerFormSimple';
 
 const Customers: React.FC = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<any>(null);
 
   useEffect(() => {
     loadCustomers();
@@ -52,6 +58,33 @@ const Customers: React.FC = () => {
     (customer.website && customer.website.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const handleAddCustomer = () => {
+    setEditingCustomer(null);
+    setShowCustomerForm(true);
+  };
+
+  const handleEditCustomer = (customer: any) => {
+    setEditingCustomer(customer);
+    setShowCustomerForm(true);
+  };
+
+  const handleSaveCustomer = async (customerData: any) => {
+    try {
+      if (editingCustomer) {
+        // Update existing customer
+        await customerAPI.update(editingCustomer.id, customerData);
+      } else {
+        // Create new customer
+        await customerAPI.create(customerData);
+      }
+      setShowCustomerForm(false);
+      setEditingCustomer(null);
+      loadCustomers(); // Refresh the list
+    } catch (error) {
+      console.error('Error saving customer:', error);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -65,6 +98,12 @@ const Customers: React.FC = () => {
     }
   };
 
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return '#4caf50';
+    if (score >= 60) return '#ff9800';
+    return '#f44336';
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -74,7 +113,7 @@ const Customers: React.FC = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => navigate('/customers/new')}
+          onClick={handleAddCustomer}
         >
           Add Customer
         </Button>
@@ -143,7 +182,29 @@ const Customers: React.FC = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Chip label={customer.lead_score || 0} size="small" />
+                    {customer.lead_score ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={customer.lead_score}
+                          sx={{
+                            width: 60,
+                            height: 8,
+                            borderRadius: 4,
+                            backgroundColor: '#e0e0e0',
+                            '& .MuiLinearProgress-bar': {
+                              backgroundColor: getScoreColor(customer.lead_score),
+                              borderRadius: 4
+                            }
+                          }}
+                        />
+                        <Typography variant="body2" sx={{ minWidth: 30 }}>
+                          {customer.lead_score}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Chip label="No Score" size="small" variant="outlined" />
+                    )}
                   </TableCell>
                   <TableCell align="right">
                     <IconButton
@@ -152,12 +213,24 @@ const Customers: React.FC = () => {
                     >
                       <ViewIcon />
                     </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => navigate(`/customers/${customer.id}/edit`)}
-                    >
-                      <EditIcon />
-                    </IconButton>
+                    <Tooltip title="Edit Customer">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditCustomer(customer)}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    {customer.ai_analysis && (
+                      <Tooltip title="View AI Analysis">
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate(`/customers/${customer.id}/analysis`)}
+                        >
+                          <AssessmentIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -171,6 +244,16 @@ const Customers: React.FC = () => {
           Total: {filteredCustomers.length} customers
         </Typography>
       </Box>
+
+      {/* Customer Form Dialog */}
+      <CustomerFormSimple
+        open={showCustomerForm}
+        onClose={() => {
+          setShowCustomerForm(false);
+          setEditingCustomer(null);
+        }}
+        onSave={handleSaveCustomer}
+      />
     </Container>
   );
 };
