@@ -1,249 +1,156 @@
 # 🚀 CCS Quote Tool v2 - Quick Start Guide
 
-**Version**: 2.0.0  
-**Last Updated**: October 10, 2025
+## 📋 Environment Overview
+
+This project has **TWO separate environments** that can run independently:
+
+### 🔧 Development Environment
+- **Purpose:** Active development with instant code updates
+- **Ports:** Different from production to avoid conflicts
+- **Features:** Hot-reload, volume mounts, faster iteration
+
+### 🏭 Production Environment
+- **Purpose:** Production-ready deployment and testing
+- **Ports:** Standard ports (3000, 8000, 3010)
+- **Features:** Optimized builds, minified assets, production configuration
 
 ---
 
-## ⚡ **Get Started in 3 Minutes**
+## 🎯 Quick Commands
 
-### 1. **Start All Services**
-```bash
-cd "C:\Users\david\Documents\CCS quote tool\CCS Quote Tool v2"
-docker-compose up -d
+### Start Development
+```powershell
+.\dev-start.ps1
 ```
+**Access at:**
+- Frontend: http://localhost:3001
+- Admin Portal: http://localhost:3011
+- Backend API: http://localhost:8001/docs
 
-### 2. **Access the Application**
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-
-### 3. **Login**
-- **Email**: admin@ccs.com
-- **Password**: admin123
-- **Role**: Super Admin
-
----
-
-## 🎯 **What You Can Do**
-
-### As Super Admin
-1. **Manage Tenants**
-   - View all tenants
-   - Create new tenants
-   - Update tenant settings
-   - Configure API keys per tenant
-
-2. **Manage System**
-   - View system-wide statistics
-   - Monitor API usage
-   - Configure system settings
-
-### As Tenant Admin (CCS)
-1. **Manage Customers**
-   - Add/edit/delete customers
-   - View customer details
-   - AI-powered customer intelligence
-
-2. **Generate Leads**
-   - Create AI-powered campaigns
-   - Find prospects automatically
-   - Score and qualify leads
-
-3. **Create Quotes**
-   - Generate professional quotes
-   - Track quote status
-   - Manage pricing
-
-4. **Manage Team**
-   - Add users to your tenant
-   - Assign roles and permissions
-   - Track user activity
-
----
-
-## 🆕 **Create a New Tenant (Self-Service)**
-
-### Option 1: Via UI (When Frontend is Running)
-1. Go to http://localhost:3000/signup
-2. Fill in company details
-3. Create admin account
-4. Start 30-day free trial
-
-### Option 2: Via API
-```bash
-curl -X POST http://localhost:8000/api/v1/tenants/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Your Company Name",
-    "slug": "yourcompany",
-    "admin_email": "admin@yourcompany.com",
-    "admin_password": "securepassword",
-    "admin_first_name": "John",
-    "admin_last_name": "Doe"
-  }'
+### Stop Development
+```powershell
+.\dev-stop.ps1
 ```
 
 ---
 
-## 🔧 **Common Commands**
-
-### View Logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f backend
-docker-compose logs -f frontend
-docker-compose logs -f postgres
+### Start Production
+```powershell
+.\prod-start.ps1
 ```
-
-### Stop Services
-```bash
-docker-compose down
-```
-
-### Rebuild After Changes
-```bash
-# Rebuild backend
-docker-compose build backend
-docker-compose up -d backend
-
-# Rebuild frontend
-docker-compose build frontend
-docker-compose up -d frontend
-```
-
-### Check Service Health
-```bash
-docker ps
-curl http://localhost:8000/health
-```
-
----
-
-## 📊 **Service Status**
-
-### Current Status
-```
-✅ Backend API      → Port 8000 (Healthy)
-✅ PostgreSQL       → Port 5432 (Healthy)
-✅ Redis            → Port 6379 (Healthy)
-🔄 Frontend         → Port 3000 (Building...)
-⏳ Celery Worker    → Not started yet
-⏳ Celery Beat      → Not started yet
-```
-
----
-
-## 🎯 **Features Available**
-
-### ✅ Working Now
-- Multi-tenant architecture
-- Tenant signup
-- User authentication
-- Customer management (API)
-- Lead management (API)
-- Campaign management (API)
-- Quote management (API)
-- AI lead generation
-- Companies House integration
-- Google Maps integration
-- Multilingual translation
-
-### 🔄 Coming Soon
-- Full frontend UI
-- Dashboard analytics
-- Real-time updates
-- Email notifications
-- PDF quote generation
-- Advanced reporting
-
----
-
-## 🔑 **API Keys**
-
-The system uses API keys from v1:
-- ✅ OpenAI (GPT-5-mini)
-- ✅ Companies House
-- ✅ Google Maps
-
-**Location**: `.env` file (gitignored for security)
-
----
-
-## 📱 **Multi-Tenant Features**
-
-### Tenant Isolation
-- Each tenant has isolated data (customers, leads, quotes)
-- Row-level security in database
-- Tenant-specific API keys supported
-- System-wide API keys as fallback
-
-### User Roles
-1. **Super Admin** - System-wide management
-2. **Tenant Admin** - Full tenant management
-3. **Manager** - Team and data management
-4. **Sales Rep** - CRM and quoting
-5. **User** - Read-only access
-
----
-
-## 🆘 **Troubleshooting**
-
-### Backend Not Starting
-```bash
-docker-compose logs backend
-docker-compose restart backend
-```
-
-### Frontend Build Issues
-```bash
-docker-compose build --no-cache frontend
-```
-
-### Database Connection Issues
-```bash
-docker-compose restart postgres
-docker-compose logs postgres
-```
-
-### Clear All and Start Fresh
-```bash
-docker-compose down -v
-docker-compose up -d
-```
-
----
-
-## 📞 **Quick Reference**
-
-### URLs
+**Access at:**
 - Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+- Admin Portal: http://localhost:3010
+- Backend API: http://localhost:8000/docs
 
-### Default Credentials
-- Email: admin@ccs.com
-- Password: admin123
-
-### Database
-- Host: localhost
-- Port: 5432
-- Database: ccs_quote_tool
-- User: postgres
-- Password: postgres_password_2025
+### Stop Production
+```powershell
+.\prod-stop.ps1
+```
 
 ---
 
-**Ready to use! 🚀**
+## 🔍 Port Reference
+
+| Service | Development | Production |
+|---------|-------------|------------|
+| Frontend | 3001 | 3000 |
+| Admin Portal | 3011 | 3010 |
+| Backend API | 8001 | 8000 |
+| PostgreSQL | 5432 | 5432 |
+| Redis | 6379 | 6379 |
+
+> **💡 Tip:** The different ports make it easy to know which environment you're using. If you see port 3001, you're in development mode with hot-reload enabled!
+
+---
+
+## 🛠️ Common Tasks
+
+### View Logs (Development)
+```powershell
+docker-compose -f docker-compose.dev.yml logs -f
+```
+
+### View Logs (Production)
+```powershell
+docker-compose -f docker-compose.prod.yml logs -f
+```
+
+### Rebuild Containers (Development)
+```powershell
+docker-compose -f docker-compose.dev.yml up -d --build
+```
+
+### Rebuild Containers (Production)
+```powershell
+docker-compose -f docker-compose.prod.yml up -d --build
+```
+
+---
+
+## 📝 Key Differences
+
+### Development Mode
+- ✅ Hot-reload for frontend and admin portal
+- ✅ Source code changes appear instantly
+- ✅ Faster development workflow
+- ✅ Development-optimized builds
+- ✅ Running on ports 3001, 8001, 3011
+
+### Production Mode
+- ✅ Optimized and minified builds
+- ✅ Production-ready configuration
+- ✅ Nginx serving static files
+- ✅ Better performance
+- ✅ Running on standard ports 3000, 8000, 3010
+
+---
+
+## 🎓 Default Login
+
+Both environments use the same database:
+
+- **Email:** admin@ccs.com
+- **Password:** admin123
+
+---
+
+## ⚠️ Important Notes
+
+1. **Only one environment can run at a time** (they share PostgreSQL and Redis ports)
+2. **Always stop one before starting the other** using the stop scripts
+3. **Database data persists** between environment switches
+4. **Hot-reload only works in development mode**
+
+---
+
+## 🆘 Troubleshooting
+
+### Port Already in Use
+If you see a port conflict, stop the other environment first:
+```powershell
+.\dev-stop.ps1
+.\prod-stop.ps1
+```
+
+### Frontend Not Loading
+Wait 30-60 seconds after startup for the frontend to compile and become available.
+
+### API Not Responding
+Check backend logs:
+```powershell
+# Development
+docker-compose -f docker-compose.dev.yml logs backend
+
+# Production
+docker-compose -f docker-compose.prod.yml logs backend
+```
+
+---
+
+## 📚 More Information
 
 For detailed documentation, see:
+- `DEVELOPMENT_ENVIRONMENT.md` - Full development guide
 - `README.md` - Project overview
-- `DEVELOPMENT.md` - Development guide
-- `PROGRESS_SUMMARY.md` - Current status
-- `SESSION_COMPLETE.md` - Build details
-
-
-
+- `CHANGELOG.md` - Version history

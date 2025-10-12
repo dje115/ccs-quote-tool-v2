@@ -41,10 +41,19 @@ docker-compose up -d
 
 ### Access Applications
 
+**Development Mode (using docker-compose.dev.yml):**
+- **Frontend (CRM):** http://localhost:3001
+- **Admin Portal:** http://localhost:3011
+- **Backend API:** http://localhost:8001
+- **API Documentation:** http://localhost:8001/docs
+
+**Production Mode (using docker-compose.prod.yml):**
 - **Frontend (CRM):** http://localhost:3000
 - **Admin Portal:** http://localhost:3010
 - **Backend API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
+
+> **Note:** Different ports are used to clearly distinguish between dev and production environments.
 
 ### View Logs
 

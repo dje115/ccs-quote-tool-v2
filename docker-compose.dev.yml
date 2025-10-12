@@ -57,7 +57,7 @@ services:
       - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     ports:
-      - "8000:8000"
+      - "8001:8000"  # Dev: External 8001 -> Internal 8000
     volumes:
       - ./backend:/app
     depends_on:
@@ -76,11 +76,11 @@ services:
       dockerfile: Dockerfile.dev
     container_name: ccs-frontend
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_API_URL=http://localhost:8001  # Updated for dev backend port
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     ports:
-      - "3000:3000"
+      - "3001:3000"  # Dev: External 3001 -> Internal 3000
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -99,9 +99,9 @@ services:
       dockerfile: Dockerfile.dev
     container_name: ccs-admin-portal
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8001  # Updated for dev backend port
     ports:
-      - "3010:3010"
+      - "3011:3010"  # Dev: External 3011 -> Internal 3010
     volumes:
       - ./admin-portal:/app
       - /app/node_modules
