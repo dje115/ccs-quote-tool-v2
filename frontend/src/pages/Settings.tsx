@@ -18,7 +18,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress
+  CircularProgress,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -27,10 +29,14 @@ import {
   Notifications as NotificationsIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  Science as ScienceIcon
+  Science as ScienceIcon,
+  Person as PersonIcon,
+  Work as WorkIcon
 } from '@mui/icons-material';
+import CompanyProfile from '../components/CompanyProfile';
 
 const Settings: React.FC = () => {
+  const [currentTab, setCurrentTab] = useState(0);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -52,7 +58,8 @@ const Settings: React.FC = () => {
     first_name: '',
     last_name: '',
     email: '',
-    phone: ''
+    phone: '',
+    company_name: ''
   });
 
   // API settings
@@ -108,12 +115,28 @@ const Settings: React.FC = () => {
       // Get user data from localStorage (set during login)
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       
+      // Get company name from company profile
+      const token = localStorage.getItem('access_token');
+      const companyResponse = await fetch('http://localhost:8000/api/v1/settings/company-profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      let companyName = '';
+      if (companyResponse.ok) {
+        const companyData = await companyResponse.json();
+        companyName = companyData.company_name || '';
+      }
+      
       // Set profile data from user data
       setProfileData({
         first_name: userData.first_name || '',
         last_name: userData.last_name || '',
         email: userData.email || '',
-        phone: userData.phone || '' // This should be phone, not email
+        phone: userData.phone || '',
+        company_name: companyName
       });
     } catch (error) {
       console.error('Error loading profile data:', error);
@@ -126,9 +149,23 @@ const Settings: React.FC = () => {
     setSuccess('');
     
     try {
-      // API call to save profile
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
+      const token = localStorage.getItem('access_token');
+      
+      // Update company name via company profile API
+      await fetch('http://localhost:8000/api/v1/settings/company-profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          company_name: profileData.company_name
+        })
+      });
+      
       setSuccess('Profile updated successfully!');
+      // Reload to ensure we have latest data
+      loadProfileData();
     } catch (err) {
       setError('Failed to update profile');
     } finally {
@@ -267,14 +304,75 @@ const Settings: React.FC = () => {
         </Alert>
       )}
 
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs 
+          value={currentTab} 
+          onChange={(e, newValue) => setCurrentTab(newValue)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            borderBottom: 1,
+            borderColor: 'divider',
+            '& .MuiTab-root': {
+              minHeight: 64,
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              textTransform: 'none',
+            },
+          }}
+        >
+          <Tab icon={<PersonIcon />} iconPosition="start" label="Profile" />
+          <Tab icon={<KeyIcon />} iconPosition="start" label="API Keys" />
+          <Tab icon={<WorkIcon />} iconPosition="start" label="Company Profile" />
+          <Tab icon={<NotificationsIcon />} iconPosition="start" label="Notifications" />
+        </Tabs>
+      </Paper>
+
+      {/* Tab 0: Profile Settings */}
+      {currentTab === 0 && (
       <Grid container spacing={3}>
+        {/* Company Settings */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                <BusinessIcon color="primary" />
+                <Typography variant="h6">Company Settings</Typography>
+              </Box>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Company Name"
+                    value={profileData.company_name}
+                    onChange={(e) => setProfileData({ ...profileData, company_name: e.target.value })}
+                    helperText="Your legal company name - used throughout the system and in AI analysis"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSaveProfile}
+                    disabled={saving}
+                  >
+                    Save Company Name
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+        
         {/* Profile Settings */}
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                <BusinessIcon color="primary" />
-                <Typography variant="h6">Profile Settings</Typography>
+                <PersonIcon color="primary" />
+                <Typography variant="h6">User Profile</Typography>
               </Box>
 
               <Grid container spacing={2}>
@@ -284,6 +382,7 @@ const Settings: React.FC = () => {
                     label="First Name"
                     value={profileData.first_name}
                     onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
+                    disabled
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -292,6 +391,7 @@ const Settings: React.FC = () => {
                     label="Last Name"
                     value={profileData.last_name}
                     onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
+                    disabled
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -301,6 +401,7 @@ const Settings: React.FC = () => {
                     type="email"
                     value={profileData.email}
                     onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                    disabled
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -309,31 +410,32 @@ const Settings: React.FC = () => {
                     label="Phone"
                     value={profileData.phone}
                     onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                    disabled
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  <Button
-                    variant="contained"
-                    startIcon={<SaveIcon />}
-                    onClick={handleSaveProfile}
-                    disabled={saving}
-                    fullWidth
-                  >
-                    Save Profile
-                  </Button>
+                  <Alert severity="info">
+                    User profile fields are managed by your administrator. Please contact support to update these fields.
+                  </Alert>
                 </Grid>
               </Grid>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Notification Settings */}
-        <Grid item xs={12} md={6}>
+      </Grid>
+      )}
+
+      {/* Tab 1: API Keys */}
+      {currentTab === 1 && (
+      <Grid container spacing={3}>
+        {/* API Keys will go here */}
+        <Grid item xs={12}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                <NotificationsIcon color="primary" />
-                <Typography variant="h6">Notifications</Typography>
+                <KeyIcon color="primary" />
+                <Typography variant="h6">API Keys Settings</Typography>
               </Box>
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -581,26 +683,78 @@ const Settings: React.FC = () => {
           </Card>
         </Grid>
 
-        {/* Danger Zone */}
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderColor: 'error.main', borderWidth: 1, borderStyle: 'solid' }}>
+      </Grid>
+      )}
+
+      {/* Tab 2: Company Profile */}
+      {currentTab === 2 && (
+        <CompanyProfile />
+      )}
+
+      {/* Tab 3: Notifications */}
+      {currentTab === 3 && (
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Card>
             <CardContent>
-              <Typography variant="h6" color="error" gutterBottom>
-                Danger Zone
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                <NotificationsIcon color="primary" />
+                <Typography variant="h6">Notification Settings</Typography>
+              </Box>
 
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Once you delete your account, there is no going back. Please be certain.
-              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notifications.email_on_new_lead}
+                      onChange={(e) => setNotifications({ ...notifications, email_on_new_lead: e.target.checked })}
+                    />
+                  }
+                  label="Email me when a new lead is created"
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notifications.email_on_quote_accepted}
+                      onChange={(e) => setNotifications({ ...notifications, email_on_quote_accepted: e.target.checked })}
+                    />
+                  }
+                  label="Email me when a quote is accepted"
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notifications.email_on_campaign_complete}
+                      onChange={(e) => setNotifications({ ...notifications, email_on_campaign_complete: e.target.checked })}
+                    />
+                  }
+                  label="Email me when a lead generation campaign completes"
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notifications.daily_summary}
+                      onChange={(e) => setNotifications({ ...notifications, daily_summary: e.target.checked })}
+                    />
+                  }
+                  label="Send me a daily summary email"
+                />
+              </Box>
 
-              <Button variant="outlined" color="error" sx={{ mt: 2 }}>
-                Delete Account
+              <Button
+                variant="contained"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveNotifications}
+                disabled={saving}
+                sx={{ mt: 3 }}
+              >
+                Save Notifications
               </Button>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+      )}
 
       {/* Test Results Modal */}
       <Dialog open={testModalOpen} onClose={closeTestModal} maxWidth="sm" fullWidth>

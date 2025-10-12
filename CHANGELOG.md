@@ -6,6 +6,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.1] - 2025-10-12
+
+### 🎯 Major Features Added
+- **AI Suggestion Review & Merge System**: Complete overhaul of AI Auto-Fill workflow
+  - **Side-by-Side Comparison**: Visual comparison of current data vs AI suggestions
+  - **Section-by-Section Control**: Individual actions (Replace/Merge/Discard) for each field
+  - **Global Actions**: Quick apply/merge/discard for all sections at once
+  - **No Auto-Apply**: AI suggestions never automatically overwrite data
+  - **Smart Merge Logic**: Intelligent merging for arrays (removes duplicates) and objects
+  - **Visual Design**: Color-coded sections with clear Current vs AI Suggested labels
+  - **Transparency**: Shows AI confidence score, data sources, and social media links found
+
+### ✨ Enhancements
+- **Frontend (CompanyProfile.tsx)**:
+  - Added `autoFillResults` state to store AI suggestions separately from profile data
+  - Implemented `applySectionSuggestion()` for granular field-level control
+  - Implemented `applyAllSuggestions()` for bulk operations
+  - Implemented `discardAllSuggestions()` to clear suggestions
+  - Enhanced UI with Paper components for each section (Description, Products, USPs, Markets, Pitch)
+  - Added chip-based display with counts for array fields
+  - Added console logging for debugging AI responses
+  - Fixed response parsing to handle nested `data` object from backend
+
+- **Backend (settings.py)**:
+  - Fixed `/company-profile/auto-fill` endpoint response structure
+  - Added `sales_methodology` to AI analysis response
+  - Enhanced AI prompt to explicitly request marketing keywords and LinkedIn URL
+  - Improved error handling and logging
+
+### 🎨 UI/UX Improvements
+- Color-coded comparison boxes:
+  - Current data: Gray (`#f5f5f5`)
+  - Company Description: Light blue (`#e3f2fd`)
+  - Products & Services: Light blue (`#e3f2fd`)
+  - Unique Selling Points: Light green (`#e8f5e9`)
+  - Target Markets: Light purple (`#f3e5f5`)
+  - Elevator Pitch: Light red (`#ffebee`)
+- Left border colors for each section (warning, info, success, secondary, error)
+- Clear button labels: "Use AI Version", "Replace", "Merge (Add New)", "Keep Current"
+- Quick action buttons at top: "Replace All", "Merge All", "Discard All"
+
+### 📚 Documentation
+- Created `AI_SUGGESTION_REVIEW_SYSTEM.md` with comprehensive implementation details
+- Updated `DEVELOPMENT_STATUS.md` to version 2.2.1
+- Updated `CHANGELOG.md` with all recent changes
+
+### 🐛 Bug Fixes
+- Fixed AI auto-fill data not displaying (was stored but not shown)
+- Fixed frontend not parsing nested `response.data.data` structure correctly
+- Fixed suggestions being applied immediately instead of showing for review
+- Added proper null/undefined checks for all array fields
+
+---
+
 ## [2.2.0] - 2025-10-11
 
 ### 🎯 Major Features Added

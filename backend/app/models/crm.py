@@ -116,6 +116,8 @@ class Customer(BaseModel):
     # Relationships
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
     interactions = relationship("CustomerInteraction", back_populates="customer", cascade="all, delete-orphan")
+    sales_activities = relationship("SalesActivity", back_populates="customer", cascade="all, delete-orphan")
+    sales_notes = relationship("SalesNote", back_populates="customer", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Customer {self.company_name}>"

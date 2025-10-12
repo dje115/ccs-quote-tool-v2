@@ -21,6 +21,7 @@ class UserResponse(BaseModel):
     is_active: bool
     tenant_id: str
     tenant_name: str
+    company_name: Optional[str] = None
     created_at: str
     
     class Config:
@@ -134,8 +135,8 @@ async def list_all_users(
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
-        # Query all users with their tenant information
-        stmt = select(User, Tenant.name).join(
+        # Query all users with their tenant information (including company_name)
+        stmt = select(User, Tenant.name, Tenant.company_name).join(
             Tenant, User.tenant_id == Tenant.id
         ).order_by(Tenant.name, User.email)
         
@@ -143,7 +144,7 @@ async def list_all_users(
         rows = result.all()
         
         users = []
-        for user, tenant_name in rows:
+        for user, tenant_name, company_name in rows:
             users.append(UserResponse(
                 id=str(user.id),
                 email=user.email,
@@ -152,6 +153,7 @@ async def list_all_users(
                 is_active=user.is_active,
                 tenant_id=str(user.tenant_id),
                 tenant_name=tenant_name,
+                company_name=company_name,
                 created_at=user.created_at.isoformat()
             ))
         
@@ -207,6 +209,7 @@ async def reset_user_password(
 class TenantListResponse(BaseModel):
     id: str
     name: str
+    company_name: str | None
     slug: str
     domain: str | None
     status: str
@@ -293,6 +296,7 @@ async def list_tenants_paginated(
             TenantListResponse(
                 id=str(tenant.id),
                 name=tenant.name,
+                company_name=tenant.company_name,
                 slug=tenant.slug,
                 domain=tenant.domain,
                 status=tenant.status.value if hasattr(tenant.status, 'value') else str(tenant.status),

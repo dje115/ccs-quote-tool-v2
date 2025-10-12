@@ -13,7 +13,9 @@ import {
   ListItem,
   ListItemText,
   IconButton,
-  Alert
+  Alert,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
@@ -37,6 +39,7 @@ interface CustomerOverviewTabProps {
   onAddContact: () => void;
   onEditContact: (contact: any) => void;
   onConfirmRegistration: (confirmed: boolean) => void;
+  onStatusChange?: (newStatus: string) => void;
 }
 
 const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
@@ -44,11 +47,13 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
   contacts,
   onAddContact,
   onEditContact,
-  onConfirmRegistration
+  onConfirmRegistration,
+  onStatusChange
 }) => {
   const navigate = useNavigate();
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [contactDetailOpen, setContactDetailOpen] = useState(false);
+  const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
 
   const handleContactClick = (contact: any) => {
     setSelectedContact(contact);
@@ -63,6 +68,40 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
   const handleEditFromDetail = () => {
     setContactDetailOpen(false);
     onEditContact(selectedContact);
+  };
+
+  const handleStatusClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    setStatusMenuAnchor(event.currentTarget);
+  };
+
+  const handleStatusClose = () => {
+    setStatusMenuAnchor(null);
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    if (onStatusChange) {
+      onStatusChange(newStatus);
+    }
+    handleStatusClose();
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toUpperCase()) {
+      case 'LEAD':
+        return '#667eea';
+      case 'PROSPECT':
+        return '#f093fb';
+      case 'CUSTOMER':
+        return '#4facfe';
+      case 'COLD_LEAD':
+        return '#fa709a';
+      case 'INACTIVE':
+        return '#95a5a6';
+      case 'LOST':
+        return '#e74c3c';
+      default:
+        return '#95a5a6';
+    }
   };
 
   // Get primary address from Google Maps locations
@@ -82,17 +121,29 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
   const primaryAddress = getPrimaryAddress();
 
   // Calculate health score based on data completeness and lead score
+  // IMPORTANT: Multiple contacts reduce risk - having relationships with multiple people
+  // in a business is crucial for account resilience (updated 2025-10-12)
+  // TODO: Further adjust when call logs and email logs are implemented
   const calculateHealthScore = () => {
     let score = 0;
+    
+    // Basic company information (32 points total)
     if (customer?.website) score += 8;
     if (customer?.main_email) score += 8;
     if (customer?.main_phone) score += 8;
-    if (customer?.company_registration && customer?.registration_confirmed) score += 18;
-    if (contacts?.length > 0) score += 12;
+    if (customer?.company_registration && customer?.registration_confirmed) score += 8;
+    
+    // Contacts - scaled by number (up to 28 points)
+    // 1 contact = 12 points, 2+ contacts = 28 points (reduces risk)
+    if (contacts?.length === 1) score += 12;
+    if (contacts?.length >= 2) score += 28;
+    
+    // AI & Data Analysis (40 points total)
     if (customer?.ai_analysis_raw) score += 18;
     if (customer?.lead_score && customer.lead_score > 50) score += 12;
-    if (customer?.website_data) score += 8; // Website scraped & analyzed
-    if (customer?.linkedin_url || customer?.linkedin_data) score += 8; // LinkedIn found
+    if (customer?.website_data) score += 5; // Website scraped & analyzed
+    if (customer?.linkedin_url || customer?.linkedin_data) score += 5; // LinkedIn found
+    
     return Math.min(score, 100);
   };
 
@@ -129,13 +180,18 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
               <Box sx={{ textAlign: 'center' }}>
                 <Chip 
                   label={customer?.status || 'Unknown'} 
+                  onClick={handleStatusClick}
                   sx={{ 
                     backgroundColor: 'rgba(255,255,255,0.2)', 
                     color: 'white',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.3)'
+                    }
                   }} 
                 />
-                <Typography variant="caption" display="block">Status</Typography>
+                <Typography variant="caption" display="block">Status (click to change)</Typography>
               </Box>
             </Grid>
           </Grid>
@@ -723,6 +779,57 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
       contact={selectedContact}
       onEdit={handleEditFromDetail}
     />
+
+    {/* Status Change Menu */}
+    <Menu
+      anchorEl={statusMenuAnchor}
+      open={Boolean(statusMenuAnchor)}
+      onClose={handleStatusClose}
+      PaperProps={{
+        sx: {
+          minWidth: 200,
+          boxShadow: 3
+        }
+      }}
+    >
+      <MenuItem onClick={() => handleStatusChange('LEAD')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#667eea' }} />
+          <Typography>Lead</Typography>
+        </Box>
+      </MenuItem>
+      <MenuItem onClick={() => handleStatusChange('PROSPECT')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#f093fb' }} />
+          <Typography>Prospect</Typography>
+        </Box>
+      </MenuItem>
+      <MenuItem onClick={() => handleStatusChange('CUSTOMER')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#4facfe' }} />
+          <Typography>Customer</Typography>
+        </Box>
+      </MenuItem>
+      <Divider />
+      <MenuItem onClick={() => handleStatusChange('COLD_LEAD')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fa709a' }} />
+          <Typography>Cold Lead</Typography>
+        </Box>
+      </MenuItem>
+      <MenuItem onClick={() => handleStatusChange('INACTIVE')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#95a5a6' }} />
+          <Typography>Inactive</Typography>
+        </Box>
+      </MenuItem>
+      <MenuItem onClick={() => handleStatusChange('LOST')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#e74c3c' }} />
+          <Typography>Lost</Typography>
+        </Box>
+      </MenuItem>
+    </Menu>
   </>
   );
 };

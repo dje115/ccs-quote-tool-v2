@@ -38,6 +38,7 @@
           <tr>
             <th>Full Name</th>
             <th>Email</th>
+            <th>Company</th>
             <th>Tenant</th>
             <th>Role</th>
             <th>Status</th>
@@ -51,6 +52,9 @@
               <strong>{{ user.full_name }}</strong>
             </td>
             <td>{{ user.email }}</td>
+            <td>
+              <span class="company-badge">{{ user.company_name || 'Not set' }}</span>
+            </td>
             <td>
               <span class="tenant-badge">{{ user.tenant_name }}</span>
             </td>
@@ -137,7 +141,8 @@ export default {
       return this.users.filter(user =>
         user.full_name.toLowerCase().includes(query) ||
         user.email.toLowerCase().includes(query) ||
-        user.tenant_name.toLowerCase().includes(query)
+        user.tenant_name.toLowerCase().includes(query) ||
+        (user.company_name && user.company_name.toLowerCase().includes(query))
       );
     }
   },
@@ -334,6 +339,16 @@ td {
 
 tr:hover {
   background-color: #fafafa;
+}
+
+.company-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: #f3e5f5;
+  color: #6a1b9a;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .tenant-badge {

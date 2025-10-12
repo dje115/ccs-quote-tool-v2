@@ -37,6 +37,7 @@
     <el-card>
       <el-table :data="tenants" v-loading="loading" style="width: 100%">
         <el-table-column prop="name" label="Name" />
+        <el-table-column prop="company_name" label="Company" />
         <el-table-column prop="slug" label="Slug" />
         <el-table-column prop="domain" label="Domain" />
         <el-table-column prop="status" label="Status">
@@ -100,6 +101,10 @@
           <el-input v-model="createForm.name" placeholder="Tenant name" />
         </el-form-item>
         
+        <el-form-item label="Company Name" prop="company_name">
+          <el-input v-model="createForm.company_name" placeholder="Legal company name (optional)" />
+        </el-form-item>
+        
         <el-form-item label="Slug" prop="slug">
           <el-input v-model="createForm.slug" placeholder="tenant-slug" />
         </el-form-item>
@@ -160,6 +165,7 @@ export default {
     
     const createForm = reactive({
       name: '',
+      company_name: '',
       slug: '',
       domain: '',
       plan: 'trial',
@@ -271,6 +277,7 @@ export default {
       // Pre-fill the create form with existing tenant data
       Object.assign(createForm, {
         name: tenant.name,
+        company_name: tenant.company_name || '',
         slug: tenant.slug,
         domain: tenant.domain,
         plan: tenant.plan,

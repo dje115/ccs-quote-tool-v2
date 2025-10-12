@@ -141,10 +141,26 @@ const CustomerDetail: React.FC = () => {
 
   const handleAddDirectorAsContact = async (director: any) => {
     try {
-      // Split name into first and last
-      const nameParts = director.name.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      // Parse name from Companies House format: "Surname, FirstNames MiddleNames"
+      // We want: first_name = "FirstName" (just first name), last_name = "Surname"
+      let firstName = '';
+      let lastName = '';
+      
+      if (director.name.includes(',')) {
+        // Format: "Barr, Christopher Ian Ernest" -> first: "Christopher", last: "Barr"
+        const [surnameWithComma, ...restParts] = director.name.split(',');
+        lastName = surnameWithComma.trim();
+        
+        // Get just the first name from "Christopher Ian Ernest"
+        const firstNames = restParts.join(',').trim();
+        const firstNameParts = firstNames.split(' ');
+        firstName = firstNameParts[0] || ''; // Just take the first name
+      } else {
+        // Fallback: if no comma, assume "FirstName LastName" format
+        const nameParts = director.name.split(' ');
+        firstName = nameParts[0] || '';
+        lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      }
       
       // Create contact from director
       const contactData = {
@@ -225,6 +241,20 @@ const CustomerDetail: React.FC = () => {
         'Competitors campaign feature is under development. This will create a lead generation campaign to analyze competitor companies.'
       );
       setTimeout(() => setAiAnalysisSuccess(null), 5000);
+    }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      await customerAPI.update(id!, { status: newStatus });
+      setAiAnalysisSuccess(`Status updated to ${newStatus}`);
+      setTimeout(() => setAiAnalysisSuccess(null), 3000);
+      // Reload customer data to reflect new status
+      await loadCustomerData();
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      setAiAnalysisError('Failed to update status');
+      setTimeout(() => setAiAnalysisError(null), 5000);
     }
   };
 
@@ -326,6 +356,7 @@ const CustomerDetail: React.FC = () => {
           onAddContact={() => setAddContactOpen(true)}
           onEditContact={handleEditContact}
           onConfirmRegistration={handleConfirmRegistration}
+          onStatusChange={handleStatusChange}
         />
       )}
 

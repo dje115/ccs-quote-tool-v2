@@ -136,5 +136,12 @@ export const userAPI = {
   delete: (id: string) => apiClient.delete(`/users/${id}`),
 };
 
+// Settings API
+export const settingsAPI = {
+  get: (endpoint: string) => apiClient.get(`/settings${endpoint}`),
+  post: (endpoint: string, data?: any) => apiClient.post(`/settings${endpoint}`, data),
+  put: (endpoint: string, data?: any) => apiClient.put(`/settings${endpoint}`, data),
+};
+
 
 
