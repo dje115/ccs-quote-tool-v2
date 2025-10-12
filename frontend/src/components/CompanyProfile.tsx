@@ -132,23 +132,32 @@ const CompanyProfile: React.FC = () => {
   };
 
   const handleAnalyzeCompany = async () => {
+    console.log('[handleAnalyzeCompany] Starting company analysis...');
     try {
       setAnalyzing(true);
       setError('');
       
+      console.log('[handleAnalyzeCompany] Calling API endpoint /company-profile/analyze');
       const response = await settingsAPI.post('/company-profile/analyze');
+      console.log('[handleAnalyzeCompany] API response received:', response.data);
       
       if (response.data.success) {
         setSuccess('AI analysis completed successfully!');
         setAnalysis(response.data.analysis);
         setAnalysisDate(response.data.analysis_date);
+        console.log('[handleAnalyzeCompany] Analysis data set:', response.data.analysis);
       setTimeout(() => setSuccess(''), 3000);
+      } else {
+        console.warn('[handleAnalyzeCompany] API returned success=false');
+        setError('Analysis completed but returned no data');
       }
     } catch (err: any) {
-      console.error('Failed to analyze company:', err);
-      setError('Failed to analyze company profile. Please ensure your OpenAI API key is configured.');
+      console.error('[handleAnalyzeCompany] Error:', err);
+      console.error('[handleAnalyzeCompany] Error details:', err.response?.data || err.message);
+      setError(err.response?.data?.detail || 'Failed to analyze company profile. Please ensure your OpenAI API key is configured.');
     } finally {
       setAnalyzing(false);
+      console.log('[handleAnalyzeCompany] Analysis complete, analyzing=false');
     }
   };
 
@@ -438,40 +447,23 @@ const CompanyProfile: React.FC = () => {
         </Typography>
       </Box>
             <Typography variant="body1" sx={{ mb: 3, opacity: 0.95 }}>
-              Let AI analyze your website and generate your company profile automatically, or get deep business intelligence insights
+              Let AI analyze your website and automatically generate your company profile data
             </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <Button
-                variant="contained"
-                size="large"
-                sx={{ 
-                  bgcolor: 'white', 
-                  color: 'primary.main',
-                  fontWeight: 'bold',
-                  '&:hover': { bgcolor: 'grey.100' }
-                }}
-                startIcon={autoFilling ? <CircularProgress size={20} /> : <SparkleIcon />}
-                onClick={handleAutoFill}
-                disabled={autoFilling || analyzing}
-              >
-                {autoFilling ? 'Analyzing Website...' : 'AI Auto-Fill Profile'}
-              </Button>
-              <Button
-                variant="outlined"
-                size="large"
-                sx={{ 
-                  borderColor: 'white', 
-                  color: 'white',
-                  fontWeight: 'bold',
-                  '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' }
-                }}
-                startIcon={analyzing ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <AssessmentIcon />}
-                onClick={handleAnalyzeCompany}
-                disabled={analyzing || autoFilling}
-              >
-                {analyzing ? 'Analyzing...' : 'Analyze My Company'}
-              </Button>
-            </Stack>
+            <Button
+              variant="contained"
+              size="large"
+              sx={{ 
+                bgcolor: 'white', 
+                color: 'primary.main',
+                fontWeight: 'bold',
+                '&:hover': { bgcolor: 'grey.100' }
+              }}
+              startIcon={autoFilling ? <CircularProgress size={20} /> : <SparkleIcon />}
+              onClick={handleAutoFill}
+              disabled={autoFilling}
+            >
+              {autoFilling ? 'Analyzing Website...' : 'AI AUTO-FILL PROFILE'}
+            </Button>
           </Paper>
         </Grid>
 

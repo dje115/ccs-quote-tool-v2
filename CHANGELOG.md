@@ -6,6 +6,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.2] - 2025-10-12
+
+### 🎯 Major Features Added
+- **AI Business Intelligence Tab**: New dedicated tab for AI-powered business analysis
+  - Strategic insights display with Accept/Discard controls per section
+  - 8 key intelligence areas: Business Model, Competitive Position, ICP, Pain Points, Sales Approach, Cross-Sell, Objections, Industry Trends
+  - Side-by-side comparison (Current vs AI Suggested) for each insight
+  - Smart JSON-to-readable-text formatting with proper bullet points and nested object handling
+  - Individual Accept/Discard/Merge controls per section
+  - Global Accept All/Discard All actions
+  - "Complete your Company Profile first" reminder with best practice guidance
+
+### ✨ Enhancements
+- **UI/UX Improvements**:
+  - Consistent purple gradient styling across Company Profile and AI Business Intelligence tabs
+  - Removed "Analyze My Company" button from Company Profile tab (moved to dedicated AI tab)
+  - Cleaner, more focused Company Profile tab with single "AI AUTO-FILL PROFILE" button
+  - Enhanced text formatting with proper line breaks, word wrapping, and spacing
+  - Intelligent nested object formatting for complex AI responses
+  - Professional display of arrays, objects, and nested structures
+
+- **Smart Data Formatting**:
+  - Converts JSON arrays to bullet points
+  - Formats nested objects with proper indentation
+  - Handles complex structures like arrays of objects (e.g., buyer personas)
+  - Capitalizes headings and removes underscores
+  - Preserves multi-paragraph text with proper line breaks
+
+- **Backend**:
+  - Fixed `sales_methodology` field length limitation (VARCHAR(100) → TEXT)
+  - Database migration: `fix_sales_methodology_length.sql`
+  - Updated Tenant model to support longer sales methodology descriptions
+  - Enhanced error handling and logging for AI analysis endpoints
+
+### 🐛 Bug Fixes
+- Fixed "failed to save profile" error caused by `sales_methodology` field exceeding 100 characters
+- Fixed "[object Object]" display issue for nested JSON structures in AI analysis results
+- Fixed text overflow and wrapping issues in analysis display
+- Added proper null/undefined checks for nested object formatting
+
+### 📚 Documentation
+- Created `AI_SUGGESTION_REVIEW_SYSTEM.md` (from previous release)
+- Created `BUGFIX_SALES_METHODOLOGY.md` with migration details
+- Updated all spec files with new AI Business Intelligence tab feature
+
+### 🎨 Visual Consistency
+- Both Company Profile and AI Business Intelligence tabs now use same gradient: `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`
+- Consistent button styling, padding, and border radius
+- Professional color-coded sections for different insight types
+- Clean, modern Material-UI design throughout
+
+---
+
 ## [2.2.1] - 2025-10-12
 
 ### 🎯 Major Features Added

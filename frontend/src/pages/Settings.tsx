@@ -31,9 +31,11 @@ import {
   Cancel as CancelIcon,
   Science as ScienceIcon,
   Person as PersonIcon,
-  Work as WorkIcon
+  Work as WorkIcon,
+  Psychology as PsychologyIcon
 } from '@mui/icons-material';
 import CompanyProfile from '../components/CompanyProfile';
+import AIBusinessIntelligence from '../components/AIBusinessIntelligence';
 
 const Settings: React.FC = () => {
   const [currentTab, setCurrentTab] = useState(0);
@@ -325,6 +327,7 @@ const Settings: React.FC = () => {
           <Tab icon={<PersonIcon />} iconPosition="start" label="Profile" />
           <Tab icon={<KeyIcon />} iconPosition="start" label="API Keys" />
           <Tab icon={<WorkIcon />} iconPosition="start" label="Company Profile" />
+          <Tab icon={<PsychologyIcon />} iconPosition="start" label="AI Business Intelligence" />
           <Tab icon={<NotificationsIcon />} iconPosition="start" label="Notifications" />
         </Tabs>
       </Paper>
@@ -691,8 +694,13 @@ const Settings: React.FC = () => {
         <CompanyProfile />
       )}
 
-      {/* Tab 3: Notifications */}
+      {/* Tab 3: AI Business Intelligence */}
       {currentTab === 3 && (
+        <AIBusinessIntelligence />
+      )}
+
+      {/* Tab 4: Notifications */}
+      {currentTab === 4 && (
       <Grid container spacing={3}>
         <Grid item xs={12}>
           <Card>

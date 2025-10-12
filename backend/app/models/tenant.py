@@ -68,7 +68,7 @@ class Tenant(Base, TimestampMixin):
     products_services = Column(JSON, default=list)  # List of products/services offered
     unique_selling_points = Column(JSON, default=list)  # USPs that differentiate you
     target_markets = Column(JSON, default=list)  # Industries/sectors you target
-    sales_methodology = Column(String(100), nullable=True)  # e.g., "consultative", "solution-based"
+    sales_methodology = Column(Text, nullable=True)  # e.g., "consultative", "solution-based" - can include detailed description
     elevator_pitch = Column(Text, nullable=True)  # 30-second company pitch
     
     # AI Analysis of Tenant's Own Business
