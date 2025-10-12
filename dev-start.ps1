@@ -1,10 +1,10 @@
 # Start Development Environment
 # This script starts the CCS Quote Tool v2 in DEVELOPMENT mode with hot-reload enabled
 # 
-# Development URLs:
-# - Frontend:      http://localhost:3001
-# - Admin Portal:  http://localhost:3011
-# - Backend API:   http://localhost:8001
+# Development URLs (same as production - only one can run at a time):
+# - Frontend:      http://localhost:3000
+# - Admin Portal:  http://localhost:3010
+# - Backend API:   http://localhost:8000
 #
 # Features:
 # - Hot-reload for frontend and admin portal (changes appear instantly)
@@ -18,9 +18,9 @@ Write-Host ""
 Write-Host "Starting development environment..." -ForegroundColor Green
 Write-Host ""
 Write-Host "Access points:" -ForegroundColor Yellow
-Write-Host "  Frontend:      http://localhost:3001" -ForegroundColor White
-Write-Host "  Admin Portal:  http://localhost:3011" -ForegroundColor White
-Write-Host "  Backend API:   http://localhost:8001" -ForegroundColor White
+Write-Host "  Frontend:      http://localhost:3000" -ForegroundColor White
+Write-Host "  Admin Portal:  http://localhost:3010" -ForegroundColor White
+Write-Host "  Backend API:   http://localhost:8000" -ForegroundColor White
 Write-Host ""
 
 docker-compose -f docker-compose.dev.yml up -d
