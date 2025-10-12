@@ -78,8 +78,10 @@ ChartJS.register(
 
 interface DashboardData {
   stats: {
+    total_discovery: number;
     total_leads: number;
     total_prospects: number;
+    total_opportunities: number;
     total_customers: number;
     total_cold_leads: number;
     total_inactive: number;

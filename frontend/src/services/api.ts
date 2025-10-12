@@ -104,10 +104,16 @@ export const leadAPI = {
 
 // Campaign API
 export const campaignAPI = {
-  list: () => apiClient.get('/campaigns/'),
+  list: (params?: any) => apiClient.get('/campaigns/', { params }),
   create: (data: any) => apiClient.post('/campaigns/', data),
   get: (id: string) => apiClient.get(`/campaigns/${id}`),
+  update: (id: string, data: any) => apiClient.patch(`/campaigns/${id}`, data),
+  delete: (id: string) => apiClient.delete(`/campaigns/${id}`),
   stop: (id: string) => apiClient.post(`/campaigns/${id}/stop`),
+  getPromptTypes: () => apiClient.get('/campaigns/prompt-types'),
+  getLeads: (campaignId: string, params?: any) => apiClient.get(`/campaigns/${campaignId}/leads`, { params }),
+  convertLead: (leadId: string) => apiClient.post(`/campaigns/leads/${leadId}/convert`),
+  listAllLeads: (params?: any) => apiClient.get('/campaigns/leads/all', { params }),
 };
 
 // Contact API

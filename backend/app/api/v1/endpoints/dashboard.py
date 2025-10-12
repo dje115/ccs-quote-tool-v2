@@ -23,8 +23,10 @@ router = APIRouter()
 
 
 class DashboardStats(BaseModel):
+    total_discovery: int
     total_leads: int
     total_prospects: int
+    total_opportunities: int
     total_customers: int
     total_cold_leads: int
     total_inactive: int
@@ -88,6 +90,15 @@ async def get_dashboard(
         tenant_id = current_tenant.id
         
         # Get customer counts by status
+        discovery_count = db.execute(
+            select(func.count(Customer.id)).where(
+                and_(
+                    Customer.tenant_id == tenant_id,
+                    Customer.status == CustomerStatus.DISCOVERY
+                )
+            )
+        ).scalar() or 0
+        
         leads_count = db.execute(
             select(func.count(Customer.id)).where(
                 and_(
@@ -102,6 +113,15 @@ async def get_dashboard(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status == CustomerStatus.PROSPECT
+                )
+            )
+        ).scalar() or 0
+        
+        opportunities_count = db.execute(
+            select(func.count(Customer.id)).where(
+                and_(
+                    Customer.tenant_id == tenant_id,
+                    Customer.status == CustomerStatus.OPPORTUNITY
                 )
             )
         ).scalar() or 0
@@ -282,7 +302,7 @@ async def get_dashboard(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT]),
+                    Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT, CustomerStatus.OPPORTUNITY]),
                     Customer.lead_score >= 70
                 )
             ).limit(5)
@@ -340,7 +360,7 @@ async def get_dashboard(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT])
+                    Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT, CustomerStatus.OPPORTUNITY])
                 )
             ).order_by(Customer.lead_score.desc()).limit(10)
         ).scalars().all()
@@ -358,8 +378,10 @@ async def get_dashboard(
         
         return DashboardResponse(
             stats=DashboardStats(
+                total_discovery=discovery_count,
                 total_leads=leads_count,
                 total_prospects=prospects_count,
+                total_opportunities=opportunities_count,
                 total_customers=customers_count,
                 total_cold_leads=cold_leads_count,
                 total_inactive=inactive_count,

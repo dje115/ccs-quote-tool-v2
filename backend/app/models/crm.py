@@ -19,8 +19,17 @@ class CustomerStatus(enum.Enum):
     The database enum is case-sensitive and uses UPPERCASE values.
     
     Database enum values (PostgreSQL):
-    - LEAD, PROSPECT, CUSTOMER, COLD_LEAD, INACTIVE, LOST (uppercase - CURRENT/ACTIVE)
+    - DISCOVERY, LEAD, PROSPECT, OPPORTUNITY, CUSTOMER, COLD_LEAD, INACTIVE, LOST (uppercase - CURRENT/ACTIVE)
     - Legacy values also exist: ACTIVE, CHURNED, customer, cold_lead, lost (lowercase - DO NOT USE)
+    
+    Customer Lifecycle Flow:
+    DISCOVERY → LEAD → PROSPECT → OPPORTUNITY → CUSTOMER
+    
+    DISCOVERY: Companies identified via campaigns but not yet contacted (shown in Leads section)
+    LEAD: First contact made, gathering information
+    PROSPECT: Qualified and actively engaging
+    OPPORTUNITY: Active deal with quote/proposal
+    CUSTOMER: Won deal, paying customer
     
     To add new status values:
     1. Add the value to this enum with UPPERCASE string value
@@ -30,8 +39,10 @@ class CustomerStatus(enum.Enum):
     The enum value (right side) is what gets stored in the database.
     Always use UPPERCASE to match PostgreSQL enum.
     """
-    LEAD = "LEAD"                    # New potential customer
+    DISCOVERY = "DISCOVERY"          # Identified via campaign, not yet contacted
+    LEAD = "LEAD"                    # First contact made, gathering information
     PROSPECT = "PROSPECT"            # Qualified lead, actively engaging
+    OPPORTUNITY = "OPPORTUNITY"      # Active sales opportunity with quote/proposal
     CUSTOMER = "CUSTOMER"            # Active paying customer
     COLD_LEAD = "COLD_LEAD"         # Lead that went cold
     INACTIVE = "INACTIVE"            # Customer no longer active
