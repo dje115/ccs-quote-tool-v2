@@ -525,54 +525,7 @@ async def get_global_api_keys(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class ApiKeyUpdateRequest(BaseModel):
-    service: str
-    key: str
-
-
-@router.post("/api-keys")
-async def update_global_api_key(
-    request: ApiKeyUpdateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Update a global API key (admin only)"""
-    # Check if user is admin
-    if current_user.role != UserRole.SUPER_ADMIN:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    try:
-        # Get the system tenant for global keys
-        system_tenant = db.query(Tenant).filter(Tenant.slug == "ccs").first()
-        
-        if not system_tenant:
-            raise HTTPException(status_code=404, detail="System tenant not found")
-        
-        # Update the appropriate key
-        if request.service.lower() == "openai":
-            system_tenant.openai_api_key = request.key
-        elif request.service.lower() == "companies house":
-            system_tenant.companies_house_api_key = request.key
-        elif request.service.lower() == "google maps":
-            system_tenant.google_maps_api_key = request.key
-        else:
-            raise HTTPException(status_code=400, detail="Invalid service name")
-        
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": f"{request.service} API key updated successfully"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to update API key: {e}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+# Old endpoint removed - duplicate functionality moved to line 854
 
 
 # API Usage endpoints
@@ -796,3 +749,247 @@ async def update_system_settings(
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== GLOBAL API KEYS ====================
+
+class GlobalAPIKeysResponse(BaseModel):
+    openai_api_key: Optional[str] = None
+    companies_house_api_key: Optional[str] = None
+    google_maps_api_key: Optional[str] = None
+
+
+class GlobalAPIKeysUpdate(BaseModel):
+    openai_api_key: Optional[str] = None
+    companies_house_api_key: Optional[str] = None
+    google_maps_api_key: Optional[str] = None
+
+
+@router.get("/api-keys", response_model=GlobalAPIKeysResponse)
+async def get_global_api_keys(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get global/system-wide API keys from database
+    
+    These keys act as fallbacks when tenant-specific keys are not configured.
+    Stored in database in a special 'System' tenant for easy management.
+    Falls back to environment variables if not set in database.
+    """
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        import os
+        
+        # Try to get System tenant from database
+        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        
+        if system_tenant:
+            # Return keys from database
+            return GlobalAPIKeysResponse(
+                openai_api_key=system_tenant.openai_api_key or os.getenv("OPENAI_API_KEY", ""),
+                companies_house_api_key=system_tenant.companies_house_api_key or os.getenv("COMPANIES_HOUSE_API_KEY", ""),
+                google_maps_api_key=system_tenant.google_maps_api_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
+            )
+        else:
+            # Fallback to environment variables if System tenant doesn't exist
+            return GlobalAPIKeysResponse(
+                openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+                companies_house_api_key=os.getenv("COMPANIES_HOUSE_API_KEY", ""),
+                google_maps_api_key=os.getenv("GOOGLE_MAPS_API_KEY", "")
+            )
+    except Exception as e:
+        print(f"[ERROR] Failed to get global API keys: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api-keys")
+async def update_global_api_keys(
+    api_keys: GlobalAPIKeysUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    print(f"[DEBUG] Received API keys update request")
+    print(f"[DEBUG] api_keys type: {type(api_keys)}")
+    print(f"[DEBUG] api_keys data: {api_keys}")
+    """Update global/system-wide API keys in database
+    
+    IMPORTANT: These keys act as fallbacks for all tenants.
+    When a tenant doesn't have their own API keys, these system-wide keys are used.
+    
+    Keys are stored in the database in a special 'System' tenant.
+    This tenant is created automatically if it doesn't exist.
+    """
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        from app.models.tenant import TenantStatus
+        import uuid
+        
+        # Get or create System tenant
+        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        
+        if not system_tenant:
+            # Create System tenant for storing global API keys
+            system_tenant = Tenant(
+                id=str(uuid.uuid4()),
+                name="System",
+                company_name="System",
+                slug="system",
+                status=TenantStatus.ACTIVE,
+                plan="system"
+            )
+            db.add(system_tenant)
+            db.flush()
+        
+        # Update API keys
+        if api_keys.openai_api_key is not None:
+            system_tenant.openai_api_key = api_keys.openai_api_key.strip() or None
+        if api_keys.companies_house_api_key is not None:
+            system_tenant.companies_house_api_key = api_keys.companies_house_api_key.strip() or None
+        if api_keys.google_maps_api_key is not None:
+            system_tenant.google_maps_api_key = api_keys.google_maps_api_key.strip() or None
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "System-wide API keys saved to database successfully"
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Failed to update global API keys: {e}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test-openai")
+async def test_openai_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Test OpenAI API connection using database keys (with env fallback)"""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        import os
+        import httpx
+        
+        # Check database first (System tenant), then fall back to environment
+        api_key = None
+        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        if system_tenant and system_tenant.openai_api_key:
+            api_key = system_tenant.openai_api_key
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+        
+        if not api_key:
+            return {"success": False, "message": "OpenAI API key not configured"}
+        
+        # Test with a simple API call
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                return {"success": True, "message": "OpenAI API connection successful"}
+            else:
+                return {"success": False, "message": f"API returned status {response.status_code}"}
+                
+    except Exception as e:
+        return {"success": False, "message": f"Connection failed: {str(e)}"}
+
+
+@router.post("/test-companies-house")
+async def test_companies_house_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Test Companies House API connection using database keys (with env fallback)"""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        import os
+        import httpx
+        from base64 import b64encode
+        
+        # Check database first (System tenant), then fall back to environment
+        api_key = None
+        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        if system_tenant and system_tenant.companies_house_api_key:
+            api_key = system_tenant.companies_house_api_key
+        else:
+            api_key = os.getenv("COMPANIES_HOUSE_API_KEY")
+        
+        if not api_key:
+            return {"success": False, "message": "Companies House API key not configured"}
+        
+        # Test with a simple search
+        credentials = b64encode(f"{api_key}:".encode()).decode()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.company-information.service.gov.uk/search/companies?q=test",
+                headers={"Authorization": f"Basic {credentials}"},
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                return {"success": True, "message": "Companies House API connection successful"}
+            else:
+                return {"success": False, "message": f"API returned status {response.status_code}"}
+                
+    except Exception as e:
+        return {"success": False, "message": f"Connection failed: {str(e)}"}
+
+
+@router.post("/test-google-maps")
+async def test_google_maps_api(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Test Google Maps API connection using database keys (with env fallback)"""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        import os
+        import httpx
+        
+        # Check database first (System tenant), then fall back to environment
+        api_key = None
+        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        if system_tenant and system_tenant.google_maps_api_key:
+            api_key = system_tenant.google_maps_api_key
+        else:
+            api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+        
+        if not api_key:
+            return {"success": False, "message": "Google Maps API key not configured"}
+        
+        # Test with a simple geocoding request
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={"address": "London", "key": api_key},
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "OK":
+                    return {"success": True, "message": "Google Maps API connection successful"}
+                else:
+                    return {"success": False, "message": f"API error: {data.get('status')}"}
+            else:
+                return {"success": False, "message": f"API returned status {response.status_code}"}
+                
+    except Exception as e:
+        return {"success": False, "message": f"Connection failed: {str(e)}"}

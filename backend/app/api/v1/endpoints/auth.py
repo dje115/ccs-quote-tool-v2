@@ -12,6 +12,7 @@ from pydantic import BaseModel, EmailStr
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from app.core.config import settings
+from app.core.dependencies import get_current_user
 from app.models.tenant import User, Tenant
 
 router = APIRouter()
@@ -121,7 +122,7 @@ async def refresh_token(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    current_user: User = Depends(get_db)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get current user information

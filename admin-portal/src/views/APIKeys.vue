@@ -50,7 +50,7 @@
               show-password
             >
               <template #append>
-                <el-button @click="testAPI('companies_house')" :loading="testing.companies_house">
+                <el-button @click="testAPI('companies-house')" :loading="testing.companies_house">
                   Test
                 </el-button>
               </template>
@@ -78,7 +78,7 @@
               show-password
             >
               <template #append>
-                <el-button @click="testAPI('google_maps')" :loading="testing.google_maps">
+                <el-button @click="testAPI('google-maps')" :loading="testing.google_maps">
                   Test
                 </el-button>
               </template>
@@ -246,9 +246,17 @@ export default {
       saving.value = true
       try {
         const token = localStorage.getItem('admin_token')
-        await axios.post('http://localhost:8000/api/v1/admin/api-keys', apiKeys, {
+        // Convert reactive object to plain object for axios - ONLY send the API key fields
+        const payload = {
+          openai_api_key: apiKeys.openai_api_key || '',
+          companies_house_api_key: apiKeys.companies_house_api_key || '',
+          google_maps_api_key: apiKeys.google_maps_api_key || ''
+        }
+        console.log('Sending API keys payload:', JSON.stringify(payload))
+        await axios.post('http://localhost:8000/api/v1/admin/api-keys', payload, {
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
         })
         ElMessage.success('API keys saved successfully!')
@@ -269,7 +277,10 @@ export default {
     }
     
     const testAPI = async (apiType) => {
-      testing[apiType] = true
+      // Normalize apiType for internal use (convert hyphens to underscores)
+      const normalizedType = apiType.replace(/-/g, '_')
+      
+      testing[normalizedType] = true
       try {
         const token = localStorage.getItem('admin_token')
         const response = await axios.post(`http://localhost:8000/api/v1/admin/test-${apiType}`, {}, {
@@ -279,34 +290,36 @@ export default {
         })
         
         // Remove existing result for this API
-        testResults.value = testResults.value.filter(r => r.api !== apiType)
+        testResults.value = testResults.value.filter(r => r.api !== normalizedType)
         
         // Add new result
         testResults.value.push({
-          api: apiType,
+          api: normalizedType,
           success: response.data.success,
           message: response.data.message
         })
         
         if (response.data.success) {
-          ElMessage.success(`${apiType.toUpperCase()} API test successful!`)
+          ElMessage.success(`${apiType.replace(/-/g, ' ').toUpperCase()} API test successful!`)
+          // Update status to 'working'
+          apiStatus[normalizedType] = 'working'
         } else {
-          ElMessage.error(`${apiType.toUpperCase()} API test failed`)
+          ElMessage.error(`${apiType.replace(/-/g, ' ').toUpperCase()} API test failed`)
         }
       } catch (error) {
         // Remove existing result for this API
-        testResults.value = testResults.value.filter(r => r.api !== apiType)
+        testResults.value = testResults.value.filter(r => r.api !== normalizedType)
         
         // Add error result
         testResults.value.push({
-          api: apiType,
+          api: normalizedType,
           success: false,
           message: error.response?.data?.detail || error.response?.data?.message || 'Test failed'
         })
         
-        ElMessage.error(`${apiType.toUpperCase()} API test failed`)
+        ElMessage.error(`${apiType.replace(/-/g, ' ').toUpperCase()} API test failed`)
       } finally {
-        testing[apiType] = false
+        testing[normalizedType] = false
         updateAPIStatus()
       }
     }
