@@ -78,6 +78,10 @@ class LeadGenerationCampaign(BaseModel):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
+    # User tracking
+    created_by = Column(String(36), nullable=True)  # User ID who created the campaign
+    updated_by = Column(String(36), nullable=True)  # User ID who last updated the campaign
+    
     # Relationships
     leads = relationship("Lead", back_populates="campaign", cascade="all, delete-orphan")
     
