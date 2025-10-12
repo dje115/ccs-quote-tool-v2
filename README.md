@@ -1,367 +1,493 @@
-# CCS Quote Tool v2 - Multi-Tenant SaaS Platform
-## Modern CRM & Quoting Platform with AI-Powered Features
+# CCS Quote Tool v2 - World-Class AI-Powered CRM & Quoting System
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://github.com/dje115/ccs-quote-tool-v2)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://docker.com)
-[![Multi-tenant](https://img.shields.io/badge/multi--tenant-enabled-green.svg)](#)
-[![AI-Powered](https://img.shields.io/badge/AI--powered-GPT5-orange.svg)](#)
+**Version:** 2.2.2  
+**Status:** Production Ready  
+**Architecture:** Multi-Tenant SaaS
 
-A modern, scalable, multi-tenant SaaS platform for customer relationship management and quoting with AI-powered lead generation, **multilingual support with 10 languages**, **Argon2 security**, and comprehensive business intelligence.
+---
 
-## ✨ **Latest Features (v2.2.0)**
+## 🎯 Quick Start
 
-### **CRM Module - COMPLETED** ✅
-- 🎯 **Advanced Customer Management**: Multi-tab interface with AI-powered insights
-- 👥 **Smart Contact Management**: Multiple emails/phones per contact with role management
-- 🤖 **AI Business Intelligence**: Company analysis, lead scoring, competitor identification
-- 📊 **Financial Analysis**: Multi-year financial data with trends and health scoring
-- 🗺️ **Google Maps Integration**: Multi-location discovery with address validation
-- 🏢 **Companies House Integration**: Director information, financial data, iXBRL parsing
-- 📝 **Known Facts System**: User-provided context for improved AI accuracy
-- 🌐 **Website & LinkedIn Analysis**: Social media and web presence insights
+### Development Mode (Hot-Reload)
 
-### **Core Features**
-- 🌍 **Multilingual Support**: 10 languages (EN, ES, FR, DE, IT, PT, NL, RU, JA, ZH) with AI-powered translation
-- 🛡️ **Argon2 Security**: Industry-leading password hashing (winner of Password Hashing Competition 2015)
-- 🤖 **GPT-5 Integration**: All AI operations use GPT-5 models exclusively
-- 🏢 **Multi-Tenant SaaS**: Complete tenant isolation with row-level security
-- 📱 **Modern UI**: Material-UI with Vite build system for blazing-fast development
+```powershell
+# Start development environment with hot-reload
+docker-compose up -d
 
-### **Admin Portal** (Port 3010)
-- 🔑 **Global API Key Management**: Centralized API configuration with status indicators
-- 👨‍💼 **Tenant Management**: Create, edit, activate, and manage tenants
-- 👥 **User Management**: View all users, search by tenant, reset passwords
-- 📊 **Dashboard Analytics**: Real-time tenant and user statistics
-
-## 🚀 **Quick Start**
-
-### **Prerequisites**
-- Docker & Docker Compose
-- Git
-- OpenAI API Key (for GPT-5)
-- Companies House API Key (optional)
-- Google Maps API Key (optional)
-
-### **Installation**
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-repo/ccs-quote-tool-v2.git
-   cd ccs-quote-tool-v2
-   ```
-
-2. **Configure environment**
-   ```bash
-   copy env.example .env
-   # Edit .env with your API keys
-   ```
-
-3. **Start the development environment**
-   ```bash
-   # Windows
-   start-dev.bat
-   
-   # Linux/Mac
-   docker-compose up -d
-   ```
-
-4. **Access the application**
-   - **CRM Frontend**: http://localhost:3000
-   - **Admin Portal**: http://localhost:3010
-   - **Backend API**: http://localhost:8000
-   - **API Documentation**: http://localhost:8000/docs
-
-5. **Default Login**
-   - **CRM**: admin@ccs.com / admin123
-   - **Admin Portal**: admin / admin123
-
-## 🏗️ **Architecture**
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React SPA     │    │   FastAPI       │    │   PostgreSQL    │
-│   (CRM - 3000)  │◄──►│   (Backend)     │◄──►│   (Database)    │
-│                 │    │   Port 8000     │    │                 │
-│ • Vite          │    │                 │    │ • Row-level     │
-│ • Material-UI   │    │ • Multi-tenant  │    │   Security      │
-│ • TypeScript    │    │ • JWT Auth      │    │ • Tenant        │
-└─────────────────┘    │ • GPT-5 AI      │    │   Isolation     │
-                       └─────────────────┘    └─────────────────┘
-┌─────────────────┐              │
-│   Vue.js Admin  │              │
-│   (Port 3010)   │◄─────────────┘
-│                 │
-│ • Element Plus  │
-│ • Admin Tools   │
-└─────────────────┘
+# View logs
+docker-compose logs -f
 ```
 
-## 📊 **Key Features**
+**Access:**
+- Frontend (CRM): http://localhost:3000
+- Admin Portal: http://localhost:3010  
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-### **Customer Intelligence**
-- ✅ AI-powered company analysis using GPT-5
-- ✅ Automated lead scoring (0-100)
-- ✅ Multi-year financial analysis with trends
-- ✅ Director and officer information
-- ✅ Competitor identification
-- ✅ Risk factor analysis
-- ✅ Opportunity recommendations
-- ✅ Health score calculation
+**Default Login:**
+- Email: `admin@ccs.com`
+- Password: `admin123`
 
-### **Contact Management**
-- ✅ Multiple emails per contact (work/personal/other)
-- ✅ Multiple phone numbers (mobile/work/home/other)
-- ✅ Role-based contact categorization
-- ✅ Primary contact designation
-- ✅ Clickable contact cards with detailed views
-- ✅ Edit contacts with reusable dialog
-- ✅ Add directors as contacts with one click
+### Production Mode (Optimized Build)
 
-### **Address Management**
-- ✅ Google Maps multi-location discovery (70+ search queries)
-- ✅ "Not this business" exclusion system
-- ✅ Primary address selection
-- ✅ Address type management (primary/billing/delivery)
-- ✅ Manual address addition
-- ✅ Google Maps integration links
+```powershell
+# Build and start production environment
+docker-compose -f docker-compose.prod.yml up -d --build
+```
 
-### **Data Integration**
-- ✅ Companies House API (company profiles, officers, financials)
-- ✅ Companies House Document API (iXBRL parsing)
-- ✅ Google Maps Places API v1 (comprehensive location search)
-- ✅ OpenAI GPT-5 (business intelligence)
-- ✅ Web scraping (LinkedIn, websites)
+---
 
-### **User Experience**
-- ✅ Modern tabbed interface (Overview, AI Analysis, Financial, Addresses, Directors, Competitors)
-- ✅ Persistent tab state (localStorage)
-- ✅ Real-time data refresh
-- ✅ Responsive design
-- ✅ Loading states and error handling
-- ✅ Success/error notifications
+## 📚 Documentation
 
-## 🛠️ **Tech Stack**
+**IMPORTANT:** Read these guides for complete understanding:
 
-### **Frontend**
-- **CRM**: React 18 + TypeScript + Vite
-- **Admin**: Vue.js 3 + TypeScript + Element Plus
-- **UI**: Material-UI (MUI) / Element Plus
-- **State**: React hooks / Vue Composition API
+1. **[DEVELOPMENT_ENVIRONMENT.md](./DEVELOPMENT_ENVIRONMENT.md)** ⭐ **START HERE**
+   - Development vs Production modes
+   - Hot-reload configuration
+   - Docker setup and workflow
+   - Troubleshooting guide
 
-### **Backend**
-- FastAPI + Python 3.12
-- PostgreSQL with Row-Level Security
-- Redis for caching
-- Celery for async tasks
-- SQLAlchemy 2.0
-- Alembic migrations
+2. **[CAMPAIGNS_GUIDE.md](./CAMPAIGNS_GUIDE.md)**
+   - Lead generation system
+   - Campaign types and configuration
+   - AI-powered lead discovery
+   - Best practices
 
-### **AI & External APIs**
-- OpenAI GPT-5 / GPT-5-mini
-- Companies House API
-- Companies House Document API
-- Google Maps Places API v1
-- BeautifulSoup for web scraping
+3. **[CAMPAIGN_MIGRATION.md](./CAMPAIGN_MIGRATION.md)**
+   - Technical migration details from v1 to v2
+   - Feature comparisons
+   - Architecture improvements
 
-### **Infrastructure**
-- Docker + Docker Compose
-- Nginx reverse proxy
-- Cloud-ready deployment
-- Health checks and logging
+4. **[CHANGELOG.md](./CHANGELOG.md)**
+   - Version history
+   - Recent changes and fixes
 
-## 📋 **Development Roadmap**
+---
 
-### **Current Version: 2.2.0** ✅
-- ✅ Complete CRM module with AI integration
-- ✅ Multi-tenant admin portal
-- ✅ Contact management with multiple contact methods
-- ✅ Advanced address management
-- ✅ Financial analysis and business intelligence
-- ✅ Known facts system for AI accuracy
+## 🏗️ Architecture
 
-### **Next Release: 2.3.0** 🚧
-See [TODO.md](TODO.md) and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) for detailed plans.
+### Tech Stack
 
-**Priority 1: Database-Driven AI Prompts**
-- Move all AI prompts to database
-- Admin interface to view/edit prompts
-- Version control for prompts
-- Tenant-specific prompt customization
+**Backend:**
+- **FastAPI** - Modern Python web framework
+- **PostgreSQL 16** - Primary database
+- **Redis 7** - Caching and sessions
+- **SQLAlchemy 2.0** - ORM
+- **Alembic** - Database migrations
+- **OpenAI API** - GPT-5-mini for AI features
+- **Google Maps API** - Location services
+- **Companies House API** - UK business verification
 
-**Priority 2: Lead Generation Module**
-- Lead campaign management
-- Address-based lead targeting
-- Competitor-based lead discovery
-- Email campaign integration
-- Lead scoring and prioritization
+**Frontend:**
+- **React 18** - Main CRM interface
+- **Material-UI (MUI)** - Component library
+- **Vite** - Build tool and dev server
+- **TypeScript** - Type safety
+- **React Router** - Navigation
+- **Axios** - HTTP client
 
-**Priority 3: Quoting Module**
-- Dynamic quote builder
-- Product/service catalog
-- Pricing rules engine
-- Quote templates
-- PDF generation
-- Quote approval workflow
+**Admin Portal:**
+- **Vue.js 3** - Admin interface
+- **Element Plus** - UI components
+- **Vite** - Build tool
+- **TypeScript** - Type safety
 
-### **Future Enhancements** 🔮
-- Integration with accounting packages (Xero, QuickBooks)
-- Advanced reporting and analytics
-- Email marketing automation
-- Sales pipeline management
-- Task and activity tracking
-- Document management system
-- Mobile app (React Native)
+**Infrastructure:**
+- **Docker** - Containerization
+- **Docker Compose** - Orchestration
+- **Nginx** - Production web server
 
-## 📁 **Project Structure**
+---
+
+## 🚀 Features
+
+### ✨ Core CRM Features
+- **Multi-tenant SaaS architecture**
+- **Customer management** with AI analysis
+- **Contact management** with multiple contacts per customer
+- **Lead scoring** and qualification
+- **Customer status workflow:** DISCOVERY → LEAD → PROSPECT → OPPORTUNITY → CUSTOMER
+- **AI-powered company analysis** using GPT-5-mini
+- **Financial analysis** from Companies House data
+- **Director information** with "Add as Contact" functionality
+- **Multiple addresses** per customer with Google Maps integration
+- **LinkedIn and website analysis**
+- **Sales activity tracking**
+- **Notes and interactions history**
+
+### 🎯 Lead Generation Campaigns
+- **AI-powered lead discovery** using GPT-5-mini with web search
+- **10+ campaign types** (IT/MSP, Education, Healthcare, Manufacturing, etc.)
+- **Multi-source data enrichment:**
+  - Google Maps API (locations, ratings)
+  - Companies House API (financials, directors)
+  - LinkedIn profiles
+  - Website scraping
+- **Intelligent deduplication** against customers and existing leads
+- **Background processing** (3-10 minutes per campaign)
+- **Real-time campaign monitoring**
+- **Lead-to-customer conversion** with DISCOVERY status
+
+### 🔐 Authentication & Security
+- **JWT-based authentication**
+- **Role-based access control (RBAC)**
+- **Row-level security (RLS)** for multi-tenant data isolation
+- **Argon2 password hashing**
+- **Session management** with Redis
+
+### 🌍 Internationalization
+- **Multi-language support** (i18next)
+- **AI-powered translation** for UI elements
+- **User-selectable language preferences**
+
+### 🎨 Modern UI/UX
+- **Colorful gradient statistics cards**
+- **Tabbed interface** for better organization
+- **Real-time updates** with auto-refresh
+- **Responsive design** for all screen sizes
+- **Dark mode support** (coming soon)
+- **Emoji icons** for visual hierarchy
+
+---
+
+## 📁 Project Structure
 
 ```
 CCS Quote Tool v2/
-├── backend/                # FastAPI backend
+├── backend/                    # FastAPI backend
 │   ├── app/
-│   │   ├── api/           # API routes
-│   │   ├── core/          # Config, security
-│   │   ├── models/        # SQLAlchemy models
-│   │   ├── services/      # Business logic
-│   │   └── main.py        # FastAPI app
-│   ├── alembic/           # Database migrations
-│   └── requirements.txt
-├── frontend/              # React CRM frontend (Vite)
+│   │   ├── api/v1/endpoints/  # API endpoints
+│   │   ├── core/              # Core configuration
+│   │   ├── models/            # Database models
+│   │   ├── services/          # Business logic
+│   │   └── migrations/        # Database migrations
+│   ├── Dockerfile             # Production dockerfile
+│   └── requirements.txt       # Python dependencies
+│
+├── frontend/                   # React frontend
 │   ├── src/
-│   │   ├── components/    # Reusable components
-│   │   ├── pages/         # Page components
-│   │   ├── services/      # API clients
-│   │   └── App.tsx
-│   └── package.json
-├── admin-portal/          # Vue.js admin portal
+│   │   ├── components/        # React components
+│   │   ├── pages/             # Page components
+│   │   ├── services/          # API services
+│   │   └── i18n/              # Translations
+│   ├── Dockerfile             # Production dockerfile
+│   ├── Dockerfile.dev         # Development dockerfile
+│   └── package.json           # Node dependencies
+│
+├── admin-portal/               # Vue.js admin portal
 │   ├── src/
-│   │   ├── views/         # Admin pages
-│   │   ├── components/    # Admin components
-│   │   └── router/
-│   └── package.json
-├── docker-compose.yml     # Multi-container setup
-├── TODO.md               # Detailed task list
-├── DEVELOPMENT_PLAN.md   # Comprehensive dev plan
-└── README.md             # This file
+│   │   ├── components/        # Vue components
+│   │   ├── views/             # Page views
+│   │   └── api/               # API services
+│   ├── Dockerfile             # Production dockerfile
+│   ├── Dockerfile.dev         # Development dockerfile
+│   └── package.json           # Node dependencies
+│
+├── docker-compose.yml         # Development config (default)
+├── docker-compose.dev.yml     # Development config (explicit)
+├── docker-compose.prod.yml    # Production config
+├── dev-start.ps1              # Quick start script
+│
+└── Documentation/
+    ├── README.md                      # This file
+    ├── DEVELOPMENT_ENVIRONMENT.md     # Dev guide ⭐
+    ├── CAMPAIGNS_GUIDE.md             # Campaign system guide
+    ├── CAMPAIGN_MIGRATION.md          # Migration notes
+    └── CHANGELOG.md                   # Version history
 ```
 
-## 🔧 **Configuration**
+---
 
-### **API Keys** (Stored in Database)
-API keys are managed through the Admin Portal Settings page:
-- **OpenAI API Key**: Required for all AI features
-- **Companies House API Key**: Required for UK company data
-- **Google Maps API Key**: Required for location services
+## 🔧 Development Workflow
 
-Keys can be configured at:
-1. **System Level** (Admin Portal > Global API Keys)
-2. **Tenant Level** (CRM > Settings > API Keys)
+### Daily Development
 
-Tenant keys override system keys when provided.
+1. **Start development environment:**
+   ```bash
+   docker-compose up -d
+   ```
 
-### **Environment Variables**
-See `env.example` for configuration options.
+2. **Edit code** - Changes are automatically detected:
+   - Frontend: `frontend/src/**` → Browser auto-refreshes
+   - Backend: `backend/app/**` → API auto-reloads
+   - Admin: `admin-portal/src/**` → Portal auto-updates
 
-## 🧪 **Testing**
+3. **View logs** (optional):
+   ```bash
+   docker-compose logs -f [service-name]
+   ```
+
+4. **Stop when done:**
+   ```bash
+   docker-compose down
+   ```
+
+### Making Changes
+
+**Frontend Changes:**
+```bash
+# Edit any file in frontend/src/
+notepad frontend/src/pages/Campaigns.tsx
+
+# Save - browser refreshes automatically within 1-2 seconds
+```
+
+**Backend Changes:**
+```bash
+# Edit any file in backend/app/
+notepad backend/app/api/v1/endpoints/campaigns.py
+
+# Save - API reloads automatically
+```
+
+**Database Migrations:**
+```bash
+# Run SQL migration
+Get-Content "backend/migrations/my_migration.sql" | docker-compose exec -T postgres psql -U postgres -d ccs_quote_tool
+
+# Restart backend
+docker-compose restart backend
+```
+
+### Testing Production Build
 
 ```bash
-# Backend tests
-docker-compose exec backend pytest
+# Stop development
+docker-compose down
 
-# Frontend tests
-docker-compose exec frontend npm test
+# Build and start production
+docker-compose -f docker-compose.prod.yml up -d --build
 
-# Admin portal tests
-docker-compose exec admin-portal npm test
+# Test at http://localhost:3000
+
+# Switch back to development
+docker-compose -f docker-compose.prod.yml down
+docker-compose up -d
 ```
 
-## 📊 **Database Management**
+---
 
+## 🔑 Environment Variables
+
+### Required API Keys
+
+For full functionality, configure these API keys in the Settings page or `.env` file:
+
+1. **OpenAI API Key** (Required for AI features)
+   - Get from: https://platform.openai.com
+   - Used for: Lead generation, company analysis, translations
+
+2. **Google Maps API Key** (Recommended)
+   - Get from: https://console.cloud.google.com
+   - Used for: Location services, address verification
+
+3. **Companies House API Key** (Recommended for UK)
+   - Get from: https://developer.company-information.service.gov.uk
+   - Used for: Company verification, financial data
+
+### Configuration
+
+**Option 1: Via UI (Recommended)**
+- Login → Settings → API Keys
+- Add keys per tenant or system-wide
+
+**Option 2: Via .env file**
+```env
+OPENAI_API_KEY=sk-...
+GOOGLE_MAPS_API_KEY=...
+COMPANIES_HOUSE_API_KEY=...
+```
+
+---
+
+## 🧪 Testing
+
+### Test Campaign Creation
+
+1. Navigate to **Campaigns** page
+2. Click **New Campaign**
+3. Fill in details:
+   - Name: "Test Campaign"
+   - Type: IT/MSP Expansion
+   - Postcode: LE17 5NJ
+   - Distance: 15 miles
+   - Max Results: 20
+4. Click **Start Campaign**
+5. Wait 3-5 minutes
+6. View generated leads
+
+### Test Customer Management
+
+1. Navigate to **Customers** page
+2. Click **Add Customer**
+3. Enter company name: "Central Technology Ltd"
+4. Click **Save**
+5. Click **Run AI Analysis**
+6. View enriched data (Companies House, Google Maps, LinkedIn)
+
+---
+
+## 📊 System Requirements
+
+### Minimum
+- **RAM:** 4GB
+- **CPU:** 2 cores
+- **Disk:** 10GB
+- **OS:** Windows 10+, macOS 10.15+, Linux
+
+### Recommended
+- **RAM:** 8GB+
+- **CPU:** 4+ cores
+- **Disk:** 20GB+
+- **OS:** Windows 11, macOS 12+, Ubuntu 22.04+
+
+### Software
+- **Docker Desktop:** Latest version
+- **Git:** Latest version
+- **PowerShell:** 7+ (Windows)
+
+---
+
+## 🐛 Troubleshooting
+
+### Frontend not updating?
 ```bash
-# Create migration
-docker-compose exec backend alembic revision --autogenerate -m "Description"
-
-# Apply migrations
-docker-compose exec backend alembic upgrade head
-
-# Rollback migration
-docker-compose exec backend alembic downgrade -1
+docker-compose restart frontend
+docker-compose logs -f frontend
 ```
 
-## 🐛 **Troubleshooting**
+### Backend not responding?
+```bash
+docker-compose restart backend
+docker-compose logs -f backend
+```
 
-### **Port Conflicts**
-- CRM Frontend: 3000
-- Admin Portal: 3010
-- Backend API: 8000
-- PostgreSQL: 5432
-- Redis: 6379
+### Database connection issues?
+```bash
+docker-compose restart postgres
+docker-compose exec postgres pg_isready
+```
 
-### **Reset Development Environment**
+### Full reset (deletes all data):
 ```bash
 docker-compose down -v
-docker-compose up -d --build
+docker-compose up -d
 ```
 
-### **View Logs**
+### More help?
+See **[DEVELOPMENT_ENVIRONMENT.md](./DEVELOPMENT_ENVIRONMENT.md)** for detailed troubleshooting.
+
+---
+
+## 📝 Version History
+
+### v2.2.2 (Current) - October 2025
+
+**Major Features:**
+- ✅ Complete lead generation campaign system
+- ✅ AI-powered lead discovery with GPT-5-mini
+- ✅ Multi-source data enrichment
+- ✅ DISCOVERY and OPPORTUNITY customer statuses
+- ✅ Modern UI with gradient statistics cards
+- ✅ Development environment with hot-reload
+- ✅ Comprehensive documentation
+
+**Technical:**
+- ✅ Development/Production Docker configurations
+- ✅ FastAPI BackgroundTasks for campaign processing
+- ✅ React with Material-UI
+- ✅ Vue.js admin portal
+- ✅ PostgreSQL 16 + Redis 7
+- ✅ Multi-tenant architecture
+
+See **[CHANGELOG.md](./CHANGELOG.md)** for complete history.
+
+---
+
+## 🤝 Contributing
+
+### Development Process
+
+1. **Create feature branch:**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make changes** in development mode
+
+3. **Test locally:**
+   ```bash
+   # Test in development
+   docker-compose up -d
+   
+   # Test in production
+   docker-compose -f docker-compose.prod.yml up -d --build
+   ```
+
+4. **Commit changes:**
+   ```bash
+   git add .
+   git commit -m "feat: your feature description"
+   ```
+
+5. **Push and create PR:**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+### Code Standards
+
+- **Python:** PEP 8, type hints, docstrings
+- **TypeScript:** ESLint, Prettier
+- **Commits:** Conventional Commits format
+- **Documentation:** Update relevant .md files
+
+---
+
+## 📞 Support
+
+### Documentation
+- **Development Guide:** [DEVELOPMENT_ENVIRONMENT.md](./DEVELOPMENT_ENVIRONMENT.md)
+- **Campaign Guide:** [CAMPAIGNS_GUIDE.md](./CAMPAIGNS_GUIDE.md)
+- **Migration Guide:** [CAMPAIGN_MIGRATION.md](./CAMPAIGN_MIGRATION.md)
+
+### Logs
 ```bash
 # All services
 docker-compose logs -f
 
 # Specific service
-docker-compose logs -f backend
 docker-compose logs -f frontend
+docker-compose logs -f backend
 ```
 
-## 📖 **Documentation**
+### Database
+```bash
+# Connect to PostgreSQL
+docker-compose exec postgres psql -U postgres -d ccs_quote_tool
 
-- **API Documentation**: http://localhost:8000/docs (Swagger UI)
-- **API Redoc**: http://localhost:8000/redoc
-- **Development Plan**: See [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
-- **TODO List**: See [TODO.md](TODO.md)
-
-## 🤝 **Contributing**
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📄 **License**
-
-MIT License - see [LICENSE](LICENSE) file for details.
+# List tables
+docker-compose exec postgres psql -U postgres -d ccs_quote_tool -c "\dt"
+```
 
 ---
 
-## 🎯 **Version History**
+## 📜 License
 
-### **v2.2.0** (October 11, 2025)
-- ✅ Complete CRM module with AI integration
-- ✅ Multiple emails/phones per contact
-- ✅ Advanced address management
-- ✅ Known facts system
-- ✅ Contact detail dialogs
-- ✅ Fixed customer update endpoint
-- ✅ Backend contact notes support
-
-### **v2.1.0** (October 9, 2025)
-- ✅ Multilingual support (10 languages)
-- ✅ Argon2 password hashing
-- ✅ Admin portal with tenant management
-- ✅ API key management system
-- ✅ User management features
-
-### **v2.0.0** (October 1, 2025)
-- 🎉 Initial multi-tenant architecture
-- 🎉 FastAPI backend with PostgreSQL
-- 🎉 React frontend with Material-UI
-- 🎉 JWT authentication
-- 🎉 Docker containerization
+Proprietary - CCS Technology Ltd  
+All Rights Reserved
 
 ---
 
-**CCS Quote Tool v2** - The future of CRM and quoting platforms.
+## 🎉 Credits
 
-**Version**: 2.2.0  
-**Status**: Active Development  
-**Last Updated**: October 11, 2025
+**Developed by:** CCS Development Team  
+**AI Integration:** OpenAI GPT-5-mini  
+**Location Services:** Google Maps API  
+**Business Data:** Companies House API  
+
+---
+
+**🚀 Happy Coding!**
+
+For detailed development instructions, always refer to **[DEVELOPMENT_ENVIRONMENT.md](./DEVELOPMENT_ENVIRONMENT.md)**

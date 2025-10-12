@@ -6,6 +6,133 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.3] - 2025-10-12
+
+### 🎯 Major Features Added
+- **Development Environment with Hot-Reload**: Complete Docker development/production separation
+  - Development mode with instant code changes (no rebuilds required)
+  - Production mode with optimized builds for deployment
+  - Separate Docker Compose configurations for each environment
+  - Frontend hot-reload via Vite dev server (updates in <2 seconds)
+  - Backend auto-reload via uvicorn --reload
+  - Admin portal hot-reload via Vue + Vite HMR
+  
+- **Lead Generation Campaign System**: Complete migration from v1 to v2
+  - AI-powered lead discovery using OpenAI GPT-5-mini with Responses API (web search enabled)
+  - 10+ predefined campaign types (IT/MSP, Education, Healthcare, Manufacturing, etc.)
+  - Multi-source data enrichment:
+    - Google Maps API (location, ratings, reviews)
+    - Companies House API (financial data, directors)
+    - LinkedIn profile detection
+    - Website scraping for additional insights
+  - Intelligent deduplication against existing customers and leads
+  - Background processing via FastAPI BackgroundTasks (3-10 minutes per campaign)
+  - Real-time campaign monitoring with auto-refresh
+  - Lead-to-customer conversion with DISCOVERY status assignment
+  
+- **Enhanced Customer Lifecycle**: New status workflow stages
+  - **DISCOVERY**: Companies identified via campaigns but not yet contacted (shown in Leads section)
+  - **OPPORTUNITY**: Active sales opportunity with quote/proposal (between PROSPECT and CUSTOMER)
+  - Complete workflow: DISCOVERY → LEAD → PROSPECT → OPPORTUNITY → CUSTOMER
+
+### ✨ Enhancements
+
+- **Development Experience**:
+  - `docker-compose.yml` → Development mode (default)
+  - `docker-compose.dev.yml` → Development mode (explicit)
+  - `docker-compose.prod.yml` → Production mode (optimized builds)
+  - `dev-start.ps1` → Quick start script for Windows
+  - Volume mounts for live code updates in development
+  - No volume mounts in production (immutable containers)
+  
+- **Campaign UI/UX**:
+  - Dashboard-style campaigns page with gradient statistics cards
+  - Emoji icons for visual hierarchy (🎯 📊 ✅ ❌ ⏱️)
+  - Real-time status updates with auto-refresh every 10 seconds
+  - Campaign type selection with card-based interface
+  - Sticky preview panel on campaign creation
+  - Detailed campaign view with lead table and conversion options
+  - Tabbed filtering (All, Running, Completed, Failed)
+  
+- **Backend Architecture**:
+  - `LeadGenerationService` with async operations
+  - Integration with OpenAI Responses API for web search
+  - Increased token limits: 10,000+ for all AI operations
+  - Timeout increased to 120 seconds for complex AI queries
+  - `created_by` and `updated_by` tracking for campaigns
+  - Background task execution for non-blocking campaign runs
+  
+- **Database Schema**:
+  - Added `DISCOVERY` and `OPPORTUNITY` to `customerstatus` enum
+  - Added `created_by` and `updated_by` columns to `lead_generation_campaigns` table
+  - Migration scripts for all enum and schema changes
+
+### 🐛 Bug Fixes
+- Fixed campaign creation failing due to missing user tracking fields
+- Fixed frontend TypeScript build errors with Chip component icon prop
+- Fixed database enum case sensitivity issues (UPPERCASE required)
+- Fixed lead deduplication logic to check both leads and customers tables
+- Fixed campaign status display in UI
+
+### 📚 Documentation
+- **DEVELOPMENT_ENVIRONMENT.md**: Comprehensive 500+ line guide covering:
+  - Development vs Production modes
+  - Quick start commands
+  - Docker configuration details
+  - Development workflow best practices
+  - Troubleshooting guide
+  - File watching and hot-reload setup
+  - Environment variables
+  - Common issues and solutions
+  
+- **CAMPAIGNS_GUIDE.md**: Complete user guide for lead generation system:
+  - Features overview
+  - Campaign types and use cases
+  - Step-by-step usage instructions
+  - Performance expectations
+  - Troubleshooting tips
+  
+- **CAMPAIGN_MIGRATION.md**: Technical migration documentation:
+  - v1 to v2 architectural changes
+  - Model and service enhancements
+  - API endpoint comparisons
+  - Testing instructions
+  
+- **README.md**: Root-level documentation with:
+  - Quick start for dev and prod modes
+  - Architecture overview
+  - Features list
+  - Project structure
+  - Development workflow
+  - Troubleshooting
+  - Version history
+
+### 🎨 Visual Improvements
+- Gradient statistics cards with hover effects
+- Color-coded campaign status badges
+- Modern card-based layouts throughout
+- Responsive design for all screen sizes
+- Consistent color scheme with purple/blue gradients
+- Emoji icons for better visual scanning
+
+### 🔧 Technical Improvements
+- Proper SQLAlchemy enum handling with database-first approach
+- AsyncHTTPClient for external API calls
+- Comprehensive error handling and logging
+- Type hints throughout Python codebase
+- TypeScript strict mode enabled
+- Docker multi-stage builds for production
+- Development Dockerfiles for hot-reload
+
+### 🚀 Performance
+- Development: <2 second hot-reload for frontend changes
+- Development: <3 second auto-reload for backend changes
+- Production: Minified and optimized builds
+- Campaign processing: 3-10 minutes for 10-50 leads
+- AI analysis: 20-30 seconds per company with GPT-5-mini
+
+---
+
 ## [2.2.2] - 2025-10-12
 
 ### 🎯 Major Features Added

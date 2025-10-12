@@ -39,7 +39,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # FastAPI Backend (Development Mode)
+  # FastAPI Backend
   backend:
     build:
       context: ./backend
@@ -69,37 +69,26 @@ services:
       - ccs-network
     restart: unless-stopped
 
-  # React Frontend (Development Mode with Hot Reload)
+  # React Frontend
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: ccs-frontend
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "3000:80"
     depends_on:
       - backend
     networks:
       - ccs-network
     restart: unless-stopped
-    stdin_open: true
-    tty: true
 
-  # Vue.js Admin Portal (Development Mode)
+  # Vue.js Admin Portal
   admin-portal:
     build:
       context: ./admin-portal
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: ccs-admin-portal
-    environment:
-      - VITE_API_URL=http://localhost:8000
     ports:
       - "3010:3010"
     volumes:
@@ -118,4 +107,3 @@ volumes:
 networks:
   ccs-network:
     driver: bridge
-
