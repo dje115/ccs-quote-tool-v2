@@ -22,6 +22,7 @@ import Leads from './pages/Leads';
 import LeadDetail from './pages/LeadDetail';
 import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
+import CampaignDetail from './pages/CampaignDetail';
 import Quotes from './pages/Quotes';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
@@ -128,6 +129,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <CampaignCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns/:campaignId"
+            element={
+              <ProtectedRoute>
+                <CampaignDetail />
               </ProtectedRoute>
             }
           />
