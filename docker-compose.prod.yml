@@ -69,12 +69,16 @@ services:
       - ccs-network
     restart: unless-stopped
 
-  # React Frontend
+  # React Frontend (Production Build)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:8000
     container_name: ccs-frontend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
     ports:
       - "3000:80"
     depends_on:
@@ -83,17 +87,16 @@ services:
       - ccs-network
     restart: unless-stopped
 
-  # Vue.js Admin Portal
+  # Vue.js Admin Portal (Production Build)
   admin-portal:
     build:
       context: ./admin-portal
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prod
+      args:
+        - VITE_API_URL=http://localhost:8000
     container_name: ccs-admin-portal
     ports:
       - "3010:3010"
-    volumes:
-      - ./admin-portal:/app
-      - /app/node_modules
     depends_on:
       - backend
     networks:

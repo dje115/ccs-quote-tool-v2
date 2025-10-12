@@ -352,7 +352,7 @@ const Campaigns: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        {...(getStatusIcon(campaign.status) && { icon: getStatusIcon(campaign.status) })}
+                        icon={getStatusIcon(campaign.status) || undefined}
                         label={campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                         color={getStatusColor(campaign.status)}
                         size="small"
