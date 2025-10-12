@@ -117,10 +117,13 @@ Both environments use the same database:
 
 ## ⚠️ Important Notes
 
-1. **Only one environment can run at a time** (they share PostgreSQL and Redis ports)
+1. **Only one environment can run at a time** (they use the same container names)
 2. **Always stop one before starting the other** using the stop scripts
-3. **Database data persists** between environment switches
-4. **Hot-reload only works in development mode**
+3. **Separate databases**: Dev and production have completely separate databases and data
+   - Development: `postgres_data_dev` and `redis_data_dev`
+   - Production: `postgres_data_prod` and `redis_data_prod`
+4. **Data isolation**: Changes in dev won't affect production (and vice versa)
+5. **Hot-reload only works in development mode**
 
 ---
 
