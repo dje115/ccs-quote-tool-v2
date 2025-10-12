@@ -77,6 +77,12 @@ export const tenantAPI = {
   signup: (data: any) => apiClient.post('/tenants/signup', data),
 };
 
+// Dashboard API
+export const dashboardAPI = {
+  get: (endpoint: string) => apiClient.get(`/dashboard${endpoint}`),
+  post: (endpoint: string, data?: any, config?: any) => apiClient.post(`/dashboard${endpoint}`, data, config),
+};
+
 // Customer API
 export const customerAPI = {
   list: (params?: any) => apiClient.get('/customers/', { params }),

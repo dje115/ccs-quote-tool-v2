@@ -12,12 +12,30 @@ from .base import Base, BaseModel
 
 
 class CustomerStatus(enum.Enum):
-    """Customer status enumeration"""
-    LEAD = "lead"
-    PROSPECT = "prospect"
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    CHURNED = "churned"
+    """
+    Customer status enumeration
+    
+    IMPORTANT: These enum values MUST match the PostgreSQL enum type 'customerstatus' exactly.
+    The database enum is case-sensitive and uses UPPERCASE values.
+    
+    Database enum values (PostgreSQL):
+    - LEAD, PROSPECT, CUSTOMER, COLD_LEAD, INACTIVE, LOST (uppercase - CURRENT/ACTIVE)
+    - Legacy values also exist: ACTIVE, CHURNED, customer, cold_lead, lost (lowercase - DO NOT USE)
+    
+    To add new status values:
+    1. Add the value to this enum with UPPERCASE string value
+    2. Run: ALTER TYPE customerstatus ADD VALUE IF NOT EXISTS 'NEW_VALUE';
+    3. Restart the backend container to pick up the changes
+    
+    The enum value (right side) is what gets stored in the database.
+    Always use UPPERCASE to match PostgreSQL enum.
+    """
+    LEAD = "LEAD"                    # New potential customer
+    PROSPECT = "PROSPECT"            # Qualified lead, actively engaging
+    CUSTOMER = "CUSTOMER"            # Active paying customer
+    COLD_LEAD = "COLD_LEAD"         # Lead that went cold
+    INACTIVE = "INACTIVE"            # Customer no longer active
+    LOST = "LOST"                    # Lost to competitor or decided not to buy
 
 
 class BusinessSector(enum.Enum):

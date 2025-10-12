@@ -59,8 +59,8 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                     {"role": "system", "content": "You are a helpful assistant that finds company websites. Respond only with the URL or NOT_FOUND."},
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=100,
-                timeout=30.0
+                max_completion_tokens=10000,
+                timeout=120.0
             )
             
             website = response.choices[0].message.content.strip()
@@ -481,7 +481,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_completion_tokens=2000
+                max_completion_tokens=10000
             )
             
             ai_response = response.choices[0].message.content
@@ -540,7 +540,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_completion_tokens=2000
+                max_completion_tokens=10000
             )
             
             ai_response = response.choices[0].message.content
@@ -598,7 +598,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_completion_tokens=1500
+                max_completion_tokens=10000
             )
             
             ai_response = response.choices[0].message.content
@@ -658,4 +658,68 @@ Do not include any explanation, just the URL or NOT_FOUND."""
         except Exception as e:
             print(f"[ERROR] Error calculating lead score: {e}")
             return 50
+    
+    async def get_dashboard_insight(self, context: str) -> str:
+        """
+        Get AI-powered dashboard insights based on CRM data
+        
+        IMPORTANT: Uses GPT-5-mini model for AI responses.
+        Returns empty string if OpenAI client is not initialized or API call fails.
+        """
+        if not self.openai_client:
+            error_msg = "AI service is currently unavailable. Please check your API configuration."
+            print(f"[ERROR] {error_msg}")
+            return error_msg
+        
+        try:
+            system_prompt = """You are a CRM analytics assistant. Analyze the provided data and answer user questions 
+            clearly and concisely. Provide actionable insights and recommendations based on the data."""
+            
+            print(f"[DEBUG] Calling OpenAI API with model: gpt-5-mini")
+            print(f"[DEBUG] Context length: {len(context)} characters")
+            
+            response = self.openai_client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": context}
+                ],
+                max_completion_tokens=10000,  # High token limit for comprehensive responses
+                timeout=120.0  # Extended timeout for GPT-5-mini
+            )
+            
+            print(f"[DEBUG] Raw OpenAI response object: {response}")
+            print(f"[DEBUG] Response type: {type(response)}")
+            print(f"[DEBUG] Response attributes: {dir(response)}")
+            
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                print(f"[DEBUG] Number of choices: {len(response.choices)}")
+                print(f"[DEBUG] First choice: {response.choices[0]}")
+                print(f"[DEBUG] First choice type: {type(response.choices[0])}")
+                
+                if hasattr(response.choices[0], 'message'):
+                    print(f"[DEBUG] Message: {response.choices[0].message}")
+                    print(f"[DEBUG] Message content: {response.choices[0].message.content}")
+                    answer = response.choices[0].message.content
+                else:
+                    print(f"[ERROR] No 'message' attribute in choice!")
+                    answer = None
+            else:
+                print(f"[ERROR] No 'choices' in response!")
+                answer = None
+            
+            print(f"[DEBUG] Final answer: {answer}")
+            print(f"[DEBUG] Answer length: {len(answer) if answer else 0} characters")
+            
+            if not answer or not answer.strip():
+                return "I received your question but couldn't generate a response. Please try again."
+            
+            return answer.strip()
+            
+        except Exception as e:
+            error_msg = f"I'm unable to provide an answer at this time. Error: {str(e)}"
+            print(f"[ERROR] Dashboard insight generation failed: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return error_msg
 

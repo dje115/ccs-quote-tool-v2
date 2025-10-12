@@ -202,7 +202,7 @@ export default {
           }
         })
         
-        tenants.value = response.data.items
+        tenants.value = response.data.tenants
         total.value = response.data.total
       } catch (error) {
         console.error('Failed to load tenants:', error)
@@ -360,6 +360,7 @@ export default {
       loading,
       creating,
       showCreateDialog,
+      editingTenantId,
       tenants,
       currentPage,
       pageSize,

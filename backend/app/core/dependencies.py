@@ -17,11 +17,6 @@ from app.models.tenant import User, Tenant
 security = HTTPBearer()
 
 
-def get_current_tenant(request: Request) -> Optional[str]:
-    """Get current tenant ID from request state"""
-    return getattr(request.state, "tenant_id", settings.DEFAULT_TENANT)
-
-
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -66,6 +61,20 @@ async def get_current_user(
         )
     
     return user
+
+
+async def get_current_tenant(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Tenant:
+    """Get current tenant from authenticated user"""
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found"
+        )
+    return tenant
 
 
 async def get_current_active_user(

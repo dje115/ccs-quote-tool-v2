@@ -81,31 +81,62 @@ export default {
     }
     
     const handleLogin = async () => {
-      try {
-        loading.value = true
-        error.value = ''
-        
-        console.log('Attempting login with:', loginForm.email)
-        
-        const response = await axios.post('http://localhost:8000/api/v1/admin/auth/login', {
-          email: loginForm.email,
-          password: loginForm.password
-        })
-        
-        console.log('Login response:', response.data)
-        
-        if (response.data.access_token) {
-          localStorage.setItem('admin_token', response.data.access_token)
-          ElMessage.success('Login successful!')
-          router.push('/dashboard')
+      // Validate form first
+      if (!loginFormRef.value) return
+      
+      await loginFormRef.value.validate(async (valid) => {
+        if (!valid) {
+          return false
         }
-      } catch (err) {
-        console.error('Login error:', err)
-        console.error('Error response:', err.response)
-        error.value = err.response?.data?.detail || err.message || 'Login failed'
-      } finally {
-        loading.value = false
-      }
+        
+        try {
+          loading.value = true
+          error.value = ''
+          
+          console.log('Attempting login with:', loginForm.email)
+          
+          // Use regular auth login endpoint - must send as URL encoded form data
+          const params = new URLSearchParams()
+          params.append('username', loginForm.email)
+          params.append('password', loginForm.password)
+          
+          const response = await axios.post('http://localhost:8000/api/v1/auth/login', params, {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            }
+          })
+          
+          console.log('Login response:', response.data)
+          
+          if (response.data.access_token) {
+            localStorage.setItem('admin_token', response.data.access_token)
+            
+            // Verify user is admin
+            const userResponse = await axios.get('http://localhost:8000/api/v1/auth/me', {
+              headers: {
+                'Authorization': `Bearer ${response.data.access_token}`
+              }
+            })
+            
+            if (userResponse.data.role !== 'super_admin') {
+              localStorage.removeItem('admin_token')
+              error.value = 'Admin access required (super_admin role needed)'
+              ElMessage.error('Admin access required')
+              return
+            }
+            
+            ElMessage.success('Login successful!')
+            router.push('/dashboard')
+          }
+        } catch (err) {
+          console.error('Login error:', err)
+          console.error('Error response:', err.response)
+          error.value = err.response?.data?.detail || err.message || 'Login failed'
+          ElMessage.error(error.value)
+        } finally {
+          loading.value = false
+        }
+      })
     }
     
     return {
