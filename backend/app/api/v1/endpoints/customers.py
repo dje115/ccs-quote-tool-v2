@@ -289,6 +289,8 @@ async def update_customer(
     if customer_update.known_facts is not None:
         # Allow empty string to clear known facts
         customer.known_facts = customer_update.known_facts if customer_update.known_facts.strip() else None
+    if customer_update.is_competitor is not None:
+        customer.is_competitor = customer_update.is_competitor
     
     db.commit()
     db.refresh(customer)
