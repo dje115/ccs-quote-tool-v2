@@ -373,6 +373,9 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                         if tenant.elevator_pitch:
                             tenant_context += f"\n\nYour Value Proposition:\n{tenant.elevator_pitch}"
                         
+                        if tenant.partnership_opportunities:
+                            tenant_context += f"\n\nB2B Partnership Opportunities (How to work WITH similar businesses):\n{tenant.partnership_opportunities}"
+                        
                         # Debug: Show what tenant context was loaded
                         print(f"[AI ANALYSIS] Loaded tenant context for: {tenant.company_name}")
                         print(f"[AI ANALYSIS] Tenant context length: {len(tenant_context)} chars")
@@ -430,13 +433,27 @@ Do not include any explanation, just the URL or NOT_FOUND."""
 
             11. **Risk Factors**: What challenges or potential objections might we face when approaching them based on their financial position and business context?
 
-            12. **Actionable Sales Strategy** (CRITICAL): Based on the "YOUR COMPANY" information provided above, create a numbered list of 5-10 specific, actionable ways we can help this prospect.
-                - Review OUR company description, products/services, USPs, and target markets
-                - Match each of OUR specific offerings to one of THEIR specific needs
-                - Be concrete: state exactly which of our services addresses which of their problems
-                - Focus on practical, immediate opportunities that align with what we actually offer
-                - Make this list ready for a sales team to use in their first call
-                - Only suggest services that we actually provide (as listed in OUR company information)
+            12. **Actionable Sales Strategy** (CRITICAL): Analyze the prospect's business type and determine the best approach:
+            
+                **A) If they are a POTENTIAL CUSTOMER (B2C/Direct Sales):**
+                - Create 5-10 ways to sell OUR services directly TO them
+                - Match each of OUR products/services to one of THEIR specific needs
+                - Example: "Provide [our service] to address their [need/pain point]"
+                - Focus on how they can BUY from us
+                
+                **B) If they are in a SIMILAR/COMPLEMENTARY business (B2B/Partnership):**
+                - Use the "B2B Partnership Opportunities" section in OUR company information
+                - Create 5-10 ways to work WITH them (subcontracting, white-label, joint bids, etc.)
+                - Example: "Partner on their customer projects requiring [our expertise]"
+                - Example: "Act as their overflow/regional subcontractor for [service type]"
+                - Focus on how we can COLLABORATE to serve their customers together
+                
+                **IMPORTANT**: 
+                - Determine which approach fits based on their business activities
+                - If they're a potential customer, use approach A
+                - If they're a service provider like us (MSP, contractor, consultant, etc.), use approach B
+                - If both could apply, provide BOTH approaches clearly labeled
+                - Only suggest what we actually offer (as listed in OUR company information)
 
             13. **Address and Location Analysis**: Based on the company information, identify:
                 - Primary business address (if different from registered address)

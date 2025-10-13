@@ -49,6 +49,7 @@ interface ProfileData {
   target_markets: string[];
   sales_methodology: string;
   elevator_pitch: string;
+  partnership_opportunities: string;
   logo_url: string;
   logo_text: string;
   use_text_logo: boolean;
@@ -79,6 +80,7 @@ const CompanyProfile: React.FC = () => {
     target_markets: [],
     sales_methodology: '',
     elevator_pitch: '',
+    partnership_opportunities: '',
     logo_url: '',
     logo_text: '',
     use_text_logo: false,
@@ -115,6 +117,7 @@ const CompanyProfile: React.FC = () => {
         target_markets: Array.isArray(data.target_markets) ? data.target_markets : [],
         sales_methodology: data.sales_methodology || '',
         elevator_pitch: data.elevator_pitch || '',
+        partnership_opportunities: data.partnership_opportunities || '',
         logo_url: data.logo_url || '',
         logo_text: data.logo_text || '',
         use_text_logo: data.use_text_logo || false,
@@ -1247,7 +1250,7 @@ const CompanyProfile: React.FC = () => {
             <CardContent>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom color="primary">
                 Elevator Pitch
-              </Typography>
+                </Typography>
               <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                 Your 30-second pitch - what do you do and why should customers care?
               </Typography>
@@ -1261,6 +1264,38 @@ const CompanyProfile: React.FC = () => {
                 variant="outlined"
                 sx={{ mt: 1 }}
               />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Partnership Opportunities (B2B Collaboration) */}
+          <Grid item xs={12}>
+          <Card elevation={2} sx={{ border: '2px solid #4caf50' }}>
+            <CardContent>
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ color: '#4caf50' }}>
+                🤝 B2B Partnership Opportunities (CRITICAL for AI)
+            </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                <strong>How can you work WITH businesses in similar/complementary sectors?</strong> This helps AI identify partnership opportunities with MSPs, contractors, consultants, and other service providers who could refer work to you or collaborate on projects.
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1, mb: 1, fontStyle: 'italic' }}>
+                Examples: Subcontract installs, white-label services, joint bids, overflow work, partner on customer projects, act as their specialist subcontractor, etc.
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={6}
+                value={profile.partnership_opportunities || ''}
+                onChange={(e) => setProfile({ ...profile, partnership_opportunities: e.target.value })}
+                placeholder="Example (for a cabling contractor):&#10;&#10;- Subcontract structured cabling installations for MSPs' customers&#10;- Deliver data centre fit-outs for hosting providers&#10;- Partner on office relocations requiring new cabling&#10;- White-label cabling services under their branding&#10;- Join forces on large commercial tenders&#10;- Provide overflow/regional coverage for busy periods"
+                variant="outlined"
+                sx={{ mt: 1 }}
+              />
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="caption">
+                  <strong>Why this matters:</strong> When analyzing prospects, AI will check if they're a direct customer (sell TO them) or a potential partner (work WITH them). The better you describe your B2B collaboration models here, the more accurate and relevant the recommendations will be.
+                </Typography>
+              </Alert>
             </CardContent>
           </Card>
         </Grid>
@@ -1295,8 +1330,8 @@ const CompanyProfile: React.FC = () => {
               {saving ? 'Saving Profile...' : 'Save Company Profile'}
               </Button>
           </Paper>
-        </Grid>
           </Grid>
+      </Grid>
     </Box>
   );
 };

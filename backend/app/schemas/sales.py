@@ -127,6 +127,7 @@ class TenantProfileUpdate(BaseModel):
     target_markets: Optional[List[str]] = None
     sales_methodology: Optional[str] = None
     elevator_pitch: Optional[str] = None
+    partnership_opportunities: Optional[str] = None
     logo_url: Optional[str] = None
     logo_text: Optional[str] = None
     use_text_logo: Optional[bool] = None
