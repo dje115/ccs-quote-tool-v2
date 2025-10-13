@@ -339,6 +339,7 @@ const CustomerDetail: React.FC = () => {
           }}
         >
           <Tab icon={<BusinessIcon />} iconPosition="start" label="Overview" />
+          <Tab icon={<LightbulbIcon />} iconPosition="start" label="Discovery Intelligence" />
           <Tab icon={<AssessmentIcon />} iconPosition="start" label="AI Analysis" />
           <Tab icon={<AccountBalanceIcon />} iconPosition="start" label="Financial Data" />
           <Tab icon={<PlaceIcon />} iconPosition="start" label="Addresses" />
@@ -360,8 +361,177 @@ const CustomerDetail: React.FC = () => {
         />
       )}
 
-      {/* Tab Panel 1: AI Analysis */}
-      {currentTab === 1 && (
+      {/* Tab Panel 1: Discovery Intelligence - Data from Campaign Phase */}
+      {currentTab === 1 && customer && (
+        <Box>
+          {/* Quick Telesales Summary */}
+          {customer.description && (
+            <Paper sx={{ p: 3, mb: 3, bgcolor: 'success.light', border: '2px solid', borderColor: 'success.main' }}>
+              <Typography variant="h6" gutterBottom sx={{ color: 'success.dark', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PhoneIcon /> Quick Telesales Summary
+              </Typography>
+              <Divider sx={{ mb: 2, borderColor: 'success.main' }} />
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  whiteSpace: 'pre-line',
+                  '& strong': { fontWeight: 'bold', color: 'success.dark' }
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: customer.description.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                }}
+              />
+            </Paper>
+          )}
+
+          {/* Discovery AI Analysis */}
+          {customer.ai_analysis_raw && typeof customer.ai_analysis_raw === 'object' && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AiIcon /> Discovery AI Analysis
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                Generated during campaign discovery phase
+              </Typography>
+
+              {/* Company Profile */}
+              {customer.ai_analysis_raw.company_profile && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Company Profile
+                  </Typography>
+                  <Typography variant="body2" paragraph>
+                    {customer.ai_analysis_raw.company_profile}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Key Metrics Grid */}
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                {customer.ai_analysis_raw.business_sector && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Business Sector</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.business_sector}</Typography>
+                  </Grid>
+                )}
+                {customer.ai_analysis_raw.business_size_category && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Company Size</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.business_size_category}</Typography>
+                  </Grid>
+                )}
+                {customer.ai_analysis_raw.estimated_employees && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Estimated Employees</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.estimated_employees}</Typography>
+                  </Grid>
+                )}
+                {customer.ai_analysis_raw.estimated_revenue && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Estimated Revenue</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.estimated_revenue}</Typography>
+                  </Grid>
+                )}
+                {customer.ai_analysis_raw.technology_maturity && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Technology Maturity</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.technology_maturity}</Typography>
+                  </Grid>
+                )}
+                {customer.ai_analysis_raw.it_budget_estimate && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Budget Estimate</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.it_budget_estimate}</Typography>
+                  </Grid>
+                )}
+                {customer.ai_analysis_raw.growth_potential && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary">Growth Potential</Typography>
+                    <Chip 
+                      label={customer.ai_analysis_raw.growth_potential} 
+                      color={
+                        customer.ai_analysis_raw.growth_potential === 'High' ? 'success' : 
+                        customer.ai_analysis_raw.growth_potential === 'Medium' ? 'warning' : 'default'
+                      }
+                      size="small"
+                    />
+                  </Grid>
+                )}
+              </Grid>
+
+              {/* Detailed Sections */}
+              {customer.ai_analysis_raw.primary_business_activities && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Primary Business Activities
+                  </Typography>
+                  <Typography variant="body2">{customer.ai_analysis_raw.primary_business_activities}</Typography>
+                </Box>
+              )}
+
+              {customer.ai_analysis_raw.financial_health_analysis && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Financial Health Analysis
+                  </Typography>
+                  <Typography variant="body2">{customer.ai_analysis_raw.financial_health_analysis}</Typography>
+                </Box>
+              )}
+
+              {customer.ai_analysis_raw.technology_needs && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Needs Assessment
+                  </Typography>
+                  <Typography variant="body2">{customer.ai_analysis_raw.technology_needs}</Typography>
+                </Box>
+              )}
+
+              {customer.ai_analysis_raw.opportunities && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="success.main" gutterBottom>
+                    Business Opportunities
+                  </Typography>
+                  <Typography variant="body2">{customer.ai_analysis_raw.opportunities}</Typography>
+                </Box>
+              )}
+
+              {customer.ai_analysis_raw.competitors && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    Competitive Landscape
+                  </Typography>
+                  <Typography variant="body2">{customer.ai_analysis_raw.competitors}</Typography>
+                </Box>
+              )}
+
+              {customer.ai_analysis_raw.risks && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="error.main" gutterBottom>
+                    Risk Factors
+                  </Typography>
+                  <Typography variant="body2">{customer.ai_analysis_raw.risks}</Typography>
+                </Box>
+              )}
+            </Paper>
+          )}
+
+          {/* No Discovery Data */}
+          {!customer.description && (!customer.ai_analysis_raw || Object.keys(customer.ai_analysis_raw).length === 0) && (
+            <Paper sx={{ p: 3 }}>
+              <Alert severity="info">
+                <Typography variant="body2">
+                  No discovery intelligence data available. This customer was not created from a campaign discovery.
+                </Typography>
+              </Alert>
+            </Paper>
+          )}
+        </Box>
+      )}
+
+      {/* Tab Panel 2: AI Analysis */}
+      {currentTab === 2 && (
         <Box>
           {/* Known Facts Section */}
           <Paper sx={{ p: 3, mb: 3, bgcolor: '#fff8e1', border: '2px solid #ffd54f' }}>
@@ -507,8 +677,8 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 2: Financial Data */}
-      {currentTab === 2 && (
+      {/* Tab Panel 3: Financial Data */}
+      {currentTab === 3 && (
         <Box>
           {/* Financial Data from Companies House */}
           {customer?.companies_house_data?.accounts_detail && (
@@ -759,8 +929,8 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 3: Addresses */}
-      {currentTab === 3 && (
+      {/* Tab Panel 4: Addresses */}
+      {currentTab === 4 && (
         <Box>
           {customer?.google_maps_data && Array.isArray(customer.google_maps_data.locations) && customer.google_maps_data.locations.length > 0 ? (
             <>
@@ -983,8 +1153,8 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 4: Directors */}
-      {currentTab === 4 && (
+      {/* Tab Panel 5: Directors */}
+      {currentTab === 5 && (
         <Box>
           {customer?.companies_house_data?.accounts_detail?.active_directors && 
            customer.companies_house_data.accounts_detail.active_directors.length > 0 ? (
@@ -1059,8 +1229,8 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 5: Business Intelligence - Opportunities, Competitors, Risks */}
-      {currentTab === 5 && (
+      {/* Tab Panel 6: Business Intelligence - Opportunities, Competitors, Risks */}
+      {currentTab === 6 && (
         <Box>
           {/* Opportunities Section */}
           {customer?.ai_analysis_raw?.opportunities && (
@@ -1123,8 +1293,8 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 6: Quotes - Coming soon */}
-      {currentTab === 6 && (
+      {/* Tab Panel 7: Quotes - Coming soon */}
+      {currentTab === 7 && (
         <Paper sx={{ p: 3 }}>
           <Typography variant="h5" gutterBottom>Quotes</Typography>
           <Typography color="text.secondary">Quotes content will appear here</Typography>
