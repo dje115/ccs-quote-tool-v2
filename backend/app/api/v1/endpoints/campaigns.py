@@ -95,7 +95,8 @@ class LeadResponse(BaseModel):
     company_registration: Optional[str]
     registration_confirmed: bool
     converted_to_customer_id: Optional[str]
-    ai_analysis: Optional[Dict[str, Any]] = None  # AI analysis results
+    qualification_reason: Optional[str] = None  # Quick telesales summary
+    ai_analysis: Optional[Dict[str, Any]] = None  # Full AI analysis results
     linkedin_data: Optional[Dict[str, Any]] = None  # LinkedIn data
     companies_house_data: Optional[Dict[str, Any]] = None  # Companies House data
     google_maps_data: Optional[Dict[str, Any]] = None  # Google Maps data

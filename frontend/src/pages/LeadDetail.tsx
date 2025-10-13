@@ -171,6 +171,26 @@ const LeadDetail: React.FC = () => {
       <Grid container spacing={3}>
         {/* Lead Information */}
         <Grid item xs={12} md={8}>
+          {/* Quick Telesales Summary */}
+          {lead.qualification_reason && (
+            <Paper sx={{ p: 3, mb: 3, bgcolor: 'success.light', border: '2px solid', borderColor: 'success.main' }}>
+              <Typography variant="h6" gutterBottom sx={{ color: 'success.dark', fontWeight: 'bold' }}>
+                📞 Quick Telesales Summary
+              </Typography>
+              <Divider sx={{ mb: 2, borderColor: 'success.main' }} />
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  whiteSpace: 'pre-line',
+                  '& strong': { fontWeight: 'bold', color: 'success.dark' }
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: lead.qualification_reason.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                }}
+              />
+            </Paper>
+          )}
+
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>
               Company Information

@@ -620,6 +620,9 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 # Extract project value estimate
                 project_value = self._estimate_project_value(lead_data.get('project_value', ''))
                 
+                # Generate quick telesales summary
+                quick_summary = await self.generate_quick_lead_summary(lead_data)
+                
                 # Create lead record
                 lead = Lead(
                     tenant_id=self.tenant_id,
@@ -648,7 +651,7 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                     
                     # Lead scoring
                     lead_score=lead_data.get('lead_score', 50),
-                    qualification_reason=lead_data.get('description'),
+                    qualification_reason=quick_summary or lead_data.get('description'),  # Use AI summary or fallback to description
                     potential_project_value=project_value,
                     timeline_estimate=lead_data.get('timeline'),
                     
@@ -772,6 +775,7 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 billing_postcode=lead.postcode,
                 business_sector=business_sector_enum,
                 business_size=business_size_enum,
+                description=lead.qualification_reason,  # Copy the quick summary to CRM
                 status=CustomerStatus.LEAD,  # Starts at LEAD (first CRM stage)
                 lead_score=lead.lead_score,
                 linkedin_url=lead.linkedin_url,
@@ -779,6 +783,7 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 companies_house_data=lead.companies_house_data,
                 website_data=lead.website_data,
                 google_maps_data=lead.google_maps_data,
+                ai_analysis_raw=lead.ai_analysis,  # Copy full AI analysis too
                 created_by=user_id
             )
             
@@ -803,6 +808,121 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
         except Exception as e:
             self.db.rollback()
             return {'success': False, 'error': str(e)}
+    
+    async def generate_quick_lead_summary(self, lead_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Generate a concise B2B lead summary for telesales teams (under 300 words)
+        
+        This creates a quick summary perfect for outbound sales calls,
+        including why the lead is a good fit for the tenant's business.
+        
+        Returns a formatted summary with:
+        - Company name, website, location
+        - Sector, staff size, estimated revenue
+        - One-line overview
+        - 3-5 bullet points on why they're a good fit
+        """
+        if not self.openai_client:
+            return None
+        
+        try:
+            # Get tenant profile for context
+            tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            
+            # Build company context
+            company_info = f"Company Name: {lead_data.get('company_name', 'Unknown')}"
+            
+            if lead_data.get('website'):
+                company_info += f"\nWebsite: {lead_data['website']}"
+            
+            if lead_data.get('postcode'):
+                company_info += f"\nLocation: {lead_data.get('address', '')} {lead_data['postcode']}"
+            
+            if lead_data.get('business_sector'):
+                company_info += f"\nSector: {lead_data['business_sector']}"
+            
+            if lead_data.get('company_size'):
+                company_info += f"\nStaff Size: {lead_data['company_size']}"
+            
+            # Add external data if available
+            if lead_data.get('companies_house_data'):
+                ch_data = lead_data['companies_house_data']
+                if isinstance(ch_data, dict):
+                    if ch_data.get('company_status'):
+                        company_info += f"\nCompany Status: {ch_data['company_status']}"
+                    if ch_data.get('date_of_creation'):
+                        company_info += f"\nFounded: {ch_data['date_of_creation']}"
+            
+            if lead_data.get('google_maps_data'):
+                gm_data = lead_data['google_maps_data']
+                if isinstance(gm_data, dict):
+                    if gm_data.get('rating'):
+                        company_info += f"\nGoogle Rating: {gm_data['rating']}/5"
+            
+            # Build tenant context
+            tenant_context = ""
+            if tenant:
+                if tenant.company_description:
+                    tenant_context += f"\n\nYOUR COMPANY: {tenant.company_name}\n{tenant.company_description}"
+                
+                if tenant.products_services and isinstance(tenant.products_services, list):
+                    tenant_context += f"\n\nYour Products/Services:\n" + "\n".join([f"- {p}" for p in tenant.products_services[:5]])
+            
+            # Build prompt
+            prompt = f"""You are an expert B2B sales researcher who writes concise, factual lead summaries for CRM and outbound sales.
+
+Create a short lead summary for this prospect:
+
+{company_info}
+{tenant_context}
+
+Format the response EXACTLY as follows:
+
+**Company:** [Name]
+**Website:** [URL if available, or "Not found"]
+**Location:** [City/Town, Postcode]
+**Sector:** [Industry sector]
+**Staff Size:** [Estimate based on data, or "Unknown"]
+**Estimated Revenue:** [Range if data available, or "Not available"]
+
+**Overview:** [One concise sentence explaining what they do]
+
+**Why They're a Good Fit:**
+- [Bullet point 1: Specific reason relating to our products/services]
+- [Bullet point 2: Another specific alignment]
+- [Bullet point 3: Business context or opportunity]
+- [Optional: 1-2 more bullets if relevant]
+
+Focus on factual, specific reasons why this prospect matches what YOUR COMPANY offers.
+Keep the total summary under 300 words, professional tone, ready for telesales outreach.
+"""
+            
+            print(f"      [SUMMARY] Generating quick lead summary for {lead_data.get('company_name')}")
+            
+            response = self.openai_client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert B2B sales researcher. Create concise, factual lead summaries that help sales teams understand prospects quickly. Always be professional and focus on business fit."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                max_completion_tokens=10000,
+                timeout=120.0
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            print(f"      [SUMMARY] ✓ Generated summary ({len(summary)} chars)")
+            
+            return summary
+            
+        except Exception as e:
+            print(f"      [SUMMARY] ✗ Error generating summary: {e}")
+            return None
     
     async def analyze_lead_with_ai(self, lead_id: str) -> Dict[str, Any]:
         """
