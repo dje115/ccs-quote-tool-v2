@@ -262,14 +262,24 @@ const CustomerDetail: React.FC = () => {
 
   const handleCompetitorToggle = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const isCompetitor = event.target.checked;
+    
+    // Optimistic update - update local state immediately
+    setCustomer((prev: any) => ({
+      ...prev,
+      is_competitor: isCompetitor
+    }));
+    
     try {
       await customerAPI.update(id!, { is_competitor: isCompetitor });
       setAiAnalysisSuccess(isCompetitor ? 'Marked as competitor' : 'Removed competitor flag');
       setTimeout(() => setAiAnalysisSuccess(null), 3000);
-      // Reload customer data to reflect new status
-      await loadCustomerData();
     } catch (error) {
       console.error('Failed to update competitor status:', error);
+      // Revert optimistic update on error
+      setCustomer((prev: any) => ({
+        ...prev,
+        is_competitor: !isCompetitor
+      }));
       setAiAnalysisError('Failed to update competitor status');
       setTimeout(() => setAiAnalysisError(null), 5000);
     }

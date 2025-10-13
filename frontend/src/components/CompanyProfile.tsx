@@ -226,11 +226,24 @@ const CompanyProfile: React.FC = () => {
     
     const aiData = autoFillResults.ai_data;
     
+    if (action === 'discard') {
+      // Mark this field as discarded by removing it from ai_data
+      setAutoFillResults(prev => {
+        if (!prev) return prev;
+        const newAiData = { ...prev.ai_data };
+        delete newAiData[field as keyof typeof newAiData];
+        return {
+          ...prev,
+          ai_data: newAiData
+        };
+      });
+      setSuccess(`Kept current ${field.replace(/_/g, ' ')} - AI suggestion discarded.`);
+      setTimeout(() => setSuccess(''), 3000);
+      return;
+    }
+    
     setProfile(prev => {
-      if (action === 'discard') {
-        // Keep existing data, do nothing
-        return prev;
-      } else if (action === 'replace') {
+      if (action === 'replace') {
         // Replace with AI data
         return {
           ...prev,
@@ -264,7 +277,18 @@ const CompanyProfile: React.FC = () => {
       return prev;
     });
     
-    setSuccess(`Updated ${field.replace(/_/g, ' ')}! Remember to click "Save Company Profile" to persist changes.`);
+    // Remove the field from auto-fill results after applying
+    setAutoFillResults(prev => {
+      if (!prev) return prev;
+      const newAiData = { ...prev.ai_data };
+      delete newAiData[field as keyof typeof newAiData];
+      return {
+        ...prev,
+        ai_data: newAiData
+      };
+    });
+    
+    setSuccess(`Applied ${field.replace(/_/g, ' ')}! Remember to click "Save Company Profile" to persist changes.`);
     setTimeout(() => setSuccess(''), 3000);
   };
 
