@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_admin_user
 from app.core.security import get_password_hash
 from app.models.tenant import User, UserRole
+from app.core.permissions import get_permissions_by_category, get_default_permissions
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ class UserCreate(BaseModel):
     password: str
     role: UserRole = UserRole.USER
     phone: str | None = None
+    permissions: List[str] | None = None  # Optional custom permissions
 
 
 class UserResponse(BaseModel):
@@ -36,6 +38,7 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     role: str
+    permissions: List[str] | None = None
     is_active: bool
     created_at: datetime
     
@@ -101,6 +104,9 @@ async def create_user(
     try:
         hashed_password = get_password_hash(user_data.password)
         
+        # Use custom permissions if provided, otherwise use role defaults
+        permissions = user_data.permissions if user_data.permissions is not None else get_default_permissions(user_data.role.value)
+        
         user = User(
             id=str(uuid.uuid4()),
             tenant_id=current_user.tenant_id,
@@ -113,7 +119,7 @@ async def create_user(
             is_verified=False,
             role=user_data.role,
             phone=user_data.phone,
-            permissions=self._get_default_permissions(user_data.role)
+            permissions=permissions
         )
         
         db.add(user)
@@ -230,3 +236,38 @@ def _get_default_permissions(role: UserRole) -> List[str]:
             "quote:read",
             "contact:read"
         ]
+
+
+@router.get("/permissions/available")
+async def get_available_permissions(
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Get all available permissions organized by category
+    Admin only - used when creating/editing users
+    """
+    return {
+        "permissions": get_permissions_by_category(),
+        "roles": {
+            "super_admin": "Super Admin (All Permissions)",
+            "tenant_admin": "Tenant Admin",
+            "manager": "Manager",
+            "sales_rep": "Sales Representative",
+            "user": "User (Read Only)"
+        }
+    }
+
+
+@router.get("/permissions/defaults/{role}")
+async def get_role_default_permissions(
+    role: str,
+    current_user: User = Depends(get_current_admin_user)
+):
+    """
+    Get default permissions for a specific role
+    Admin only - used to pre-populate permission checkboxes
+    """
+    return {
+        "role": role,
+        "permissions": get_default_permissions(role)
+    }

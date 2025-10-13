@@ -14,7 +14,8 @@ from .base import Base, BaseModel
 class LeadGenerationStatus(enum.Enum):
     """Lead generation campaign status"""
     DRAFT = "draft"
-    RUNNING = "running"
+    QUEUED = "queued"  # Queued in Celery, waiting for worker
+    RUNNING = "running"  # Currently executing in Celery worker
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"

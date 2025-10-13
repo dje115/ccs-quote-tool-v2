@@ -23,6 +23,7 @@ import httpx
 from app.core.api_keys import get_api_keys
 from app.models.leads import LeadGenerationCampaign, Lead, LeadStatus, LeadSource, LeadGenerationStatus
 from app.models.crm import Customer, CustomerStatus
+from app.models.tenant import Tenant
 
 
 class LeadGenerationService:
@@ -43,6 +44,7 @@ class LeadGenerationService:
     def __init__(self, db: Session, tenant_id: str):
         self.db = db
         self.tenant_id = tenant_id
+        self.tenant = None
         self.openai_client = None
         self.gmaps_client = None
         self.companies_house_key = None
@@ -51,14 +53,22 @@ class LeadGenerationService:
     def _initialize_clients(self):
         """Initialize all API clients with keys"""
         try:
+            # Fetch tenant object from database
+            self.tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            if not self.tenant:
+                print(f"[ERROR] Tenant not found: {self.tenant_id}")
+                return
+            
             # Get API keys (tenant-specific or system-wide)
-            api_keys = get_api_keys(self.db, self.tenant_id)
+            api_keys = get_api_keys(self.db, self.tenant)
+            
+            print(f"[INFO] API Keys resolved from: {api_keys.source}")
             
             # Initialize OpenAI client
-            if api_keys.get('openai'):
+            if api_keys.openai:
                 import openai
                 self.openai_client = openai.OpenAI(
-                    api_key=api_keys['openai'],
+                    api_key=api_keys.openai,
                     timeout=240.0  # 4 minutes for GPT-5-mini with web search [[memory:9653106]]
                 )
                 print("[OK] OpenAI client initialized")
@@ -66,16 +76,16 @@ class LeadGenerationService:
                 print("[WARN] OpenAI API key not found")
             
             # Initialize Google Maps client
-            if api_keys.get('google_maps'):
+            if api_keys.google_maps:
                 import googlemaps
-                self.gmaps_client = googlemaps.Client(key=api_keys['google_maps'])
+                self.gmaps_client = googlemaps.Client(key=api_keys.google_maps)
                 print("[OK] Google Maps client initialized")
             else:
                 print("[WARN] Google Maps API key not found")
             
             # Store Companies House key
-            if api_keys.get('companies_house'):
-                self.companies_house_key = api_keys['companies_house']
+            if api_keys.companies_house:
+                self.companies_house_key = api_keys.companies_house
                 print("[OK] Companies House API key found")
             else:
                 print("[WARN] Companies House API key not found")
@@ -177,7 +187,10 @@ class LeadGenerationService:
         """
         Use GPT-5-mini with Responses API + web search to find real businesses
         
-        [[memory:9653106]] - CRITICAL: Use gpt-5-mini with 10000+ tokens, 120s+ timeout
+        [[memory:9653106]] - CRITICAL: Use gpt-5-mini with 20000+ tokens, 240s+ timeout
+        
+        The Responses API with web_search tool provides real-time web access for finding
+        actual UK businesses, making lead generation much more accurate and current.
         """
         
         # Build comprehensive prompt
@@ -189,9 +202,10 @@ class LeadGenerationService:
             print(f"🎫 Max Tokens: 20000 (comprehensive results)")
             
             # Use Responses API with web search [[memory:9653106]]
+            # This API enables real-time web search for finding actual businesses
             response = self.openai_client.responses.create(
                 model="gpt-5-mini",
-                tools=[{"type": "web_search"}],  # Enable web search
+                tools=[{"type": "web_search"}],  # Enable real-time web search
                 input=[
                     {
                         "role": "system",
@@ -221,9 +235,9 @@ SEARCH STRATEGY:
                 metadata={"task": f"lead_generation_{campaign.prompt_type}"}
             )
             
-            print(f"✓ GPT-5-mini response received")
+            print(f"✓ GPT-5-mini Responses API call completed")
             
-            # Extract response text
+            # Extract response text from Responses API format
             ai_response = self._extract_response_text(response)
             print(f"✓ Extracted {len(ai_response)} characters")
             
@@ -683,8 +697,12 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
     
     async def convert_lead_to_customer(self, lead_id: str, user_id: str) -> Dict[str, Any]:
         """
-        Convert a Lead to a Customer
-        IMPORTANT: Customer starts at DISCOVERY status (campaign-generated leads)
+        Convert a Discovery (Campaign Lead) to a CRM Lead (Customer with LEAD status)
+        
+        Workflow:
+        - DISCOVERY (Campaign Lead) → LEAD (CRM Customer)
+        - LEAD → PROSPECT → OPPORTUNITY → CUSTOMER
+        - or LEAD → PROSPECT → CUSTOMER (skip opportunity)
         """
         try:
             # Get lead
@@ -699,9 +717,9 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 return {'success': False, 'error': 'Lead not found'}
             
             if lead.converted_to_customer_id:
-                return {'success': False, 'error': 'Lead already converted'}
+                return {'success': False, 'error': 'Discovery already converted to CRM'}
             
-            # Create customer with DISCOVERY status
+            # Create customer with LEAD status (first step in CRM pipeline)
             customer = Customer(
                 tenant_id=self.tenant_id,
                 company_name=lead.company_name,
@@ -714,7 +732,7 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 billing_postcode=lead.postcode,
                 business_sector=lead.business_sector,
                 business_size_category=lead.company_size,
-                status=CustomerStatus.DISCOVERY,  # Starts at DISCOVERY
+                status=CustomerStatus.LEAD,  # Starts at LEAD (first CRM stage)
                 lead_score=lead.lead_score,
                 linkedin_url=lead.linkedin_url,
                 linkedin_data=lead.linkedin_data,
@@ -727,21 +745,281 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
             self.db.add(customer)
             self.db.flush()
             
-            # Update lead
+            # Update campaign lead to CONVERTED
             lead.status = LeadStatus.CONVERTED
             lead.converted_to_customer_id = customer.id
             lead.conversion_date = datetime.utcnow()
             
             self.db.commit()
             
-            print(f"✓ Converted lead {lead.company_name} to customer (DISCOVERY status)")
+            print(f"✓ Converted discovery '{lead.company_name}' to CRM Lead (LEAD status)")
             
             return {
                 'success': True,
                 'customer_id': customer.id,
-                'message': 'Lead converted to customer successfully'
+                'message': 'Discovery converted to CRM Lead successfully'
             }
             
         except Exception as e:
+            self.db.rollback()
+            return {'success': False, 'error': str(e)}
+    
+    async def analyze_lead_with_ai(self, lead_id: str) -> Dict[str, Any]:
+        """
+        Run comprehensive AI analysis on a discovery/lead
+        
+        Analyzes company using GPT-5-mini with all available data:
+        - External data (Google Maps, Companies House, LinkedIn)
+        - Website information
+        - Financial data
+        - Director information
+        
+        [[memory:9653106]] - Use GPT-5-mini with 20000+ tokens, 240s timeout
+        """
+        try:
+            # Get lead
+            lead = self.db.query(Lead).filter(
+                and_(
+                    Lead.id == lead_id,
+                    Lead.tenant_id == self.tenant_id
+                )
+            ).first()
+            
+            if not lead:
+                return {'success': False, 'error': 'Lead not found'}
+            
+            if not self.openai_client:
+                return {'success': False, 'error': 'OpenAI client not initialized'}
+            
+            # Build comprehensive company information
+            company_info = f"Company Name: {lead.company_name}"
+            
+            if hasattr(lead, 'website') and lead.website:
+                company_info += f"\nWebsite: {lead.website}"
+            
+            if hasattr(lead, 'description') and lead.description:
+                company_info += f"\nDescription: {lead.description}"
+            
+            if hasattr(lead, 'postcode') and lead.postcode:
+                company_info += f"\nPostcode: {lead.postcode}"
+            
+            if hasattr(lead, 'address') and lead.address:
+                company_info += f"\nAddress: {lead.address}"
+            
+            if hasattr(lead, 'business_sector') and lead.business_sector:
+                company_info += f"\nBusiness Sector: {lead.business_sector}"
+            
+            if hasattr(lead, 'company_size') and lead.company_size:
+                company_info += f"\nCompany Size: {lead.company_size}"
+            
+            # Add external data
+            if lead.external_data:
+                external_data = lead.external_data if isinstance(lead.external_data, dict) else json.loads(lead.external_data)
+                
+                # Google Maps data
+                if external_data.get('google_maps'):
+                    maps = external_data['google_maps']
+                    company_info += f"\n\nGoogle Maps Data:"
+                    if maps.get('rating'):
+                        company_info += f"\n- Rating: {maps['rating']}/5"
+                    if maps.get('user_ratings_total'):
+                        company_info += f"\n- Reviews: {maps['user_ratings_total']}"
+                    if maps.get('formatted_address'):
+                        company_info += f"\n- Address: {maps['formatted_address']}"
+                    if maps.get('phone'):
+                        company_info += f"\n- Phone: {maps['phone']}"
+                    if maps.get('website'):
+                        company_info += f"\n- Website: {maps['website']}"
+                
+                # Companies House data
+                if external_data.get('companies_house'):
+                    ch = external_data['companies_house']
+                    company_info += f"\n\nCompanies House Data:"
+                    if ch.get('company_number'):
+                        company_info += f"\n- Company Number: {ch['company_number']}"
+                    if ch.get('company_status'):
+                        company_info += f"\n- Status: {ch['company_status']}"
+                    if ch.get('company_type'):
+                        company_info += f"\n- Type: {ch['company_type']}"
+                    if ch.get('date_of_creation'):
+                        company_info += f"\n- Founded: {ch['date_of_creation']}"
+                    if ch.get('sic_codes'):
+                        company_info += f"\n- SIC Codes: {', '.join(ch['sic_codes'])}"
+                    
+                    # Financial data
+                    if ch.get('accounts'):
+                        accounts = ch['accounts']
+                        company_info += f"\n\nFinancial Information:"
+                        if accounts.get('turnover'):
+                            company_info += f"\n- Turnover: £{accounts['turnover']:,}"
+                        if accounts.get('shareholders_funds'):
+                            company_info += f"\n- Shareholders' Funds: £{accounts['shareholders_funds']:,}"
+                        if accounts.get('cash_at_bank'):
+                            company_info += f"\n- Cash at Bank: £{accounts['cash_at_bank']:,}"
+                        if accounts.get('employees'):
+                            company_info += f"\n- Employees: {accounts['employees']}"
+                    
+                    # Directors
+                    if ch.get('officers'):
+                        officers = ch['officers']
+                        company_info += f"\n\nDirectors/Officers ({len(officers)}):"
+                        for i, officer in enumerate(officers[:5], 1):  # Show first 5
+                            company_info += f"\n{i}. {officer.get('name', 'Unknown')}"
+                            if officer.get('officer_role'):
+                                company_info += f" - {officer['officer_role']}"
+                            if officer.get('appointed_on'):
+                                company_info += f" (Appointed: {officer['appointed_on']})"
+                
+                # LinkedIn data
+                if external_data.get('linkedin'):
+                    linkedin = external_data['linkedin']
+                    company_info += f"\n\nLinkedIn Data:"
+                    if linkedin.get('linkedin_url'):
+                        company_info += f"\n- LinkedIn URL: {linkedin['linkedin_url']}"
+                    if linkedin.get('linkedin_industry'):
+                        company_info += f"\n- Industry: {linkedin['linkedin_industry']}"
+                    if linkedin.get('linkedin_company_size'):
+                        company_info += f"\n- Company Size: {linkedin['linkedin_company_size']}"
+                    if linkedin.get('linkedin_description'):
+                        company_info += f"\n- Description: {linkedin['linkedin_description']}"
+            
+            # Build AI prompt
+            prompt = f"""
+Analyze this UK company and provide comprehensive business intelligence:
+
+{company_info}
+
+Please provide a detailed analysis including:
+
+1. **Business Sector**: Choose from: office, retail, industrial, healthcare, education, hospitality, manufacturing, technology, finance, government, other
+
+2. **Company Size Assessment**: 
+   - Estimated employees
+   - Revenue range
+   - Business size category (Small/Medium/Large/Enterprise)
+
+3. **Primary Business Activities**: What they do, main products/services
+
+4. **Technology Maturity**: Basic/Intermediate/Advanced/Enterprise
+
+5. **IT Budget Estimate**: Likely annual IT spending range
+
+6. **Financial Health**: Analysis of financial position, profitability trends, stability
+
+7. **Growth Potential**: High/Medium/Low with reasoning
+
+8. **Technology Needs**: Predicted IT infrastructure needs
+
+9. **Competitive Landscape**: Potential competitors
+
+10. **Business Opportunities**: IT infrastructure project opportunities
+
+11. **Risk Factors**: Challenges or risks
+
+12. **Contact Information**: Search the website, Google Maps data, and Companies House data for:
+    - Key contact person (Director, CEO, IT Manager, or general contact)
+    - Contact email address (look for info@, sales@, enquiries@, or specific contact emails)
+    - Direct phone number if available
+
+IMPORTANT: For contact information, look in:
+- Website contact pages
+- Google Maps business listing
+- Companies House director information
+- Any email addresses or contact names found in the data
+
+Respond in JSON format with these exact fields:
+{{
+    "business_sector": "string",
+    "estimated_employees": number,
+    "estimated_revenue": "string",
+    "business_size_category": "string",
+    "primary_business_activities": "string",
+    "technology_maturity": "string",
+    "it_budget_estimate": "string",
+    "growth_potential": "string",
+    "technology_needs": "string",
+    "competitors": "string",
+    "opportunities": "string",
+    "risks": "string",
+    "company_profile": "string",
+    "financial_health_analysis": "string",
+    "contact_name": "string or null (key contact person if found)",
+    "contact_email": "string or null (email address if found)",
+    "contact_phone": "string or null (direct phone if different from main)"
+}}
+
+Focus on UK market context and be realistic. Only include contact information if you can find it in the provided data.
+"""
+            
+            print(f"[AI ANALYSIS] Running analysis for {lead.company_name}")
+            
+            # Call GPT-5-mini with Chat Completions API
+            response = self.openai_client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": "You are a business intelligence analyst specializing in UK companies and IT infrastructure needs. Provide accurate, realistic assessments. Always respond with valid JSON."
+                    },
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ],
+                max_completion_tokens=20000,  # [[memory:9653106]]
+                timeout=240.0,
+                temperature=0.7
+            )
+            
+            # Extract and parse response
+            ai_response = response.choices[0].message.content.strip()
+            
+            # Remove markdown code blocks if present
+            if ai_response.startswith('```'):
+                ai_response = re.sub(r'^```(?:json)?\s*|\s*```$', '', ai_response, flags=re.MULTILINE).strip()
+            
+            # Parse JSON
+            analysis_data = json.loads(ai_response)
+            
+            # Update lead with AI analysis
+            lead.ai_analysis = analysis_data
+            
+            # Update business sector if found
+            if analysis_data.get('business_sector') and not lead.business_sector:
+                lead.business_sector = analysis_data['business_sector']
+            
+            # Update company size if found
+            if analysis_data.get('business_size_category') and not lead.company_size:
+                lead.company_size = analysis_data['business_size_category']
+            
+            # Update contact information if found by AI
+            if analysis_data.get('contact_name') and not lead.contact_name:
+                lead.contact_name = analysis_data['contact_name']
+                print(f"[AI ANALYSIS] ✓ Found contact name: {lead.contact_name}")
+            
+            if analysis_data.get('contact_email') and not lead.contact_email:
+                lead.contact_email = analysis_data['contact_email']
+                print(f"[AI ANALYSIS] ✓ Found contact email: {lead.contact_email}")
+            
+            if analysis_data.get('contact_phone') and not lead.contact_phone:
+                lead.contact_phone = analysis_data['contact_phone']
+                print(f"[AI ANALYSIS] ✓ Found contact phone: {lead.contact_phone}")
+            
+            self.db.commit()
+            self.db.refresh(lead)
+            
+            print(f"[AI ANALYSIS] ✓ Analysis completed for {lead.company_name}")
+            
+            return {
+                'success': True,
+                'analysis': analysis_data,
+                'message': 'AI analysis completed successfully'
+            }
+            
+        except json.JSONDecodeError as e:
+            print(f"[AI ANALYSIS] ✗ JSON parse error: {e}")
+            return {'success': False, 'error': f'Failed to parse AI response: {str(e)}'}
+        except Exception as e:
+            print(f"[AI ANALYSIS] ✗ Error: {e}")
             self.db.rollback()
             return {'success': False, 'error': str(e)}

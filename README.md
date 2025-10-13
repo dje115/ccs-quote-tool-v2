@@ -1,6 +1,6 @@
 # CCS Quote Tool v2 - World-Class AI-Powered CRM & Quoting System
 
-**Version:** 2.2.2  
+**Version:** 2.3.0  
 **Status:** Production Ready  
 **Architecture:** Multi-Tenant SaaS
 
@@ -47,18 +47,35 @@ docker-compose -f docker-compose.prod.yml up -d --build
    - Docker setup and workflow
    - Troubleshooting guide
 
-2. **[CAMPAIGNS_GUIDE.md](./CAMPAIGNS_GUIDE.md)**
+2. **[AI_DISCOVERY_ANALYSIS.md](./AI_DISCOVERY_ANALYSIS.md)** 🤖 **NEW**
+   - AI-powered discovery analysis
+   - Automatic contact extraction
+   - Business intelligence features
+   - Usage guide and best practices
+
+3. **[USER_PERMISSIONS_SYSTEM.md](./USER_PERMISSIONS_SYSTEM.md)** 🔐 **NEW**
+   - Role-based access control
+   - Permission matrix
+   - User management
+   - Security features
+
+4. **[DISCOVERY_TO_CRM_WORKFLOW.md](./DISCOVERY_TO_CRM_WORKFLOW.md)**
+   - Discovery to CRM lead conversion
+   - Status progression workflow
+   - Multi-select and bulk operations
+
+5. **[CAMPAIGNS_GUIDE.md](./CAMPAIGNS_GUIDE.md)**
    - Lead generation system
    - Campaign types and configuration
    - AI-powered lead discovery
    - Best practices
 
-3. **[CAMPAIGN_MIGRATION.md](./CAMPAIGN_MIGRATION.md)**
+6. **[CAMPAIGN_MIGRATION.md](./CAMPAIGN_MIGRATION.md)**
    - Technical migration details from v1 to v2
    - Feature comparisons
    - Architecture improvements
 
-4. **[CHANGELOG.md](./CHANGELOG.md)**
+7. **[CHANGELOG.md](./CHANGELOG.md)**
    - Version history
    - Recent changes and fixes
 

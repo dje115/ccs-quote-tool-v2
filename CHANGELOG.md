@@ -6,6 +6,162 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2025-10-13
+
+### 🤖 AI Discovery Analysis System
+- **NEW: Comprehensive AI-Powered Analysis for Discoveries**
+  - Analyzes companies using GPT-5-mini (20,000 tokens, 240s timeout)
+  - Extracts business intelligence from multiple data sources:
+    - Google Maps (ratings, reviews, contact info)
+    - Companies House (financials, directors, SIC codes)
+    - LinkedIn (industry, company size, description)
+    - Website information
+  
+- **Automatic Contact Information Extraction**
+  - AI searches for and extracts:
+    - Contact person name (Director, CEO, IT Manager, or general contact)
+    - Contact email address (info@, sales@, enquiries@, or specific contacts)
+    - Contact phone number (direct lines if available)
+  - Auto-populates contact fields on lead record
+  - Only updates empty fields (preserves manual data)
+  - Searches in: website contact pages, Google Maps listings, Companies House directors
+
+- **Comprehensive Business Intelligence Output**
+  - Business sector classification (11 categories)
+  - Company size assessment (employees, revenue, category)
+  - Primary business activities description
+  - Technology maturity level (Basic/Intermediate/Advanced/Enterprise)
+  - IT budget estimate
+  - Financial health analysis
+  - Growth potential assessment (High/Medium/Low)
+  - Technology needs prediction
+  - Competitive landscape analysis
+  - Business opportunities identification
+  - Risk factors assessment
+
+- **Beautiful Structured UI Display**
+  - Professional layout with color-coded sections
+  - Company profile summary at top
+  - Key metrics in 2-column grid
+  - Growth potential with color-coded chips
+  - Opportunities section (green heading)
+  - Risk factors section (red heading)
+  - Expandable detailed sections
+
+### 🔐 User Permissions & Role-Based Access Control (RBAC)
+- **NEW: Granular Permission System**
+  - 33 individual permissions across 7 categories:
+    - Dashboard (2 permissions)
+    - Customers (5 permissions)
+    - Discoveries (4 permissions)
+    - Campaigns (6 permissions)
+    - Quotes (7 permissions)
+    - Users (5 permissions)
+    - Settings (4 permissions)
+
+- **5 Pre-Defined User Roles**
+  - **Super Admin**: All permissions (cannot be restricted)
+  - **Tenant Admin**: Full tenant access
+  - **Manager**: Can manage but not delete
+  - **Sales Rep**: Create/edit, limited delete
+  - **User**: Read-only access
+
+- **Backend API for Permission Management**
+  - `GET /api/v1/users/permissions/available` - Get all permissions by category
+  - `GET /api/v1/users/permissions/defaults/{role}` - Get default permissions for role
+  - `POST /api/v1/users/` - Create user with custom permissions
+  - Permission validation on every request
+  - Super admin bypass for all checks
+
+- **Permission Storage**
+  - Stored as JSON array in user record
+  - Default permissions auto-populated by role
+  - Custom permissions override role defaults
+  - Extensible for future permissions
+
+### 🔍 Discovery System Enhancements
+- **Renamed "Leads" to "Discoveries" in UI**
+  - Updated sidebar menu label
+  - Consistent terminology throughout app
+  - Reflects campaign-generated nature of leads
+
+- **Multi-Select & Bulk Operations**
+  - Checkbox column in discoveries table
+  - "Select All" functionality
+  - Bulk convert to CRM leads
+  - Selected rows highlighted
+  - Bulk action button shows count
+  - Progress tracking during bulk operations
+
+- **Enhanced Discovery Detail Page**
+  - "Run AI Analysis" button in Quick Actions
+  - Loading states ("Analyzing...")
+  - Auto-refresh after analysis completion
+  - Display of all discovery fields:
+    - Company name, business sector
+    - Company size, postcode, address
+    - Contact details (name, email, phone)
+    - Website, campaign name, source
+    - Description, project value, timeline
+  - External data display (Google Maps, Companies House)
+
+- **Campaign Queue Management**
+  - Added "Reset to Draft" button for queued campaigns
+  - Allows un-queuing campaigns before execution
+  - "Cancel" button for queued campaigns
+  - Workflow: DRAFT → QUEUED → RUNNING → COMPLETED
+  - Can reset QUEUED → DRAFT for editing
+
+### 🐛 Bug Fixes
+- Fixed discovery detail page error (undefined `handleConvertToCustomer`)
+- Fixed attribute error in AI analysis (missing `description` field)
+- Added safe attribute checking with `hasattr()`
+- Fixed "Convert to CRM Lead" button functionality
+- Updated all references to use correct function names
+
+### 📚 Documentation
+- **NEW: AI_DISCOVERY_ANALYSIS.md**
+  - Complete guide to AI analysis system
+  - API endpoints and usage examples
+  - Frontend integration guide
+  - Performance considerations
+  - Troubleshooting guide
+
+- **NEW: USER_PERMISSIONS_SYSTEM.md**
+  - Comprehensive RBAC documentation
+  - Permission categories and descriptions
+  - Role definitions and defaults
+  - API usage examples
+  - Security considerations
+
+- **NEW: DISCOVERY_TO_CRM_WORKFLOW.md**
+  - Status progression workflow
+  - Discovery to CRM lead conversion
+  - Multi-select and bulk operations
+  - Database schema reference
+
+- **Updated: README.md**
+  - Version bumped to 2.3.0
+  - Added links to new documentation
+  - Updated feature list
+
+### 🔧 Technical Improvements
+- Enhanced error handling in AI analysis service
+- Added comprehensive logging for AI operations
+- Improved contact information extraction logic
+- Better JSON parsing with markdown code block removal
+- Safe attribute access throughout codebase
+
+### 🎨 UI/UX Improvements
+- Professional AI analysis display layout
+- Color-coded sections (green=opportunities, red=risks)
+- Growth potential chips with dynamic colors
+- Improved discovery table with checkboxes
+- Better loading states and user feedback
+- Consistent button styling and placement
+
+---
+
 ## [2.2.3] - 2025-10-12
 
 ### 🎯 Major Features Added

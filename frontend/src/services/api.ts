@@ -110,10 +110,14 @@ export const campaignAPI = {
   get: (id: string) => apiClient.get(`/campaigns/${id}`),
   update: (id: string, data: any) => apiClient.patch(`/campaigns/${id}`, data),
   delete: (id: string) => apiClient.delete(`/campaigns/${id}`),
+  start: (id: string) => apiClient.post(`/campaigns/${id}/start`),
+  restart: (id: string) => apiClient.post(`/campaigns/${id}/restart`),
   stop: (id: string) => apiClient.post(`/campaigns/${id}/stop`),
+  resetToDraft: (id: string) => apiClient.post(`/campaigns/${id}/reset-to-draft`),
   getPromptTypes: () => apiClient.get('/campaigns/prompt-types'),
   getLeads: (campaignId: string, params?: any) => apiClient.get(`/campaigns/${campaignId}/leads`, { params }),
   convertLead: (leadId: string) => apiClient.post(`/campaigns/leads/${leadId}/convert`),
+  analyzeLead: (leadId: string) => apiClient.post(`/campaigns/leads/${leadId}/analyze`),
   listAllLeads: (params?: any) => apiClient.get('/campaigns/leads/all', { params }),
 };
 

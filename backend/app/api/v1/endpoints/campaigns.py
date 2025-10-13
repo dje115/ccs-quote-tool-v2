@@ -4,7 +4,7 @@ Campaign management endpoints for lead generation
 Supports background processing via Celery for long-running campaigns
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
 from typing import List, Optional
@@ -14,6 +14,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_tenant
+from app.core.celery_app import celery_app
 from app.models.leads import (
     LeadGenerationCampaign, Lead, LeadGenerationStatus, LeadStatus, LeadSource
 )
@@ -213,18 +214,15 @@ async def list_campaigns(
 @router.post("/", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
 async def create_campaign(
     campaign_data: CampaignCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """
-    Create and run new lead generation campaign
+    Create new lead generation campaign in DRAFT status
     
-    The campaign runs in the background and may take 3-10 minutes depending on:
-    - Number of results requested
-    - AI web search time
-    - External data enrichment (Google Maps, Companies House)
+    Campaign must be explicitly started using POST /{campaign_id}/start
+    This allows for review and configuration before execution
     """
     
     try:
@@ -255,17 +253,8 @@ async def create_campaign(
         db.commit()
         db.refresh(campaign)
         
-        print(f"[OK] Campaign created: {campaign.name} ({campaign.id})")
-        
-        # Queue campaign for background processing
-        background_tasks.add_task(
-            run_campaign_background,
-            campaign.id,
-            current_tenant.id,
-            db
-        )
-        
-        print(f"[OK] Campaign queued for background execution")
+        print(f"[OK] Campaign created: {campaign.name} ({campaign.id}) - Status: DRAFT")
+        print(f"[OK] Use POST /{campaign.id}/start to begin lead generation")
         
         return campaign
         
@@ -357,14 +346,17 @@ async def delete_campaign(
     return None
 
 
-@router.post("/{campaign_id}/stop", status_code=status.HTTP_200_OK)
-async def stop_campaign(
+@router.post("/{campaign_id}/start", status_code=status.HTTP_200_OK)
+async def start_campaign(
     campaign_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Stop a running campaign"""
+    """
+    Start a draft campaign using Celery background task
+    Campaign will execute asynchronously in a separate worker process
+    """
     campaign = db.query(LeadGenerationCampaign).filter(
         and_(
             LeadGenerationCampaign.id == campaign_id,
@@ -375,20 +367,192 @@ async def stop_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    if campaign.status == LeadGenerationStatus.RUNNING:
+    if campaign.status != LeadGenerationStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only start campaigns with DRAFT status. Current status: {campaign.status}"
+        )
+    
+    # Update campaign status to QUEUED before sending to Celery
+    campaign.status = LeadGenerationStatus.QUEUED
+    campaign.updated_at = datetime.utcnow()
+    db.commit()
+    
+    # Queue campaign task to Celery
+    print(f"\n{'='*80}")
+    print(f"🚀 QUEUEING CAMPAIGN TO CELERY")
+    print(f"Campaign: {campaign.name} ({campaign.id})")
+    print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    print(f"{'='*80}\n")
+    
+    # Use send_task() to queue the task by name
+    task = celery_app.send_task(
+        'run_campaign',
+        args=[str(campaign.id), str(current_tenant.id)]
+    )
+    
+    print(f"✓ Celery task created: {task.id}")
+    
+    return {
+        "success": True,
+        "message": f"Campaign '{campaign.name}' queued for execution",
+        "campaign_id": str(campaign.id),
+        "task_id": task.id,
+        "status": "queued"
+    }
+
+
+@router.post("/{campaign_id}/restart", status_code=status.HTTP_200_OK)
+async def restart_campaign(
+    campaign_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """
+    Restart a completed, failed, or cancelled campaign using Celery
+    Campaign will execute asynchronously in a separate worker process
+    """
+    campaign = db.query(LeadGenerationCampaign).filter(
+        and_(
+            LeadGenerationCampaign.id == campaign_id,
+            LeadGenerationCampaign.tenant_id == current_tenant.id
+        )
+    ).first()
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    if campaign.status in [LeadGenerationStatus.DRAFT, LeadGenerationStatus.RUNNING, LeadGenerationStatus.QUEUED]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot restart campaign with status: {campaign.status}. Use /start for DRAFT or /stop for RUNNING campaigns."
+        )
+    
+    # Reset campaign stats
+    campaign.status = LeadGenerationStatus.QUEUED
+    campaign.total_found = 0
+    campaign.leads_created = 0
+    campaign.duplicates_found = 0
+    campaign.errors_count = 0
+    campaign.started_at = None
+    campaign.completed_at = None
+    campaign.updated_at = datetime.utcnow()
+    campaign.updated_by = current_user.id
+    db.commit()
+    
+    # Queue campaign task to Celery
+    print(f"\n{'='*80}")
+    print(f"🔄 RESTARTING CAMPAIGN VIA CELERY")
+    print(f"Campaign: {campaign.name} ({campaign.id})")
+    print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    print(f"{'='*80}\n")
+    
+    # Use send_task() to queue the task by name
+    task = celery_app.send_task(
+        'run_campaign',
+        args=[str(campaign.id), str(current_tenant.id)]
+    )
+    
+    print(f"✓ Celery task created: {task.id}")
+    
+    return {
+        "success": True,
+        "message": f"Campaign '{campaign.name}' queued for restart",
+        "campaign_id": str(campaign.id),
+        "task_id": task.id,
+        "status": "queued"
+    }
+
+
+@router.post("/{campaign_id}/reset-to-draft", status_code=status.HTTP_200_OK)
+async def reset_campaign_to_draft(
+    campaign_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """
+    Reset a queued campaign back to draft status
+    
+    Allows users to un-queue a campaign before it starts executing.
+    Only works for QUEUED campaigns.
+    """
+    campaign = db.query(LeadGenerationCampaign).filter(
+        and_(
+            LeadGenerationCampaign.id == campaign_id,
+            LeadGenerationCampaign.tenant_id == current_tenant.id
+        )
+    ).first()
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    if campaign.status != LeadGenerationStatus.QUEUED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only reset QUEUED campaigns to draft. Current status: {campaign.status.value}"
+        )
+    
+    # Reset to draft
+    campaign.status = LeadGenerationStatus.DRAFT
+    campaign.updated_at = datetime.utcnow()
+    campaign.updated_by = current_user.id
+    db.commit()
+    
+    print(f"[OK] Campaign {campaign.id} reset to DRAFT by user {current_user.email}")
+    
+    return {
+        "success": True,
+        "message": f"Campaign '{campaign.name}' reset to draft",
+        "campaign_id": str(campaign.id),
+        "status": "draft"
+    }
+
+
+@router.post("/{campaign_id}/stop", status_code=status.HTTP_200_OK)
+async def stop_campaign(
+    campaign_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """
+    Stop/cancel a running or queued campaign
+    
+    - RUNNING campaigns: Sets status to CANCELLED (task may continue until it checks status)
+    - QUEUED campaigns: Sets status to CANCELLED (task will be skipped when worker picks it up)
+    """
+    campaign = db.query(LeadGenerationCampaign).filter(
+        and_(
+            LeadGenerationCampaign.id == campaign_id,
+            LeadGenerationCampaign.tenant_id == current_tenant.id
+        )
+    ).first()
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    if campaign.status in [LeadGenerationStatus.RUNNING, LeadGenerationStatus.QUEUED]:
         campaign.status = LeadGenerationStatus.CANCELLED
         campaign.completed_at = datetime.utcnow()
+        campaign.updated_at = datetime.utcnow()
+        campaign.updated_by = current_user.id
         db.commit()
+        
+        message = "Campaign cancelled" if campaign.status == LeadGenerationStatus.QUEUED else "Campaign stopped"
+        
+        print(f"[OK] Campaign {campaign.id} cancelled by user {current_user.email}")
         
         return {
             "success": True,
-            "message": "Campaign stopped",
+            "message": message,
             "status": "cancelled"
         }
     
     return {
         "success": False,
-        "message": "Campaign is not currently running",
+        "message": f"Cannot stop campaign with status: {campaign.status.value}",
         "status": campaign.status.value
     }
 
@@ -527,11 +691,53 @@ async def convert_lead_to_customer(
     db: Session = Depends(get_db)
 ):
     """
-    Convert lead to customer
-    Customer will be created with DISCOVERY status
+    Convert Discovery (Campaign Lead) to CRM Lead
+    
+    Creates a Customer record with LEAD status (first stage in CRM pipeline)
+    
+    Workflow:
+    - DISCOVERY (Campaign Lead) → LEAD (CRM)
+    - LEAD → PROSPECT → OPPORTUNITY → CUSTOMER
+    - or LEAD → PROSPECT → CUSTOMER
     """
     service = LeadGenerationService(db, current_tenant.id)
     result = await service.convert_lead_to_customer(lead_id, current_user.id)
+    
+    if not result['success']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result['error']
+        )
+    
+    return result
+
+
+@router.post("/leads/{lead_id}/analyze", status_code=status.HTTP_200_OK)
+async def analyze_lead(
+    lead_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """
+    Run AI analysis on a discovery/lead
+    
+    Analyzes the company using GPT-5-mini with all available data:
+    - External data (Google Maps, Companies House, LinkedIn)
+    - Website information
+    - Financial data
+    - Director information
+    
+    Returns comprehensive business intelligence including:
+    - Business sector and size
+    - Technology needs and maturity
+    - Financial health analysis
+    - Growth potential
+    - Competitive landscape
+    - Business opportunities and risks
+    """
+    service = LeadGenerationService(db, current_tenant.id)
+    result = await service.analyze_lead_with_ai(lead_id)
     
     if not result['success']:
         raise HTTPException(
@@ -546,16 +752,18 @@ async def convert_lead_to_customer(
 # Background Task Functions
 # ============================================================================
 
-async def run_campaign_background(campaign_id: str, tenant_id: str, db: Session):
+def run_campaign_task(campaign_id: str, tenant_id: str):
     """
-    Background task to run campaign
+    Background task to run campaign (SYNC function for BackgroundTasks)
     This runs outside the request/response cycle
     
     Note: For production, this should be moved to Celery for better
     scalability and reliability
     """
+    import asyncio
+    
     try:
-        print(f"\n[BACKGROUND] Starting campaign {campaign_id}")
+        print(f"\n🚀 [BACKGROUND] Starting campaign {campaign_id}")
         
         # Create new database session for background task
         from app.core.database import SessionLocal
@@ -571,21 +779,22 @@ async def run_campaign_background(campaign_id: str, tenant_id: str, db: Session)
             ).first()
             
             if not campaign:
-                print(f"[BACKGROUND] Campaign {campaign_id} not found")
+                print(f"❌ [BACKGROUND] Campaign {campaign_id} not found")
                 return
             
-            # Run lead generation
-            result = await service.generate_leads(campaign)
+            # Run lead generation (must use asyncio.run for async function)
+            result = asyncio.run(service.generate_leads(campaign))
             
             if result['success']:
-                print(f"[BACKGROUND] Campaign {campaign_id} completed successfully")
+                print(f"✅ [BACKGROUND] Campaign {campaign_id} completed successfully")
+                print(f"   Leads created: {result.get('leads_created', 0)}")
             else:
-                print(f"[BACKGROUND] Campaign {campaign_id} failed: {result.get('error')}")
+                print(f"❌ [BACKGROUND] Campaign {campaign_id} failed: {result.get('error')}")
         
         finally:
             bg_db.close()
         
     except Exception as e:
-        print(f"[BACKGROUND] Campaign {campaign_id} crashed: {e}")
+        print(f"💥 [BACKGROUND] Campaign {campaign_id} crashed: {e}")
         import traceback
         traceback.print_exc()

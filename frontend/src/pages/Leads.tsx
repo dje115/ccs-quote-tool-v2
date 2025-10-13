@@ -38,25 +38,36 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Phone as PhoneIcon,
-  Email as EmailIcon
+  Email as EmailIcon,
+  CheckBox as CheckBoxIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { campaignAPI } from '../services/api';
 
 interface Lead {
   id: string;
   company_name: string;
-  contact_name: string;
-  email: string;
-  phone?: string;
-  industry: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  website?: string;
+  address?: string;
+  postcode: string;
+  business_sector?: string;
+  company_size?: string;
   lead_score: number;
-  status: 'new' | 'contacted' | 'qualified' | 'proposal' | 'closed_won' | 'closed_lost';
+  status: string;
   source: string;
+  campaign_id: string;
+  campaign_name?: string;
+  description?: string;
+  project_value?: string;
+  timeline?: string;
   created_at: string;
-  last_contact: string;
+  external_data?: any;
   ai_analysis?: any;
-  notes?: string;
 }
 
 const Leads: React.FC = () => {
@@ -68,6 +79,8 @@ const Leads: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [converting, setConverting] = useState(false);
 
   useEffect(() => {
     loadLeads();
@@ -76,65 +89,11 @@ const Leads: React.FC = () => {
   const loadLeads = async () => {
     try {
       setLoading(true);
-      // Mock data for now - replace with actual API call
-      const mockLeads: Lead[] = [
-        {
-          id: '1',
-          company_name: 'TechCorp Solutions',
-          contact_name: 'John Smith',
-          email: 'john@techcorp.com',
-          phone: '+44 20 7123 4567',
-          industry: 'Technology',
-          lead_score: 85,
-          status: 'qualified',
-          source: 'Website',
-          created_at: '2024-01-15',
-          last_contact: '2024-01-20',
-          ai_analysis: {
-            urgency: 'high',
-            opportunities: ['Network upgrade needed', 'New office expansion'],
-            risk_factors: ['Budget constraints']
-          }
-        },
-        {
-          id: '2',
-          company_name: 'Manufacturing Ltd',
-          contact_name: 'Sarah Johnson',
-          email: 'sarah@manufacturing.co.uk',
-          phone: '+44 161 234 5678',
-          industry: 'Manufacturing',
-          lead_score: 72,
-          status: 'contacted',
-          source: 'Referral',
-          created_at: '2024-01-18',
-          last_contact: '2024-01-19',
-          ai_analysis: {
-            urgency: 'medium',
-            opportunities: ['Cabling infrastructure'],
-            risk_factors: []
-          }
-        },
-        {
-          id: '3',
-          company_name: 'Retail Chain UK',
-          contact_name: 'Mike Wilson',
-          email: 'mike@retailchain.co.uk',
-          industry: 'Retail',
-          lead_score: 45,
-          status: 'new',
-          source: 'Cold Outreach',
-          created_at: '2024-01-20',
-          last_contact: '',
-          ai_analysis: {
-            urgency: 'low',
-            opportunities: ['Store network connectivity'],
-            risk_factors: ['Long sales cycle']
-          }
-        }
-      ];
-      setLeads(mockLeads);
+      // Fetch all campaign leads (discoveries)
+      const response = await campaignAPI.listAllLeads();
+      setLeads(response.data || []);
     } catch (error) {
-      console.error('Error loading leads:', error);
+      console.error('Error loading discoveries:', error);
     } finally {
       setLoading(false);
     }
@@ -143,8 +102,9 @@ const Leads: React.FC = () => {
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = 
       lead.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchTerm.toLowerCase());
+      (lead.contact_name && lead.contact_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (lead.contact_email && lead.contact_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (lead.postcode && lead.postcode.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === 'all' || lead.status === filterStatus;
     
@@ -186,13 +146,13 @@ const Leads: React.FC = () => {
   };
 
   const statusOptions = [
-    { value: 'all', label: 'All Leads' },
+    { value: 'all', label: 'All Discoveries' },
     { value: 'new', label: 'New' },
     { value: 'contacted', label: 'Contacted' },
     { value: 'qualified', label: 'Qualified' },
-    { value: 'proposal', label: 'Proposal' },
-    { value: 'closed_won', label: 'Closed Won' },
-    { value: 'closed_lost', label: 'Closed Lost' }
+    { value: 'converted', label: 'Converted' },
+    { value: 'rejected', label: 'Rejected' },
+    { value: 'duplicate', label: 'Duplicate' }
   ];
 
   const LeadStatsCard: React.FC<{ title: string; value: number; color: string; icon: React.ReactNode }> = ({
@@ -220,26 +180,93 @@ const Leads: React.FC = () => {
     </Card>
   );
 
+  const handleConvertToLead = async (leadId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!window.confirm('Convert this discovery to a CRM lead?')) return;
+    
+    try {
+      await campaignAPI.convertLead(leadId);
+      alert('Discovery converted to CRM lead successfully!');
+      loadLeads(); // Refresh list
+    } catch (error) {
+      console.error('Error converting discovery:', error);
+      alert('Failed to convert discovery');
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedLeads.length === filteredLeads.length) {
+      setSelectedLeads([]);
+    } else {
+      setSelectedLeads(filteredLeads.map(lead => lead.id));
+    }
+  };
+
+  const handleSelectLead = (leadId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedLeads(prev => {
+      if (prev.includes(leadId)) {
+        return prev.filter(id => id !== leadId);
+      } else {
+        return [...prev, leadId];
+      }
+    });
+  };
+
+  const handleBulkConvert = async () => {
+    if (selectedLeads.length === 0) {
+      alert('Please select discoveries to convert');
+      return;
+    }
+
+    if (!window.confirm(`Convert ${selectedLeads.length} ${selectedLeads.length === 1 ? 'discovery' : 'discoveries'} to CRM leads?`)) {
+      return;
+    }
+
+    setConverting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const leadId of selectedLeads) {
+      try {
+        await campaignAPI.convertLead(leadId);
+        successCount++;
+      } catch (error) {
+        console.error(`Error converting discovery ${leadId}:`, error);
+        failCount++;
+      }
+    }
+
+    setConverting(false);
+    setSelectedLeads([]);
+    loadLeads();
+
+    if (failCount === 0) {
+      alert(`Successfully converted ${successCount} ${successCount === 1 ? 'discovery' : 'discoveries'} to CRM leads!`);
+    } else {
+      alert(`Converted ${successCount} discoveries. ${failCount} failed.`);
+    }
+  };
+
   const QuickActions: React.FC<{ lead: Lead }> = ({ lead }) => (
     <Box sx={{ display: 'flex', gap: 0.5 }}>
-      <Tooltip title="Call">
-        <IconButton size="small" color="primary">
-          <PhoneIcon />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Email">
-        <IconButton size="small" color="primary">
-          <EmailIcon />
-        </IconButton>
-      </Tooltip>
       <Tooltip title="View Details">
         <IconButton size="small" onClick={() => navigate(`/leads/${lead.id}`)}>
           <ViewIcon />
         </IconButton>
       </Tooltip>
+      <Tooltip title="Convert to CRM Lead">
+        <IconButton 
+          size="small" 
+          color="success"
+          onClick={(e) => handleConvertToLead(lead.id, e)}
+        >
+          <CheckCircleIcon />
+        </IconButton>
+      </Tooltip>
       {lead.ai_analysis && (
         <Tooltip title="AI Analysis">
-          <IconButton size="small" onClick={() => navigate(`/leads/${lead.id}/analysis`)}>
+          <IconButton size="small">
             <AssessmentIcon />
           </IconButton>
         </Tooltip>
@@ -259,22 +286,35 @@ const Leads: React.FC = () => {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
-          Leads
+          Discoveries
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setShowLeadForm(true)}
-        >
-          Add Lead
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {selectedLeads.length > 0 && (
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<CheckCircleIcon />}
+              onClick={handleBulkConvert}
+              disabled={converting}
+            >
+              {converting ? 'Converting...' : `Convert ${selectedLeads.length} to CRM`}
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/campaigns')}
+          >
+            View All Campaigns
+          </Button>
+        </Box>
       </Box>
 
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
           <LeadStatsCard
-            title="Total Leads"
+            title="Total Discoveries"
             value={leadStats.total}
             color="#1976d2"
             icon={<BusinessIcon />}
@@ -282,7 +322,7 @@ const Leads: React.FC = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <LeadStatsCard
-            title="New Leads"
+            title="New Discoveries"
             value={leadStats.new}
             color="#ff9800"
             icon={<TrendingUpIcon />}
@@ -312,7 +352,7 @@ const Leads: React.FC = () => {
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              placeholder="Search leads..."
+              placeholder="Search discoveries..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
@@ -343,64 +383,97 @@ const Leads: React.FC = () => {
         </Grid>
       </Paper>
 
-      {/* Leads Table */}
+      {/* Discoveries Table */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <IconButton size="small" onClick={handleSelectAll}>
+                  {selectedLeads.length === filteredLeads.length && filteredLeads.length > 0 ? 
+                    <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />
+                  }
+                </IconButton>
+              </TableCell>
               <TableCell>Company</TableCell>
               <TableCell>Contact</TableCell>
-              <TableCell>Industry</TableCell>
+              <TableCell>Location</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Lead Score</TableCell>
-              <TableCell>Source</TableCell>
-              <TableCell>Last Contact</TableCell>
+              <TableCell>Campaign</TableCell>
+              <TableCell>Created</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  No leads found
+                <TableCell colSpan={9} align="center">
+                  No discoveries found
                 </TableCell>
               </TableRow>
             ) : (
               filteredLeads.map((lead) => (
-                <TableRow key={lead.id} hover>
-                  <TableCell>
-                    <Box>
-                      <Typography variant="subtitle2">{lead.company_name}</Typography>
-                      {lead.ai_analysis && (
-                        <Chip
-                          label={lead.ai_analysis.urgency || 'Unknown'}
-                          color={getUrgencyColor(lead.ai_analysis.urgency || '')}
-                          size="small"
-                          sx={{ mt: 0.5 }}
-                        />
-                      )}
-                    </Box>
+                <TableRow 
+                  key={lead.id} 
+                  hover 
+                  sx={{ 
+                    cursor: 'pointer',
+                    backgroundColor: selectedLeads.includes(lead.id) ? 'action.selected' : 'inherit'
+                  }}
+                  onClick={() => navigate(`/leads/${lead.id}`)}
+                >
+                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                    <IconButton 
+                      size="small" 
+                      onClick={(e) => handleSelectLead(lead.id, e)}
+                    >
+                      {selectedLeads.includes(lead.id) ? 
+                        <CheckBoxIcon color="primary" /> : <CheckBoxOutlineBlankIcon />
+                      }
+                    </IconButton>
                   </TableCell>
                   <TableCell>
                     <Box>
-                      <Typography variant="subtitle2">{lead.contact_name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {lead.email}
-                      </Typography>
-                      {lead.phone && (
-                        <Typography variant="caption" display="block" color="text.secondary">
-                          {lead.phone}
+                      <Typography variant="subtitle2">{lead.company_name}</Typography>
+                      {lead.business_sector && (
+                        <Typography variant="caption" color="text.secondary">
+                          {lead.business_sector}
                         </Typography>
                       )}
                     </Box>
                   </TableCell>
-                  <TableCell>{lead.industry}</TableCell>
+                  <TableCell>
+                    <Box>
+                      {lead.contact_name && (
+                        <Typography variant="subtitle2">{lead.contact_name}</Typography>
+                      )}
+                      {lead.contact_email && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {lead.contact_email}
+                        </Typography>
+                      )}
+                      {lead.contact_phone && (
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          {lead.contact_phone}
+                        </Typography>
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{lead.postcode}</Typography>
+                    {lead.company_size && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {lead.company_size}
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={lead.status.replace('_', ' ').toUpperCase()}
@@ -429,11 +502,16 @@ const Leads: React.FC = () => {
                       </Typography>
                     </Box>
                   </TableCell>
-                  <TableCell>{lead.source}</TableCell>
                   <TableCell>
-                    {lead.last_contact ? new Date(lead.last_contact).toLocaleDateString() : 'Never'}
+                    <Typography variant="body2">{lead.campaign_name || 'N/A'}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {lead.source}
+                    </Typography>
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell>
+                    {new Date(lead.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <QuickActions lead={lead} />
                   </TableCell>
                 </TableRow>
@@ -446,7 +524,7 @@ const Leads: React.FC = () => {
       {/* Summary */}
       <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          Showing {filteredLeads.length} of {leads.length} leads
+          Showing {filteredLeads.length} of {leads.length} discoveries
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Chip

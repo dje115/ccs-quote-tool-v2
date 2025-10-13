@@ -22,7 +22,7 @@ import {
   TrendingUp as ConvertIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { leadAPI, customerAPI } from '../services/api';
+import { campaignAPI, customerAPI } from '../services/api';
 
 const LeadDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +30,7 @@ const LeadDetail: React.FC = () => {
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -40,47 +41,69 @@ const LeadDetail: React.FC = () => {
   const loadLead = async () => {
     try {
       setLoading(true);
-      const response = await leadAPI.get(id!);
-      setLead(response.data);
+      // Fetch from campaigns API - this is a discovery/campaign lead
+      // We need to get all leads and find the one with this ID
+      const response = await campaignAPI.listAllLeads();
+      const foundLead = response.data.find((l: any) => l.id === id);
+      setLead(foundLead);
     } catch (error) {
-      console.error('Error loading lead:', error);
+      console.error('Error loading discovery:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleConvertToCustomer = async () => {
+  const handleConvertToLead = async () => {
     if (!lead) return;
+
+    if (!window.confirm('Convert this discovery to a CRM lead? This will create a new customer record in the CRM.')) {
+      return;
+    }
 
     setConverting(true);
     try {
-      // Create customer from lead
-      const customerData = {
-        company_name: lead.company_name,
-        website: lead.website,
-        business_type: lead.business_type,
-        business_sector: lead.business_sector,
-        employee_count_estimate: lead.employee_count_estimate,
-        annual_revenue_estimate: lead.annual_revenue_estimate,
-        contact_email: lead.contact_email,
-        contact_phone: lead.contact_phone,
-        status: 'active',
-        lead_score: lead.lead_score,
-        notes: `Converted from lead: ${lead.notes || ''}`
-      };
-
-      const response = await customerAPI.create(customerData);
+      // Use the campaign API convert endpoint
+      const response = await campaignAPI.convertLead(lead.id);
       
-      // Update lead status
-      await leadAPI.update(id!, { status: 'converted' });
-
-      // Navigate to new customer
-      navigate(`/customers/${response.data.id}`);
+      alert('Discovery converted to CRM lead successfully!');
+      
+      // Navigate to the new customer record
+      if (response.data?.customer_id) {
+        navigate(`/customers/${response.data.customer_id}`);
+      } else {
+        navigate('/customers');
+      }
     } catch (error) {
-      console.error('Error converting lead:', error);
-      alert('Failed to convert lead to customer');
+      console.error('Error converting discovery:', error);
+      alert('Failed to convert discovery to CRM lead');
     } finally {
       setConverting(false);
+    }
+  };
+
+  const handleRunAIAnalysis = async () => {
+    if (!lead) return;
+
+    if (!window.confirm('Run AI analysis on this discovery? This will analyze the company using all available data.')) {
+      return;
+    }
+
+    setAnalyzing(true);
+    try {
+      const response = await campaignAPI.analyzeLead(lead.id);
+      
+      if (response.data?.success) {
+        alert('AI analysis completed successfully!');
+        // Reload lead to get updated analysis
+        loadLead();
+      } else {
+        alert(`AI analysis failed: ${response.data?.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      console.error('Error running AI analysis:', error);
+      alert(`Failed to run AI analysis: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -131,17 +154,17 @@ const LeadDetail: React.FC = () => {
             variant="contained"
             color="success"
             startIcon={<ConvertIcon />}
-            onClick={handleConvertToCustomer}
+            onClick={handleConvertToLead}
             disabled={converting}
           >
-            {converting ? 'Converting...' : 'Convert to Customer'}
+            {converting ? 'Converting...' : 'Convert to CRM Lead'}
           </Button>
         )}
       </Box>
 
       {lead.status === 'converted' && (
         <Alert severity="success" sx={{ mb: 3 }}>
-          This lead has been converted to a customer
+          This discovery has been converted to a CRM lead
         </Alert>
       )}
 
@@ -172,12 +195,64 @@ const LeadDetail: React.FC = () => {
                   <BusinessIcon color="action" />
                   <Box>
                     <Typography variant="caption" color="text.secondary">
+                      Company Size
+                    </Typography>
+                    <Typography>{lead.company_size || 'N/A'}</Typography>
+                  </Box>
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <BusinessIcon color="action" />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Postcode
+                    </Typography>
+                    <Typography>{lead.postcode || 'N/A'}</Typography>
+                  </Box>
+                </Box>
+              </Grid>
+
+              {lead.address && (
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <BusinessIcon color="action" />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Address
+                      </Typography>
+                      <Typography>{lead.address}</Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+              )}
+
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <BusinessIcon color="action" />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
                       Source
                     </Typography>
                     <Typography>{lead.source || 'N/A'}</Typography>
                   </Box>
                 </Box>
               </Grid>
+
+              {lead.campaign_name && (
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <BusinessIcon color="action" />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Campaign
+                      </Typography>
+                      <Typography>{lead.campaign_name}</Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+              )}
 
               {lead.website && (
                 <Grid item xs={12}>
@@ -244,26 +319,193 @@ const LeadDetail: React.FC = () => {
               )}
             </Grid>
 
-            {lead.notes && (
+            {lead.description && (
               <Box sx={{ mt: 3 }}>
                 <Typography variant="caption" color="text.secondary">
-                  Notes
+                  Description
                 </Typography>
-                <Typography>{lead.notes}</Typography>
+                <Typography>{lead.description}</Typography>
+              </Box>
+            )}
+
+            {lead.project_value && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Estimated Project Value
+                </Typography>
+                <Typography>{lead.project_value}</Typography>
+              </Box>
+            )}
+
+            {lead.timeline && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Timeline
+                </Typography>
+                <Typography>{lead.timeline}</Typography>
               </Box>
             )}
           </Paper>
 
           {/* AI Analysis */}
           {lead.ai_analysis && (
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                AI Analysis
+                AI Business Intelligence
               </Typography>
               <Divider sx={{ mb: 2 }} />
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                {lead.ai_analysis}
+              
+              {typeof lead.ai_analysis === 'object' ? (
+                <Box>
+                  {lead.ai_analysis.company_profile && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Company Profile
+                      </Typography>
+                      <Typography variant="body2" paragraph>
+                        {lead.ai_analysis.company_profile}
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  <Grid container spacing={2} sx={{ mb: 3 }}>
+                    {lead.ai_analysis.business_sector && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">Business Sector</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.business_sector}</Typography>
+                      </Grid>
+                    )}
+                    {lead.ai_analysis.business_size_category && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">Company Size</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.business_size_category}</Typography>
+                      </Grid>
+                    )}
+                    {lead.ai_analysis.estimated_employees && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">Estimated Employees</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.estimated_employees}</Typography>
+                      </Grid>
+                    )}
+                    {lead.ai_analysis.estimated_revenue && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">Estimated Revenue</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.estimated_revenue}</Typography>
+                      </Grid>
+                    )}
+                    {lead.ai_analysis.technology_maturity && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">Technology Maturity</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.technology_maturity}</Typography>
+                      </Grid>
+                    )}
+                    {lead.ai_analysis.it_budget_estimate && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">IT Budget Estimate</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.it_budget_estimate}</Typography>
+                      </Grid>
+                    )}
+                    {lead.ai_analysis.growth_potential && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="caption" color="text.secondary">Growth Potential</Typography>
+                        <Chip 
+                          label={lead.ai_analysis.growth_potential} 
+                          color={
+                            lead.ai_analysis.growth_potential === 'High' ? 'success' : 
+                            lead.ai_analysis.growth_potential === 'Medium' ? 'warning' : 'default'
+                          }
+                          size="small"
+                        />
+                      </Grid>
+                    )}
+                  </Grid>
+
+                  {lead.ai_analysis.primary_business_activities && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Primary Business Activities
+                      </Typography>
+                      <Typography variant="body2">{lead.ai_analysis.primary_business_activities}</Typography>
+                    </Box>
+                  )}
+
+                  {lead.ai_analysis.financial_health_analysis && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Financial Health Analysis
+                      </Typography>
+                      <Typography variant="body2">{lead.ai_analysis.financial_health_analysis}</Typography>
+                    </Box>
+                  )}
+
+                  {lead.ai_analysis.technology_needs && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Technology Needs
+                      </Typography>
+                      <Typography variant="body2">{lead.ai_analysis.technology_needs}</Typography>
+                    </Box>
+                  )}
+
+                  {lead.ai_analysis.opportunities && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="success.main" gutterBottom>
+                        Business Opportunities
+                      </Typography>
+                      <Typography variant="body2">{lead.ai_analysis.opportunities}</Typography>
+                    </Box>
+                  )}
+
+                  {lead.ai_analysis.competitors && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Competitive Landscape
+                      </Typography>
+                      <Typography variant="body2">{lead.ai_analysis.competitors}</Typography>
+                    </Box>
+                  )}
+
+                  {lead.ai_analysis.risks && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="error.main" gutterBottom>
+                        Risk Factors
+                      </Typography>
+                      <Typography variant="body2">{lead.ai_analysis.risks}</Typography>
+                    </Box>
+                  )}
+                </Box>
+              ) : (
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {lead.ai_analysis}
+                </Typography>
+              )}
+            </Paper>
+          )}
+
+          {/* External Data */}
+          {lead.external_data && Object.keys(lead.external_data).length > 0 && (
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Additional Data
               </Typography>
+              <Divider sx={{ mb: 2 }} />
+              {lead.external_data.google_maps && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary">Google Maps Data</Typography>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    {lead.external_data.google_maps.rating && `Rating: ${lead.external_data.google_maps.rating} ⭐`}
+                    {lead.external_data.google_maps.user_ratings_total && ` (${lead.external_data.google_maps.user_ratings_total} reviews)`}
+                  </Typography>
+                </Box>
+              )}
+              {lead.external_data.companies_house && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary">Companies House</Typography>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    {lead.external_data.companies_house.company_number && `Company Number: ${lead.external_data.companies_house.company_number}`}
+                  </Typography>
+                </Box>
+              )}
             </Paper>
           )}
         </Grid>
@@ -309,26 +551,20 @@ const LeadDetail: React.FC = () => {
                     color="success"
                     sx={{ mb: 1 }}
                     startIcon={<ConvertIcon />}
-                    onClick={handleConvertToCustomer}
+                    onClick={handleConvertToLead}
                     disabled={converting}
                   >
-                    Convert to Customer
+                    {converting ? 'Converting...' : 'Convert to CRM Lead'}
                   </Button>
                   <Button
                     fullWidth
-                    variant="outlined"
+                    variant="contained"
+                    color="primary"
                     sx={{ mb: 1 }}
-                    onClick={() => leadAPI.update(id!, { status: 'contacted' })}
+                    onClick={handleRunAIAnalysis}
+                    disabled={analyzing}
                   >
-                    Mark as Contacted
-                  </Button>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    sx={{ mb: 1 }}
-                    onClick={() => leadAPI.update(id!, { status: 'qualified' })}
-                  >
-                    Mark as Qualified
+                    {analyzing ? 'Analyzing...' : 'Run AI Analysis'}
                   </Button>
                   <Button
                     fullWidth

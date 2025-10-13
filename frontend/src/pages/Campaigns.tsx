@@ -33,7 +33,11 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   People as PeopleIcon,
-  Star as StarIcon
+  Star as StarIcon,
+  PlayArrow as PlayArrowIcon,
+  Replay as ReplayIcon,
+  Cancel as CancelIcon,
+  Undo as UndoIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { campaignAPI } from '../services/api';
@@ -87,12 +91,78 @@ const Campaigns: React.FC = () => {
     }
   };
 
+  const handleStartCampaign = async (campaignId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent row click
+    try {
+      await campaignAPI.start(campaignId);
+      loadCampaigns(); // Refresh list
+    } catch (error) {
+      console.error('Error starting campaign:', error);
+      alert('Failed to start campaign');
+    }
+  };
+
+  const handleRestartCampaign = async (campaignId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent row click
+    try {
+      await campaignAPI.restart(campaignId);
+      loadCampaigns(); // Refresh list
+    } catch (error) {
+      console.error('Error restarting campaign:', error);
+      alert('Failed to restart campaign');
+    }
+  };
+
+  const handleStopCampaign = async (campaignId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent row click
+    if (!window.confirm('Are you sure you want to stop this campaign?')) return;
+    
+    try {
+      // await campaignAPI.stop(campaignId); // TODO: Add stop endpoint
+      alert('Stop functionality coming soon');
+      loadCampaigns(); // Refresh list
+    } catch (error) {
+      console.error('Error stopping campaign:', error);
+      alert('Failed to stop campaign');
+    }
+  };
+
+  const handleCancelQueuedCampaign = async (campaignId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent row click
+    if (!window.confirm('Are you sure you want to cancel this queued campaign?')) return;
+    
+    try {
+      // For now, we'll use the stop endpoint which sets status to CANCELLED
+      // This will prevent it from running when the worker picks it up
+      await campaignAPI.stop(campaignId);
+      loadCampaigns(); // Refresh list
+    } catch (error) {
+      console.error('Error cancelling campaign:', error);
+      alert('Failed to cancel campaign');
+    }
+  };
+
+  const handleResetToDraft = async (campaignId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent row click
+    if (!window.confirm('Reset this campaign back to draft status?')) return;
+    
+    try {
+      await campaignAPI.resetToDraft(campaignId);
+      loadCampaigns(); // Refresh list
+    } catch (error) {
+      console.error('Error resetting campaign to draft:', error);
+      alert('Failed to reset campaign');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'queued': return 'info';
       case 'running': return 'info';
       case 'completed': return 'success';
       case 'failed': return 'error';
       case 'cancelled': return 'warning';
+      case 'draft': return 'default';
       default: return 'default';
     }
   };
@@ -300,12 +370,13 @@ const Campaigns: React.FC = () => {
                 <TableCell><strong>Status</strong></TableCell>
                 <TableCell align="right"><strong>Leads</strong></TableCell>
                 <TableCell><strong>Created</strong></TableCell>
+                <TableCell align="center"><strong>Actions</strong></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredCampaigns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
                     <CampaignIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
                     <Typography variant="h6" color="text.secondary" gutterBottom>
                       No campaigns found
@@ -368,6 +439,106 @@ const Campaigns: React.FC = () => {
                       <Typography variant="body2">
                         {formatDate(campaign.created_at)}
                       </Typography>
+                    </TableCell>
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                        {campaign.status === 'draft' && (
+                          <Tooltip title="Start Campaign">
+                            <IconButton
+                              size="small"
+                              color="success"
+                              onClick={(e) => handleStartCampaign(campaign.id, e)}
+                              sx={{
+                                '&:hover': {
+                                  backgroundColor: 'success.light',
+                                  color: 'white'
+                                }
+                              }}
+                            >
+                              <PlayArrowIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {campaign.status === 'queued' && (
+                          <>
+                            <Tooltip title="Reset to Draft">
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={(e) => handleResetToDraft(campaign.id, e)}
+                                sx={{
+                                  '&:hover': {
+                                    backgroundColor: 'primary.light',
+                                    color: 'white'
+                                  }
+                                }}
+                              >
+                                <UndoIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Cancel Campaign">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={(e) => handleCancelQueuedCampaign(campaign.id, e)}
+                                sx={{
+                                  '&:hover': {
+                                    backgroundColor: 'error.light',
+                                    color: 'white'
+                                  }
+                                }}
+                              >
+                                <CancelIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                        {(campaign.status === 'failed' || campaign.status === 'cancelled' || campaign.status === 'completed') && (
+                          <Tooltip title="Restart Campaign">
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={(e) => handleRestartCampaign(campaign.id, e)}
+                              sx={{
+                                '&:hover': {
+                                  backgroundColor: 'primary.light',
+                                  color: 'white'
+                                }
+                              }}
+                            >
+                              <ReplayIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {campaign.status === 'running' && (
+                          <Tooltip title="Stop Campaign">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={(e) => handleStopCampaign(campaign.id, e)}
+                              sx={{
+                                '&:hover': {
+                                  backgroundColor: 'error.light',
+                                  color: 'white'
+                                }
+                              }}
+                            >
+                              <StopIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title="View Details">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/campaigns/${campaign.id}`);
+                            }}
+                          >
+                            <ViewIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))

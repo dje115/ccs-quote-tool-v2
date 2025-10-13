@@ -67,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const menuItems = [
     { text: t('navigation.dashboard'), icon: <DashboardIcon />, path: '/dashboard' },
     { text: t('navigation.customers'), icon: <PeopleIcon />, path: '/customers' },
-    { text: t('navigation.leads'), icon: <LeadsIcon />, path: '/leads' },
+    { text: 'Discoveries', icon: <LeadsIcon />, path: '/leads' },
     { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
     { text: t('navigation.users'), icon: <GroupIcon />, path: '/users' },
