@@ -63,26 +63,26 @@ class AIAnalysisService:
                 
                 if tenant:
                     if tenant.company_name:
-                        prompt += f" and helping companies like {tenant.company_name}"
+                        prompt += f" and helping {tenant.company_name} identify sales opportunities"
                     
                     if tenant.target_markets and isinstance(tenant.target_markets, list) and len(tenant.target_markets) > 0:
                         markets = ", ".join(tenant.target_markets[:3])
-                        prompt += f" sell to businesses in {markets}"
+                        prompt += f" in their target markets: {markets}"
                     
-                    if analysis_type == "sales" and tenant.products_services:
-                        prompt += ". You understand their product/service offerings"
+                    # Emphasize matching their specific offerings
+                    prompt += ". You must carefully review the client's products, services, and capabilities, then identify specific ways they can help prospects based ONLY on what they actually offer"
             except Exception as e:
                 print(f"[DEBUG] Could not load tenant info: {e}")
         
         # Add context based on analysis type
         if analysis_type == "sales":
-            prompt += " and creating targeted sales strategies"
+            prompt += ". Focus on creating actionable, specific sales strategies"
         elif analysis_type == "lead_scoring":
-            prompt += " and scoring sales leads"
+            prompt += ". Focus on scoring sales leads accurately"
         else:
-            prompt += " and business development opportunities"
+            prompt += ". Focus on practical business opportunities"
         
-        prompt += ". Provide accurate, realistic assessments. Always respond with valid JSON."
+        prompt += ". Always respond with valid JSON."
         
         return prompt
     
@@ -372,6 +372,12 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                         
                         if tenant.elevator_pitch:
                             tenant_context += f"\n\nYour Value Proposition:\n{tenant.elevator_pitch}"
+                        
+                        # Debug: Show what tenant context was loaded
+                        print(f"[AI ANALYSIS] Loaded tenant context for: {tenant.company_name}")
+                        print(f"[AI ANALYSIS] Tenant context length: {len(tenant_context)} chars")
+                        if tenant_context:
+                            print(f"[AI ANALYSIS] Tenant context preview: {tenant_context[:200]}...")
                 except Exception as e:
                     print(f"[DEBUG] Could not load tenant context: {e}")
             
@@ -424,7 +430,15 @@ Do not include any explanation, just the URL or NOT_FOUND."""
 
             11. **Risk Factors**: What challenges or potential objections might we face when approaching them based on their financial position and business context?
 
-            12. **Address and Location Analysis**: Based on the company information, identify:
+            12. **Actionable Sales Strategy** (CRITICAL): Based on the "YOUR COMPANY" information provided above, create a numbered list of 5-10 specific, actionable ways we can help this prospect.
+                - Review OUR company description, products/services, USPs, and target markets
+                - Match each of OUR specific offerings to one of THEIR specific needs
+                - Be concrete: state exactly which of our services addresses which of their problems
+                - Focus on practical, immediate opportunities that align with what we actually offer
+                - Make this list ready for a sales team to use in their first call
+                - Only suggest services that we actually provide (as listed in OUR company information)
+
+            13. **Address and Location Analysis**: Based on the company information, identify:
                 - Primary business address (if different from registered address)
                 - ALL additional sites/locations mentioned
                 - Geographic spread of operations
@@ -443,6 +457,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 "competitors": "string (competitor analysis)",
                 "opportunities": "string (business opportunities)",
                 "risks": "string (risk factors)",
+                "actionable_recommendations": ["array of 5-10 specific strings, each describing how we can help them"],
                 "company_profile": "string (comprehensive company summary)",
                 "primary_address": "string (main business address if different from registered)",
                 "additional_sites": "string (list of additional locations/sites)",

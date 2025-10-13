@@ -518,6 +518,24 @@ const CustomerDetail: React.FC = () => {
                 </Box>
               )}
 
+              {customer.ai_analysis_raw.actionable_recommendations && Array.isArray(customer.ai_analysis_raw.actionable_recommendations) && customer.ai_analysis_raw.actionable_recommendations.length > 0 && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: '#e8f5e9', borderRadius: 2, border: '2px solid #4caf50' }}>
+                  <Typography variant="subtitle2" color="success.dark" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LightbulbIcon /> How We Can Help This Customer
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                    Actionable recommendations based on our products/services and their needs
+                  </Typography>
+                  <Box component="ol" sx={{ pl: 2, m: 0 }}>
+                    {customer.ai_analysis_raw.actionable_recommendations.map((rec: string, idx: number) => (
+                      <Box component="li" key={idx} sx={{ mb: 1 }}>
+                        <Typography variant="body2">{rec}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
               {customer.ai_analysis_raw.opportunities && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" color="success.main" gutterBottom>
