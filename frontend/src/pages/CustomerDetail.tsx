@@ -1052,33 +1052,13 @@ const CustomerDetail: React.FC = () => {
                                     addressElement.style.display = 'none';
                                   }
                                   
-                                  const response = await fetch(`/api/v1/customers/${id}/addresses/exclude`, {
-                                    method: 'POST',
-                                    headers: {
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-                                    },
-                                    body: JSON.stringify({ location_id: locationId })
-                                  });
+                                  await customerAPI.excludeAddress(id!, locationId);
                                   
-                                  if (response.ok) {
-                                    // Reload page to update the display
-                                    window.location.reload();
-                                  } else if (response.status === 401) {
-                                    alert('Session expired. Please log in again.');
-                                    window.location.href = '/login';
-                                  } else {
-                                    const errorData = await response.json();
-                                    alert('Failed to exclude address: ' + (errorData.detail || 'Unknown error'));
-                                    // Reset checkbox and show element again
-                                    e.target.checked = false;
-                                    if (addressElement) {
-                                      addressElement.style.display = '';
-                                    }
-                                  }
-                                } catch (error) {
+                                  // Reload page to update the display
+                                  window.location.reload();
+                                } catch (error: any) {
                                   console.error('Error excluding address:', error);
-                                  alert('Error excluding address. Please try again.');
+                                  alert('Error excluding address: ' + (error.response?.data?.detail || error.message || 'Please try again'));
                                   // Reset checkbox and show element again
                                   e.target.checked = false;
                                   const addressElement = document.getElementById(`address_${locationId}`);

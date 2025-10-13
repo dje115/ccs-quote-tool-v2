@@ -93,6 +93,10 @@ export const customerAPI = {
   delete: (id: string) => apiClient.delete(`/customers/${id}`),
   runAiAnalysis: (id: string) => apiClient.post(`/customers/${id}/ai-analysis`),
   confirmRegistration: (id: string, confirmed: boolean) => apiClient.post(`/customers/${id}/confirm-registration?confirmed=${confirmed}`),
+  excludeAddress: (id: string, locationId: string) => apiClient.post(`/customers/${id}/addresses/exclude`, { location_id: locationId }),
+  includeAddress: (id: string, locationId: string) => apiClient.post(`/customers/${id}/addresses/include`, { location_id: locationId }),
+  updateKnownFacts: (id: string, knownFacts: string) => apiClient.put(`/customers/${id}/known-facts`, { known_facts: knownFacts }),
+  changeStatus: (id: string, status: string) => apiClient.patch(`/customers/${id}/status`, { status }),
 };
 
 // Lead API
