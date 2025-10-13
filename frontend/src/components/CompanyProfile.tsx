@@ -104,6 +104,11 @@ const CompanyProfile: React.FC = () => {
       const response = await settingsAPI.get('/company-profile');
       const data = response.data;
       
+      console.log('[loadProfile] Full response data:', data);
+      console.log('[loadProfile] partnership_opportunities:', data.partnership_opportunities);
+      console.log('[loadProfile] company_analysis:', data.company_analysis);
+      console.log('[loadProfile] products_services:', data.products_services);
+      
       setProfile({
         company_name: data.company_name || '',
         company_address: data.company_address || '',
@@ -122,6 +127,14 @@ const CompanyProfile: React.FC = () => {
         logo_text: data.logo_text || '',
         use_text_logo: data.use_text_logo || false,
         website_keywords: data.website_keywords || {}
+      });
+      
+      console.log('[loadProfile] Set profile state:', {
+        products_count: data.products_services?.length,
+        usps_count: data.unique_selling_points?.length,
+        markets_count: data.target_markets?.length,
+        has_partnership: !!data.partnership_opportunities,
+        has_analysis: !!data.company_analysis
       });
       
       setAnalysis(data.company_analysis);
