@@ -7,7 +7,7 @@ Supports background processing via Celery for long-running campaigns
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 import uuid
 from datetime import datetime
@@ -95,6 +95,11 @@ class LeadResponse(BaseModel):
     company_registration: Optional[str]
     registration_confirmed: bool
     converted_to_customer_id: Optional[str]
+    ai_analysis: Optional[Dict[str, Any]] = None  # AI analysis results
+    linkedin_data: Optional[Dict[str, Any]] = None  # LinkedIn data
+    companies_house_data: Optional[Dict[str, Any]] = None  # Companies House data
+    google_maps_data: Optional[Dict[str, Any]] = None  # Google Maps data
+    website_data: Optional[Dict[str, Any]] = None  # Website data
     created_at: datetime
     
     class Config:

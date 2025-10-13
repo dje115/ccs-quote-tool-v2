@@ -483,26 +483,46 @@ const LeadDetail: React.FC = () => {
           )}
 
           {/* External Data */}
-          {lead.external_data && Object.keys(lead.external_data).length > 0 && (
+          {(lead.google_maps_data || lead.companies_house_data || lead.linkedin_data || lead.website_data) && (
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Additional Data
               </Typography>
               <Divider sx={{ mb: 2 }} />
-              {lead.external_data.google_maps && (
+              {lead.google_maps_data && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" color="primary">Google Maps Data</Typography>
                   <Typography variant="caption" display="block" color="text.secondary">
-                    {lead.external_data.google_maps.rating && `Rating: ${lead.external_data.google_maps.rating} ⭐`}
-                    {lead.external_data.google_maps.user_ratings_total && ` (${lead.external_data.google_maps.user_ratings_total} reviews)`}
+                    {lead.google_maps_data.rating && `Rating: ${lead.google_maps_data.rating} ⭐`}
+                    {lead.google_maps_data.user_ratings_total && ` (${lead.google_maps_data.user_ratings_total} reviews)`}
                   </Typography>
+                  {lead.google_maps_data.formatted_address && (
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Address: {lead.google_maps_data.formatted_address}
+                    </Typography>
+                  )}
                 </Box>
               )}
-              {lead.external_data.companies_house && (
+              {lead.companies_house_data && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" color="primary">Companies House</Typography>
                   <Typography variant="caption" display="block" color="text.secondary">
-                    {lead.external_data.companies_house.company_number && `Company Number: ${lead.external_data.companies_house.company_number}`}
+                    {lead.companies_house_data.company_number && `Company Number: ${lead.companies_house_data.company_number}`}
+                  </Typography>
+                  {lead.companies_house_data.company_status && (
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Status: {lead.companies_house_data.company_status}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+              {lead.linkedin_data && lead.linkedin_data.linkedin_url && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="primary">LinkedIn</Typography>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    <a href={lead.linkedin_data.linkedin_url} target="_blank" rel="noopener noreferrer">
+                      View LinkedIn Profile
+                    </a>
                   </Typography>
                 </Box>
               )}

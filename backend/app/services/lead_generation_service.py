@@ -720,6 +720,46 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 return {'success': False, 'error': 'Discovery already converted to CRM'}
             
             # Create customer with LEAD status (first step in CRM pipeline)
+            # Map business_sector string to enum if needed
+            business_sector_enum = None
+            if lead.business_sector:
+                try:
+                    from app.models.crm import BusinessSector
+                    # Try to match the sector to enum
+                    sector_map = {
+                        'office': BusinessSector.OFFICE,
+                        'retail': BusinessSector.RETAIL,
+                        'industrial': BusinessSector.INDUSTRIAL,
+                        'healthcare': BusinessSector.HEALTHCARE,
+                        'education': BusinessSector.EDUCATION,
+                        'hospitality': BusinessSector.HOSPITALITY,
+                        'manufacturing': BusinessSector.MANUFACTURING,
+                        'technology': BusinessSector.TECHNOLOGY,
+                        'finance': BusinessSector.FINANCE,
+                        'government': BusinessSector.GOVERNMENT,
+                    }
+                    business_sector_enum = sector_map.get(lead.business_sector.lower(), BusinessSector.OTHER)
+                except:
+                    pass
+            
+            # Map business_size string to enum if needed  
+            business_size_enum = None
+            if lead.company_size:
+                try:
+                    from app.models.crm import BusinessSize
+                    # Try to match the size to enum
+                    size_str = lead.company_size.lower()
+                    if 'small' in size_str or '1-10' in size_str or '1-50' in size_str:
+                        business_size_enum = BusinessSize.SMALL
+                    elif 'medium' in size_str or '50-250' in size_str:
+                        business_size_enum = BusinessSize.MEDIUM
+                    elif 'large' in size_str or '250-1000' in size_str:
+                        business_size_enum = BusinessSize.LARGE
+                    elif 'enterprise' in size_str or '1000+' in size_str:
+                        business_size_enum = BusinessSize.ENTERPRISE
+                except:
+                    pass
+            
             customer = Customer(
                 tenant_id=self.tenant_id,
                 company_name=lead.company_name,
@@ -730,8 +770,8 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 main_email=lead.contact_email,
                 billing_address=lead.address,
                 billing_postcode=lead.postcode,
-                business_sector=lead.business_sector,
-                business_size_category=lead.company_size,
+                business_sector=business_sector_enum,
+                business_size=business_size_enum,
                 status=CustomerStatus.LEAD,  # Starts at LEAD (first CRM stage)
                 lead_score=lead.lead_score,
                 linkedin_url=lead.linkedin_url,
@@ -812,82 +852,113 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
             if hasattr(lead, 'company_size') and lead.company_size:
                 company_info += f"\nCompany Size: {lead.company_size}"
             
-            # Add external data
-            if lead.external_data:
-                external_data = lead.external_data if isinstance(lead.external_data, dict) else json.loads(lead.external_data)
+            # Add external data from separate fields
+            # Google Maps data
+            if hasattr(lead, 'google_maps_data') and lead.google_maps_data:
+                maps = lead.google_maps_data if isinstance(lead.google_maps_data, dict) else json.loads(lead.google_maps_data)
+                company_info += f"\n\nGoogle Maps Data:"
+                if maps.get('rating'):
+                    company_info += f"\n- Rating: {maps['rating']}/5"
+                if maps.get('user_ratings_total'):
+                    company_info += f"\n- Reviews: {maps['user_ratings_total']}"
+                if maps.get('formatted_address'):
+                    company_info += f"\n- Address: {maps['formatted_address']}"
+                if maps.get('phone'):
+                    company_info += f"\n- Phone: {maps['phone']}"
+                if maps.get('website'):
+                    company_info += f"\n- Website: {maps['website']}"
+            
+            # Companies House data
+            if hasattr(lead, 'companies_house_data') and lead.companies_house_data:
+                ch = lead.companies_house_data if isinstance(lead.companies_house_data, dict) else json.loads(lead.companies_house_data)
+                company_info += f"\n\nCompanies House Data:"
+                if ch.get('company_number'):
+                    company_info += f"\n- Company Number: {ch['company_number']}"
+                if ch.get('company_status'):
+                    company_info += f"\n- Status: {ch['company_status']}"
+                if ch.get('company_type'):
+                    company_info += f"\n- Type: {ch['company_type']}"
+                if ch.get('date_of_creation'):
+                    company_info += f"\n- Founded: {ch['date_of_creation']}"
+                if ch.get('sic_codes'):
+                    company_info += f"\n- SIC Codes: {', '.join(ch['sic_codes']) if isinstance(ch['sic_codes'], list) else ch['sic_codes']}"
                 
-                # Google Maps data
-                if external_data.get('google_maps'):
-                    maps = external_data['google_maps']
-                    company_info += f"\n\nGoogle Maps Data:"
-                    if maps.get('rating'):
-                        company_info += f"\n- Rating: {maps['rating']}/5"
-                    if maps.get('user_ratings_total'):
-                        company_info += f"\n- Reviews: {maps['user_ratings_total']}"
-                    if maps.get('formatted_address'):
-                        company_info += f"\n- Address: {maps['formatted_address']}"
-                    if maps.get('phone'):
-                        company_info += f"\n- Phone: {maps['phone']}"
-                    if maps.get('website'):
-                        company_info += f"\n- Website: {maps['website']}"
+                # Financial data
+                if ch.get('accounts'):
+                    accounts = ch['accounts']
+                    company_info += f"\n\nFinancial Information:"
+                    if accounts.get('turnover'):
+                        company_info += f"\n- Turnover: £{accounts['turnover']:,}" if isinstance(accounts['turnover'], (int, float)) else f"\n- Turnover: {accounts['turnover']}"
+                    if accounts.get('shareholders_funds'):
+                        company_info += f"\n- Shareholders' Funds: £{accounts['shareholders_funds']:,}" if isinstance(accounts['shareholders_funds'], (int, float)) else f"\n- Shareholders' Funds: {accounts['shareholders_funds']}"
+                    if accounts.get('cash_at_bank'):
+                        company_info += f"\n- Cash at Bank: £{accounts['cash_at_bank']:,}" if isinstance(accounts['cash_at_bank'], (int, float)) else f"\n- Cash at Bank: {accounts['cash_at_bank']}"
+                    if accounts.get('employees'):
+                        company_info += f"\n- Employees: {accounts['employees']}"
                 
-                # Companies House data
-                if external_data.get('companies_house'):
-                    ch = external_data['companies_house']
-                    company_info += f"\n\nCompanies House Data:"
-                    if ch.get('company_number'):
-                        company_info += f"\n- Company Number: {ch['company_number']}"
-                    if ch.get('company_status'):
-                        company_info += f"\n- Status: {ch['company_status']}"
-                    if ch.get('company_type'):
-                        company_info += f"\n- Type: {ch['company_type']}"
-                    if ch.get('date_of_creation'):
-                        company_info += f"\n- Founded: {ch['date_of_creation']}"
-                    if ch.get('sic_codes'):
-                        company_info += f"\n- SIC Codes: {', '.join(ch['sic_codes'])}"
-                    
-                    # Financial data
-                    if ch.get('accounts'):
-                        accounts = ch['accounts']
-                        company_info += f"\n\nFinancial Information:"
-                        if accounts.get('turnover'):
-                            company_info += f"\n- Turnover: £{accounts['turnover']:,}"
-                        if accounts.get('shareholders_funds'):
-                            company_info += f"\n- Shareholders' Funds: £{accounts['shareholders_funds']:,}"
-                        if accounts.get('cash_at_bank'):
-                            company_info += f"\n- Cash at Bank: £{accounts['cash_at_bank']:,}"
-                        if accounts.get('employees'):
-                            company_info += f"\n- Employees: {accounts['employees']}"
-                    
-                    # Directors
-                    if ch.get('officers'):
-                        officers = ch['officers']
-                        company_info += f"\n\nDirectors/Officers ({len(officers)}):"
-                        for i, officer in enumerate(officers[:5], 1):  # Show first 5
-                            company_info += f"\n{i}. {officer.get('name', 'Unknown')}"
-                            if officer.get('officer_role'):
-                                company_info += f" - {officer['officer_role']}"
-                            if officer.get('appointed_on'):
-                                company_info += f" (Appointed: {officer['appointed_on']})"
+                # Directors
+                if ch.get('officers'):
+                    officers = ch['officers']
+                    company_info += f"\n\nDirectors/Officers ({len(officers)}):"
+                    for i, officer in enumerate(officers[:5], 1):  # Show first 5
+                        company_info += f"\n{i}. {officer.get('name', 'Unknown')}"
+                        if officer.get('officer_role'):
+                            company_info += f" - {officer['officer_role']}"
+                        if officer.get('appointed_on'):
+                            company_info += f" (Appointed: {officer['appointed_on']})"
+            
+            # LinkedIn data
+            if hasattr(lead, 'linkedin_data') and lead.linkedin_data:
+                linkedin = lead.linkedin_data if isinstance(lead.linkedin_data, dict) else json.loads(lead.linkedin_data)
+                company_info += f"\n\nLinkedIn Data:"
+                if linkedin.get('linkedin_url'):
+                    company_info += f"\n- LinkedIn URL: {linkedin['linkedin_url']}"
+                if linkedin.get('linkedin_industry'):
+                    company_info += f"\n- Industry: {linkedin['linkedin_industry']}"
+                if linkedin.get('linkedin_company_size'):
+                    company_info += f"\n- Company Size: {linkedin['linkedin_company_size']}"
+                if linkedin.get('linkedin_description'):
+                    company_info += f"\n- Description: {linkedin['linkedin_description']}"
+            
+            # Get tenant profile information to contextualize the analysis
+            tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            
+            # Build context about our company
+            our_company_context = ""
+            if tenant:
+                if tenant.company_name:
+                    our_company_context += f"\n\nYOUR COMPANY: {tenant.company_name}"
                 
-                # LinkedIn data
-                if external_data.get('linkedin'):
-                    linkedin = external_data['linkedin']
-                    company_info += f"\n\nLinkedIn Data:"
-                    if linkedin.get('linkedin_url'):
-                        company_info += f"\n- LinkedIn URL: {linkedin['linkedin_url']}"
-                    if linkedin.get('linkedin_industry'):
-                        company_info += f"\n- Industry: {linkedin['linkedin_industry']}"
-                    if linkedin.get('linkedin_company_size'):
-                        company_info += f"\n- Company Size: {linkedin['linkedin_company_size']}"
-                    if linkedin.get('linkedin_description'):
-                        company_info += f"\n- Description: {linkedin['linkedin_description']}"
+                if tenant.company_description:
+                    our_company_context += f"\n\nAbout Your Company:\n{tenant.company_description}"
+                
+                if tenant.products_services:
+                    products = tenant.products_services if isinstance(tenant.products_services, list) else []
+                    if products:
+                        our_company_context += f"\n\nYour Products/Services:\n" + "\n".join([f"- {p}" for p in products])
+                
+                if tenant.unique_selling_points:
+                    usps = tenant.unique_selling_points if isinstance(tenant.unique_selling_points, list) else []
+                    if usps:
+                        our_company_context += f"\n\nYour Core Strengths/USPs:\n" + "\n".join([f"- {u}" for u in usps])
+                
+                if tenant.target_markets:
+                    markets = tenant.target_markets if isinstance(tenant.target_markets, list) else []
+                    if markets:
+                        our_company_context += f"\n\nYour Target Markets:\n" + "\n".join([f"- {m}" for m in markets])
+                
+                if tenant.elevator_pitch:
+                    our_company_context += f"\n\nYour Value Proposition:\n{tenant.elevator_pitch}"
             
             # Build AI prompt
             prompt = f"""
-Analyze this UK company and provide comprehensive business intelligence:
+Analyze this UK company and provide comprehensive business intelligence that helps us sell to them.
 
 {company_info}
+{our_company_context}
+
+IMPORTANT: Consider how our company's products, services, and strengths align with this prospect's needs. 
+Focus on identifying specific opportunities where we can add value based on what we offer.
 
 Please provide a detailed analysis including:
 
@@ -908,13 +979,17 @@ Please provide a detailed analysis including:
 
 7. **Growth Potential**: High/Medium/Low with reasoning
 
-8. **Technology Needs**: Predicted IT infrastructure needs
+8. **Technology Needs**: Based on their business, what specific technology/IT needs do they likely have? 
+   Consider how OUR products and services could address these needs.
 
-9. **Competitive Landscape**: Potential competitors
+9. **Competitive Landscape**: Who are their main competitors in their sector?
 
-10. **Business Opportunities**: IT infrastructure project opportunities
+10. **Business Opportunities**: Specific opportunities where OUR company can add value. 
+    Be detailed about which of OUR products/services align with their needs.
+    Explain HOW we can help them solve problems or achieve goals.
+    Reference our USPs where relevant.
 
-11. **Risk Factors**: Challenges or risks
+11. **Risk Factors**: Challenges or potential objections we might face when approaching them
 
 12. **Contact Information**: Search the website, Google Maps data, and Companies House data for:
     - Key contact person (Director, CEO, IT Manager, or general contact)
@@ -954,6 +1029,7 @@ Focus on UK market context and be realistic. Only include contact information if
             print(f"[AI ANALYSIS] Running analysis for {lead.company_name}")
             
             # Call GPT-5-mini with Chat Completions API
+            # Note: GPT-5-mini does not support temperature parameter - only default (1) is supported
             response = self.openai_client.chat.completions.create(
                 model="gpt-5-mini",
                 messages=[
@@ -967,8 +1043,7 @@ Focus on UK market context and be realistic. Only include contact information if
                     }
                 ],
                 max_completion_tokens=20000,  # [[memory:9653106]]
-                timeout=240.0,
-                temperature=0.7
+                timeout=240.0
             )
             
             # Extract and parse response
