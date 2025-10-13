@@ -867,9 +867,17 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 
                 if tenant.products_services and isinstance(tenant.products_services, list):
                     tenant_context += f"\n\nYour Products/Services:\n" + "\n".join([f"- {p}" for p in tenant.products_services[:5]])
+                
+                if tenant.partnership_opportunities:
+                    tenant_context += f"\n\nB2B Partnership Opportunities:\n{tenant.partnership_opportunities[:500]}"  # First 500 chars for summary
             
             # Build prompt
             prompt = f"""You are an expert B2B sales researcher who writes concise, factual lead summaries for CRM and outbound sales.
+
+IMPORTANT: Determine if this prospect is:
+A) A potential CUSTOMER (we sell TO them) 
+B) A potential PARTNER (we work WITH them)
+C) Both
 
 Create a short lead summary for this prospect:
 
@@ -1069,10 +1077,13 @@ Keep the total summary under 300 words, professional tone, ready for telesales o
                 
                 if tenant.elevator_pitch:
                     our_company_context += f"\n\nYour Value Proposition:\n{tenant.elevator_pitch}"
+                
+                if tenant.partnership_opportunities:
+                    our_company_context += f"\n\nB2B Partnership Opportunities (How to work WITH similar businesses):\n{tenant.partnership_opportunities}"
             
             # Build AI prompt
             prompt = f"""
-Analyze this UK company and provide comprehensive business intelligence that helps us sell to them.
+Analyze this UK company and determine if they are a potential CUSTOMER or PARTNERSHIP opportunity (or both).
 
 {company_info}
 {our_company_context}

@@ -821,12 +821,21 @@ Based on ALL the available information above and your knowledge, provide:
 4. **Target Markets**: List 3-7 industries or customer segments they serve
 5. **Sales Methodology**: Suggest the most appropriate sales approach (e.g., "Consultative", "Solution-Based", "Value-Based")
 6. **Elevator Pitch**: Create a compelling 30-second pitch for the company
-7. **Contact Information**:
+7. **B2B Partnership Opportunities** (CRITICAL): Based on what this company does, describe 5-10 ways they could work WITH other businesses in similar or complementary sectors.
+   Think about:
+   - Can they subcontract their services to other companies?
+   - Can they white-label their offerings?
+   - Can they partner on large projects or tenders?
+   - Can they provide overflow/regional support to similar businesses?
+   - Can they collaborate with consultants, contractors, or service providers who serve the same markets?
+   - How can they work as a B2B partner (not just sell to end customers)?
+   Format as a multi-line text with each opportunity on its own line (not an array)
+8. **Contact Information**:
    - Primary email address (look for contact@, info@, or sales@ emails)
    - Phone numbers found on website
    - Business address if available
-8. **Marketing Keywords**: Extract 15-20 relevant keywords from the website for SEO and marketing
-9. **LinkedIn URL**: {linkedin_url if linkedin_url else 'Not found'}
+9. **Marketing Keywords**: Extract 15-20 relevant keywords from the website for SEO and marketing
+10. **LinkedIn URL**: {linkedin_url if linkedin_url else 'Not found'}
 
 Format your response as JSON with these keys:
 - company_description
@@ -835,6 +844,7 @@ Format your response as JSON with these keys:
 - target_markets (array)
 - sales_methodology (string)
 - elevator_pitch (string)
+- partnership_opportunities (string, multi-line text describing B2B collaboration models)
 - contact_emails (array of objects with email and suggested role)
 - contact_phones (array)
 - company_address (string or null)
@@ -901,6 +911,7 @@ If information is missing or unclear, make reasonable inferences based on the co
                 "target_markets": result.get("target_markets", []),
                 "sales_methodology": result.get("sales_methodology", ""),
                 "elevator_pitch": result.get("elevator_pitch", ""),
+                "partnership_opportunities": result.get("partnership_opportunities", ""),
                 "company_phone_numbers": result.get("contact_phones", []),
                 "company_email_addresses": [
                     {"email": email.get("email") if isinstance(email, dict) else email, "is_default": i == 0}

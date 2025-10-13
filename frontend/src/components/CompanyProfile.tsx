@@ -203,6 +203,7 @@ const CompanyProfile: React.FC = () => {
           target_markets: data.target_markets || [],
           sales_methodology: data.sales_methodology || '',
           elevator_pitch: data.elevator_pitch || '',
+          partnership_opportunities: data.partnership_opportunities || '',
           company_phone_numbers: data.company_phone_numbers || [],
           company_email_addresses: data.company_email_addresses || [],
           company_address: data.company_address || '',
