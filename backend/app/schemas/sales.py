@@ -150,6 +150,7 @@ class TenantProfileResponse(BaseModel):
     target_markets: List[str] = Field(default_factory=list)
     sales_methodology: Optional[str] = None
     elevator_pitch: Optional[str] = None
+    partnership_opportunities: Optional[str] = None
     logo_url: Optional[str] = None
     logo_text: Optional[str] = None
     use_text_logo: bool = False

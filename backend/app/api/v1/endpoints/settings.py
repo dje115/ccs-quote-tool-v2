@@ -383,6 +383,7 @@ async def get_company_profile(
         target_markets=current_tenant.target_markets or [],
         sales_methodology=current_tenant.sales_methodology,
         elevator_pitch=current_tenant.elevator_pitch,
+        partnership_opportunities=current_tenant.partnership_opportunities,
         logo_url=current_tenant.logo_url,
         logo_text=current_tenant.logo_text,
         use_text_logo=current_tenant.use_text_logo or False,
@@ -440,6 +441,8 @@ async def update_company_profile(
             current_tenant.sales_methodology = profile.sales_methodology
         if profile.elevator_pitch is not None:
             current_tenant.elevator_pitch = profile.elevator_pitch
+        if profile.partnership_opportunities is not None:
+            current_tenant.partnership_opportunities = profile.partnership_opportunities
         if profile.logo_url is not None:
             current_tenant.logo_url = profile.logo_url
         if profile.logo_text is not None:
@@ -463,6 +466,7 @@ async def update_company_profile(
             target_markets=current_tenant.target_markets or [],
             sales_methodology=current_tenant.sales_methodology,
             elevator_pitch=current_tenant.elevator_pitch,
+            partnership_opportunities=current_tenant.partnership_opportunities,
             logo_url=current_tenant.logo_url,
             logo_text=current_tenant.logo_text,
             use_text_logo=current_tenant.use_text_logo or False,
