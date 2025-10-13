@@ -26,7 +26,8 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   AccountCircle,
-  Group as GroupIcon
+  Group as GroupIcon,
+  Business as CompetitorsIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -70,6 +71,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Discoveries', icon: <LeadsIcon />, path: '/leads' },
     { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
+    { text: 'Competitors', icon: <CompetitorsIcon />, path: '/competitors' },
     { text: t('navigation.users'), icon: <GroupIcon />, path: '/users' },
     { text: t('navigation.settings'), icon: <SettingsIcon />, path: '/settings' },
   ];

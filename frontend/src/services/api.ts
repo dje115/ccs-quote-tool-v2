@@ -97,6 +97,7 @@ export const customerAPI = {
   includeAddress: (id: string, locationId: string) => apiClient.post(`/customers/${id}/addresses/include`, { location_id: locationId }),
   updateKnownFacts: (id: string, knownFacts: string) => apiClient.put(`/customers/${id}/known-facts`, { known_facts: knownFacts }),
   changeStatus: (id: string, status: string) => apiClient.patch(`/customers/${id}/status`, { status }),
+  getCompetitors: (params?: any) => apiClient.get('/customers/competitors', { params }),
 };
 
 // Lead API

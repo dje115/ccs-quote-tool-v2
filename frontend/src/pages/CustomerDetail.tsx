@@ -31,7 +31,9 @@ import {
   TableHead,
   TableRow,
   Tabs,
-  Tab
+  Tab,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -258,6 +260,21 @@ const CustomerDetail: React.FC = () => {
     }
   };
 
+  const handleCompetitorToggle = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const isCompetitor = event.target.checked;
+    try {
+      await customerAPI.update(id!, { is_competitor: isCompetitor });
+      setAiAnalysisSuccess(isCompetitor ? 'Marked as competitor' : 'Removed competitor flag');
+      setTimeout(() => setAiAnalysisSuccess(null), 3000);
+      // Reload customer data to reflect new status
+      await loadCustomerData();
+    } catch (error) {
+      console.error('Failed to update competitor status:', error);
+      setAiAnalysisError('Failed to update competitor status');
+      setTimeout(() => setAiAnalysisError(null), 5000);
+    }
+  };
+
   if (loading || !customer) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -284,6 +301,21 @@ const CustomerDetail: React.FC = () => {
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
           {customer?.company_name || 'Unknown Customer'}
         </Typography>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={customer?.is_competitor || false}
+              onChange={handleCompetitorToggle}
+              color="warning"
+            />
+          }
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <BusinessIcon fontSize="small" />
+              <Typography variant="body2">Competitor</Typography>
+            </Box>
+          }
+        />
         <Button
           variant="contained"
           color="primary"

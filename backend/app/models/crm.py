@@ -110,6 +110,9 @@ class Customer(BaseModel):
     company_registration = Column(String(50), nullable=True)
     registration_confirmed = Column(Boolean, default=False)
     
+    # Competitor flag
+    is_competitor = Column(Boolean, default=False, nullable=False)  # Mark as competitor for analysis
+    
     # AI analysis and external data
     ai_analysis_raw = Column(JSON, nullable=True)
     lead_score = Column(Integer, nullable=True)

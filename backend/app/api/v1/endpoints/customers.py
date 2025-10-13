@@ -51,6 +51,7 @@ class CustomerResponse(BaseModel):
     google_maps_data: dict | None = None
     company_registration: str | None = None
     registration_confirmed: bool | None = None
+    is_competitor: bool | None = None
     main_phone: str | None = None
     known_facts: str | None = None
     billing_address: str | None = None
@@ -81,6 +82,7 @@ class CustomerUpdate(BaseModel):
     billing_address: str | None = None
     billing_postcode: str | None = None
     known_facts: str | None = None
+    is_competitor: bool | None = None
 
 
 @router.get("/", response_model=List[CustomerResponse])
@@ -90,6 +92,7 @@ async def list_customers(
     status: Optional[CustomerStatus] = None,
     sector: Optional[BusinessSector] = None,
     search: Optional[str] = None,
+    is_competitor: Optional[bool] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -109,11 +112,41 @@ async def list_customers(
         stmt = stmt.where(Customer.business_sector == sector)
     if search:
         stmt = stmt.where(Customer.company_name.ilike(f"%{search}%"))
+    if is_competitor is not None:
+        stmt = stmt.where(Customer.is_competitor == is_competitor)
     
     stmt = stmt.offset(skip).limit(limit)
     result = db.execute(stmt)
     customers = result.scalars().all()
     return customers
+
+
+@router.get("/competitors", response_model=List[CustomerResponse])
+async def list_competitors(
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List competitors for current tenant"""
+    from sqlalchemy import select
+    
+    # Build query to get only competitors
+    stmt = select(Customer).where(
+        Customer.tenant_id == current_user.tenant_id,
+        Customer.is_deleted == False,
+        Customer.is_competitor == True
+    )
+    
+    # Apply search filter if provided
+    if search:
+        stmt = stmt.where(Customer.company_name.ilike(f"%{search}%"))
+    
+    stmt = stmt.offset(skip).limit(limit)
+    result = db.execute(stmt)
+    competitors = result.scalars().all()
+    return competitors
 
 
 @router.post("/", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)

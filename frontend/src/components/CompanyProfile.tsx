@@ -829,6 +829,45 @@ const CompanyProfile: React.FC = () => {
                         </Stack>
                       </Paper>
                     )}
+
+                    {/* B2B Partnership Opportunities */}
+                    {autoFillResults.ai_data.partnership_opportunities && (
+                      <Paper elevation={2} sx={{ p: 2, mb: 2, borderLeft: 4, borderColor: 'info.main' }}>
+                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                          🤝 B2B Partnership Opportunities
+                        </Typography>
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                              CURRENT:
+                            </Typography>
+                            <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1, minHeight: 80 }}>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                                {profile.partnership_opportunities || <em style={{ color: '#999' }}>No partnership opportunities yet</em>}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={12} md={6}>
+                            <Typography variant="caption" color="primary" fontWeight="bold">
+                              AI SUGGESTED:
+                            </Typography>
+                            <Box sx={{ p: 2, bgcolor: '#e3f2fd', borderRadius: 1, minHeight: 80 }}>
+                              <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                                {autoFillResults.ai_data.partnership_opportunities}
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        </Grid>
+                        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                          <Button size="small" variant="contained" onClick={() => applySectionSuggestion('partnership_opportunities', 'replace')}>
+                            Use AI Version
+                          </Button>
+                          <Button size="small" variant="outlined" onClick={() => applySectionSuggestion('partnership_opportunities', 'discard')}>
+                            Keep Current
+                          </Button>
+                        </Stack>
+                      </Paper>
+                    )}
                   </Box>
                 )}
               </CardContent>

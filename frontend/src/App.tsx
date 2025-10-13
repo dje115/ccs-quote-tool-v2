@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
+import Competitors from './pages/Competitors';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerEdit from './pages/CustomerEdit';
 import CustomerNew from './pages/CustomerNew';
@@ -81,6 +82,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <CustomerEdit />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/competitors"
+            element={
+              <ProtectedRoute>
+                <Competitors />
               </ProtectedRoute>
             }
           />
