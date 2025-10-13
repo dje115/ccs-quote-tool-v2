@@ -316,8 +316,9 @@ const CustomerDetail: React.FC = () => {
 
       {/* Modern Tabbed Interface */}
       <Paper sx={{ mb: 3 }}>
+        {/* First Row of Tabs - Intelligence & Data */}
         <Tabs 
-          value={currentTab} 
+          value={currentTab > 6 ? false : currentTab} 
           onChange={(e, newValue) => {
             setCurrentTab(newValue);
             localStorage.setItem('customerDetailTab', String(newValue));
@@ -345,6 +346,35 @@ const CustomerDetail: React.FC = () => {
           <Tab icon={<PlaceIcon />} iconPosition="start" label="Addresses" />
           <Tab icon={<PeopleIcon />} iconPosition="start" label="Directors" />
           <Tab icon={<CompareArrowsIcon />} iconPosition="start" label="Business Intelligence" />
+        </Tabs>
+        
+        {/* Second Row of Tabs - Activity & Documents */}
+        <Tabs
+          value={currentTab > 6 ? currentTab - 7 : false}
+          onChange={(e, newValue) => {
+            const tabIndex = newValue + 7;
+            setCurrentTab(tabIndex);
+            localStorage.setItem('customerDetailTab', String(tabIndex));
+          }}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: '#f5f5f5',
+            '& .MuiTab-root': {
+              minHeight: 56,
+              fontSize: '0.9rem',
+              fontWeight: 500,
+              textTransform: 'none',
+            },
+            '& .Mui-selected': {
+              color: '#1976d2',
+              bgcolor: '#fff',
+            },
+          }}
+        >
+          <Tab icon={<PhoneIcon />} iconPosition="start" label="Activity" />
           <Tab icon={<DescriptionIcon />} iconPosition="start" label="Quotes" />
         </Tabs>
       </Paper>
@@ -1293,11 +1323,200 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 7: Quotes - Coming soon */}
+      {/* Tab Panel 7: Activity - CRM Actions & Communications */}
       {currentTab === 7 && (
+        <Box>
+          {/* Activity Overview */}
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PhoneIcon /> Activity Center
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Manage all sales activities, communications, and engagement tracking for this customer.
+            </Typography>
+            
+            <Grid container spacing={3}>
+              {/* Email Templates */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <EmailIcon color="primary" /> Email Templates
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Generate AI-powered email templates for different scenarios
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button variant="outlined" size="small" disabled>Initial Outreach Email</Button>
+                      <Button variant="outlined" size="small" disabled>Follow-up Email</Button>
+                      <Button variant="outlined" size="small" disabled>Quote Email</Button>
+                      <Button variant="outlined" size="small" disabled>Thank You Email</Button>
+                    </Box>
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
+                      Coming Soon
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Call Logging */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PhoneIcon color="primary" /> Call Logging
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Log calls with notes, outcomes, and follow-up actions
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button variant="outlined" size="small" disabled>Log New Call</Button>
+                      <Button variant="outlined" size="small" disabled>View Call History</Button>
+                      <Button variant="outlined" size="small" disabled>Schedule Follow-up</Button>
+                      <Button variant="outlined" size="small" disabled>AI Call Summary</Button>
+                    </Box>
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
+                      Coming Soon
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Notes & Tasks */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <EditIcon color="primary" /> Notes & Tasks
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Add notes, create tasks, and set reminders
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button variant="outlined" size="small" disabled>Add Note</Button>
+                      <Button variant="outlined" size="small" disabled>Create Task</Button>
+                      <Button variant="outlined" size="small" disabled>Set Reminder</Button>
+                      <Button variant="outlined" size="small" disabled>View Timeline</Button>
+                    </Box>
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
+                      Coming Soon
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Meeting Scheduler */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <BusinessIcon color="primary" /> Meeting Management
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Schedule meetings, site visits, and demos
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button variant="outlined" size="small" disabled>Schedule Meeting</Button>
+                      <Button variant="outlined" size="small" disabled>Log Site Visit</Button>
+                      <Button variant="outlined" size="small" disabled>Book Demo</Button>
+                      <Button variant="outlined" size="small" disabled>Meeting Notes</Button>
+                    </Box>
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
+                      Coming Soon
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Document Management */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <DescriptionIcon color="primary" /> Documents
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Upload and manage customer documents
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button variant="outlined" size="small" disabled>Upload Document</Button>
+                      <Button variant="outlined" size="small" disabled>View Documents</Button>
+                      <Button variant="outlined" size="small" disabled>Share Document</Button>
+                      <Button variant="outlined" size="small" disabled>Document History</Button>
+                    </Box>
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
+                      Coming Soon
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* AI Sales Assistant */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <AiIcon color="primary" /> AI Sales Assistant
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Get AI-powered suggestions and insights
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Button variant="outlined" size="small" disabled>Suggest Next Action</Button>
+                      <Button variant="outlined" size="small" disabled>Draft Email</Button>
+                      <Button variant="outlined" size="small" disabled>Sales Strategy</Button>
+                      <Button variant="outlined" size="small" disabled>Objection Handling</Button>
+                    </Box>
+                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
+                      Coming Soon
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Paper>
+
+          {/* Activity Timeline Placeholder */}
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>Activity Timeline</Typography>
+            <Alert severity="info">
+              <Typography variant="body2">
+                Activity timeline will show all interactions, calls, emails, meetings, and notes in chronological order.
+              </Typography>
+            </Alert>
+          </Paper>
+        </Box>
+      )}
+
+      {/* Tab Panel 8: Quotes */}
+      {currentTab === 8 && (
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h5" gutterBottom>Quotes</Typography>
-          <Typography color="text.secondary">Quotes content will appear here</Typography>
+          <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DescriptionIcon /> Quotes
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Create, manage, and track quotes for this customer.
+          </Typography>
+          
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              Quote management system coming soon. Features will include:
+            </Typography>
+            <Box component="ul" sx={{ mt: 1, mb: 0 }}>
+              <li>AI-powered quote generation</li>
+              <li>Product/service catalog integration</li>
+              <li>Quote templates</li>
+              <li>Version control</li>
+              <li>Approval workflows</li>
+              <li>PDF generation and email delivery</li>
+              <li>Quote status tracking</li>
+              <li>Win/loss analysis</li>
+            </Box>
+          </Alert>
+
+          <Button variant="outlined" startIcon={<AddIcon />} disabled>
+            Create New Quote
+          </Button>
         </Paper>
       )}
 

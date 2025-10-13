@@ -12,6 +12,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, check_permission
+from app.core.api_keys import get_api_keys
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
 from app.models.tenant import User
 from app.services.ai_analysis_service import AIAnalysisService
@@ -348,15 +349,26 @@ async def run_ai_analysis(
         tenant_result = db.execute(tenant_stmt)
         tenant = tenant_result.scalars().first()
         
-        # Get API keys with fallback
+        # Get API keys with fallback (tenant first, then system-wide)
         api_keys = get_api_keys(db, tenant)
+        
+        print(f"[AI ANALYSIS] Using API keys from: {api_keys.source}")
+        print(f"[AI ANALYSIS] OpenAI configured: {bool(api_keys.openai)}")
+        print(f"[AI ANALYSIS] Companies House configured: {bool(api_keys.companies_house)}")
+        print(f"[AI ANALYSIS] Google Maps configured: {bool(api_keys.google_maps)}")
+        
+        if not api_keys.openai:
+            raise HTTPException(
+                status_code=400,
+                detail="OpenAI API key not configured. Please configure API keys in Settings."
+            )
         
         # Initialize AI analysis service with tenant's API keys and context
         ai_service = AIAnalysisService(
             openai_api_key=api_keys.openai,
             companies_house_api_key=api_keys.companies_house,
             google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
+            tenant_id=tenant.id,
             db=db
         )
         

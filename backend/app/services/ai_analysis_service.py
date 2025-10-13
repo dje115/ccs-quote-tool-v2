@@ -347,11 +347,44 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             if known_facts:
                 company_info += f"\n\n**IMPORTANT - Known Facts (User-Verified Information):**\n{known_facts}\n\nPlease take these user-provided facts into account when analyzing the company. They represent verified information that should take precedence over conflicting data from other sources."
             
-            # V1 comprehensive prompt
+            # Get tenant profile information to contextualize the analysis
+            tenant_context = ""
+            if self.db and self.tenant_id:
+                try:
+                    from app.models.tenant import Tenant
+                    tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+                    
+                    if tenant:
+                        if tenant.company_name:
+                            tenant_context += f"\n\n**YOUR COMPANY: {tenant.company_name}**"
+                        
+                        if tenant.company_description:
+                            tenant_context += f"\n\nAbout Your Company:\n{tenant.company_description}"
+                        
+                        if tenant.products_services and isinstance(tenant.products_services, list):
+                            tenant_context += f"\n\nYour Products/Services:\n" + "\n".join([f"- {p}" for p in tenant.products_services])
+                        
+                        if tenant.unique_selling_points and isinstance(tenant.unique_selling_points, list):
+                            tenant_context += f"\n\nYour Core Strengths/USPs:\n" + "\n".join([f"- {u}" for u in tenant.unique_selling_points])
+                        
+                        if tenant.target_markets and isinstance(tenant.target_markets, list):
+                            tenant_context += f"\n\nYour Target Markets:\n" + "\n".join([f"- {m}" for m in tenant.target_markets])
+                        
+                        if tenant.elevator_pitch:
+                            tenant_context += f"\n\nYour Value Proposition:\n{tenant.elevator_pitch}"
+                except Exception as e:
+                    print(f"[DEBUG] Could not load tenant context: {e}")
+            
+            # V1 comprehensive prompt with tenant context
             prompt = f"""
-            Analyze this company and provide comprehensive business intelligence:
+            Analyze this company and provide comprehensive business intelligence that helps us sell to them.
+            
+            {tenant_context}
             
             {company_info}
+            
+            IMPORTANT: Consider how our company's products, services, and strengths align with this prospect's needs. 
+            Focus on identifying specific opportunities where we can add value based on what we offer.
 
             Please provide a detailed analysis including:
 
