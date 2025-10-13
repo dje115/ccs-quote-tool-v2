@@ -469,11 +469,13 @@ async def ai_dashboard_query(
         # This checks tenant keys first, then falls back to system-wide keys from admin portal
         api_keys = get_api_keys(db, current_tenant)
         
-        # Initialize AI service with resolved API keys
+        # Initialize AI service with resolved API keys and tenant context
         ai_service = AIAnalysisService(
             openai_api_key=api_keys.openai,
             companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
         )
         
         # ===== CUSTOMER DATA =====

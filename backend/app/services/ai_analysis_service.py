@@ -20,10 +20,14 @@ class AIAnalysisService:
     
     def __init__(self, openai_api_key: Optional[str] = None, 
                  companies_house_api_key: Optional[str] = None,
-                 google_maps_api_key: Optional[str] = None):
+                 google_maps_api_key: Optional[str] = None,
+                 tenant_id: Optional[str] = None,
+                 db=None):
         self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
         self.companies_house_api_key = companies_house_api_key or settings.COMPANIES_HOUSE_API_KEY
         self.google_maps_api_key = google_maps_api_key or settings.GOOGLE_MAPS_API_KEY
+        self.tenant_id = tenant_id
+        self.db = db
         
         self.openai_client = None
         self.companies_house_service = CompaniesHouseService(api_key=self.companies_house_api_key)
@@ -41,6 +45,46 @@ class AIAnalysisService:
                 )
         except Exception as e:
             print(f"[ERROR] Error initializing AI analysis client: {e}")
+    
+    def _build_dynamic_system_prompt(self, analysis_type: str = "general") -> str:
+        """
+        Build dynamic system prompt based on tenant's business
+        
+        Args:
+            analysis_type: Type of analysis ('general', 'sales', 'lead_scoring')
+        """
+        prompt = "You are a business intelligence analyst specializing in UK companies"
+        
+        # Try to get tenant information if available
+        if self.db and self.tenant_id:
+            try:
+                from app.models.tenant import Tenant
+                tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+                
+                if tenant:
+                    if tenant.company_name:
+                        prompt += f" and helping companies like {tenant.company_name}"
+                    
+                    if tenant.target_markets and isinstance(tenant.target_markets, list) and len(tenant.target_markets) > 0:
+                        markets = ", ".join(tenant.target_markets[:3])
+                        prompt += f" sell to businesses in {markets}"
+                    
+                    if analysis_type == "sales" and tenant.products_services:
+                        prompt += ". You understand their product/service offerings"
+            except Exception as e:
+                print(f"[DEBUG] Could not load tenant info: {e}")
+        
+        # Add context based on analysis type
+        if analysis_type == "sales":
+            prompt += " and creating targeted sales strategies"
+        elif analysis_type == "lead_scoring":
+            prompt += " and scoring sales leads"
+        else:
+            prompt += " and business development opportunities"
+        
+        prompt += ". Provide accurate, realistic assessments. Always respond with valid JSON."
+        
+        return prompt
     
     async def _discover_website(self, company_name: str) -> str:
         """Use AI to discover company website via simple search"""
@@ -320,13 +364,14 @@ Do not include any explanation, just the URL or NOT_FOUND."""
 
             3. **Primary Business Activities**: Describe what this company does, their main products/services
 
-            4. **Technology Maturity**: Assess their likely technology sophistication based on company size and financial data:
-               - Basic: Simple IT needs, basic infrastructure
-               - Intermediate: Some advanced systems, growing IT requirements
-               - Advanced: Sophisticated IT infrastructure, multiple systems
-               - Enterprise: Complex, integrated systems, dedicated IT teams
+            4. **Technology Maturity**: Assess their likely technology/operational sophistication based on company size and financial data:
+               - Basic: Simple needs, basic infrastructure
+               - Intermediate: Some advanced systems, growing requirements
+               - Advanced: Sophisticated infrastructure, multiple systems
+               - Enterprise: Complex, integrated systems, dedicated teams
+               (If technology isn't relevant to your industry, assess operational maturity)
 
-            5. **IT Budget Estimate**: Based on their revenue and company size, estimate their likely annual IT spending range
+            5. **Budget Estimate**: Based on their revenue and company size, estimate their likely annual spending range for products/services like ours
 
             6. **Financial Health Analysis**: Analyze the financial data from Companies House:
                - Comment on their profitability trend (Growing/Stable/Declining)
@@ -336,13 +381,15 @@ Do not include any explanation, just the URL or NOT_FOUND."""
 
             7. **Growth Potential**: Assess potential for business growth and expansion based on financial trends and company size
 
-            8. **Technology Needs Prediction**: What structured cabling, networking, and security needs might they have based on their size and financial position?
+            8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
+                Focus on needs that align with what we offer.
 
-            9. **Competitive Landscape**: Identify potential competitors or similar companies
+            9. **Competitive Landscape**: Identify potential competitors or similar companies in their sector
 
-            10. **Business Opportunities**: What opportunities exist for IT infrastructure projects given their financial capacity and growth trajectory?
+            10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
+                Be specific about which of our offerings might align with their needs.
 
-            11. **Risk Factors**: What challenges or risks might affect their IT projects based on their financial position?
+            11. **Risk Factors**: What challenges or potential objections might we face when approaching them based on their financial position and business context?
 
             12. **Address and Location Analysis**: Based on the company information, identify:
                 - Primary business address (if different from registered address)
@@ -376,9 +423,10 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             Focus on UK market context and be realistic in your assessments.
             """
             
-            system_prompt = """You are a business intelligence analyst specializing in UK companies and IT infrastructure needs. Provide accurate, realistic assessments based on company information. Always respond with valid JSON format."""
+            system_prompt = self._build_dynamic_system_prompt("general")
             
             print(f"[AI] Making GPT-5-mini API call for customer analysis...")
+            print(f"[AI] System prompt: {system_prompt[:100]}...")
             
             response = self.openai_client.chat.completions.create(
                 model="gpt-5-mini",
@@ -507,7 +555,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             return {"error": "AI service not available"}
         
         try:
-            system_prompt = """You are a sales strategist specializing in structured cabling and IT infrastructure sales.
+            system_prompt = self._build_dynamic_system_prompt("sales") + """
             
             Create a comprehensive engagement strategy including:
             1. Initial contact approach
@@ -566,13 +614,13 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             return {"error": "AI service not available"}
         
         try:
-            system_prompt = """You are a lead scoring expert for structured cabling sales.
+            system_prompt = self._build_dynamic_system_prompt("lead_scoring") + """
             
             Score leads based on:
             1. Company size and growth
-            2. Industry fit
+            2. Industry fit with our target markets
             3. Financial stability
-            4. IT infrastructure needs
+            4. Needs alignment with our products/services
             5. Decision-making capability
             6. Timeline and urgency
             7. Budget availability

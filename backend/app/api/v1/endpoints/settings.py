@@ -511,11 +511,13 @@ async def analyze_company_profile(
                 detail="OpenAI API key not configured. Please add your API key in settings."
             )
         
-        # Initialize AI service
+        # Initialize AI service with tenant context
         ai_service = AIAnalysisService(
             openai_api_key=api_keys.openai,
             companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
         )
         
         # Build context for AI analysis
@@ -631,11 +633,13 @@ async def auto_fill_company_profile(
                 detail="OpenAI API key not configured. Please add your API key in settings."
             )
         
-        # Initialize AI service
+        # Initialize AI service with tenant context
         ai_service = AIAnalysisService(
             openai_api_key=api_keys.openai,
             companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
         )
         
         company_name = current_tenant.company_name or current_tenant.name

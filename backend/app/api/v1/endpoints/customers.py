@@ -348,11 +348,16 @@ async def run_ai_analysis(
         tenant_result = db.execute(tenant_stmt)
         tenant = tenant_result.scalars().first()
         
-        # Initialize AI analysis service with tenant's API keys
+        # Get API keys with fallback
+        api_keys = get_api_keys(db, tenant)
+        
+        # Initialize AI analysis service with tenant's API keys and context
         ai_service = AIAnalysisService(
-            openai_api_key=tenant.openai_api_key if tenant and tenant.openai_api_key else None,
-            companies_house_api_key=tenant.companies_house_api_key if tenant and tenant.companies_house_api_key else None,
-            google_maps_api_key=tenant.google_maps_api_key if tenant and tenant.google_maps_api_key else None
+            openai_api_key=api_keys.openai,
+            companies_house_api_key=api_keys.companies_house,
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
         )
         
         print(f"[AI ANALYSIS] Starting analysis for customer: {customer.company_name}")

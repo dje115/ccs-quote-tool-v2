@@ -971,16 +971,17 @@ Please provide a detailed analysis including:
 
 3. **Primary Business Activities**: What they do, main products/services
 
-4. **Technology Maturity**: Basic/Intermediate/Advanced/Enterprise
+4. **Technology Maturity**: Basic/Intermediate/Advanced/Enterprise (or N/A if not relevant to your industry)
 
-5. **IT Budget Estimate**: Likely annual IT spending range
+5. **Budget Estimate**: Likely annual budget/spending range for products/services like ours
 
 6. **Financial Health**: Analysis of financial position, profitability trends, stability
 
 7. **Growth Potential**: High/Medium/Low with reasoning
 
-8. **Technology Needs**: Based on their business, what specific technology/IT needs do they likely have? 
+8. **Needs Assessment**: Based on their business, what specific needs do they likely have that relate to OUR offerings? 
    Consider how OUR products and services could address these needs.
+   (For IT companies: technology/infrastructure needs. For other industries: adjust accordingly)
 
 9. **Competitive Landscape**: Who are their main competitors in their sector?
 
@@ -1028,6 +1029,23 @@ Focus on UK market context and be realistic. Only include contact information if
             
             print(f"[AI ANALYSIS] Running analysis for {lead.company_name}")
             
+            # Build dynamic system prompt based on tenant's business
+            system_prompt = "You are a business intelligence analyst specializing in UK companies"
+            
+            if tenant and tenant.company_description:
+                # Extract industry/specialization from company description
+                system_prompt += f" and helping companies like {tenant.company_name}"
+                if tenant.target_markets:
+                    markets = tenant.target_markets if isinstance(tenant.target_markets, list) else []
+                    if markets:
+                        market_str = ", ".join(markets[:3])  # First 3 markets
+                        system_prompt += f" sell to businesses in {market_str}"
+            else:
+                # Fallback to generic
+                system_prompt += " and business development opportunities"
+            
+            system_prompt += ". Provide accurate, realistic assessments that help with sales and business development. Always respond with valid JSON."
+            
             # Call GPT-5-mini with Chat Completions API
             # Note: GPT-5-mini does not support temperature parameter - only default (1) is supported
             response = self.openai_client.chat.completions.create(
@@ -1035,7 +1053,7 @@ Focus on UK market context and be realistic. Only include contact information if
                 messages=[
                     {
                         "role": "system", 
-                        "content": "You are a business intelligence analyst specializing in UK companies and IT infrastructure needs. Provide accurate, realistic assessments. Always respond with valid JSON."
+                        "content": system_prompt
                     },
                     {
                         "role": "user", 
