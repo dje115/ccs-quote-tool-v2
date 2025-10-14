@@ -1,6 +1,6 @@
 # CCS Quote Tool v2 - World-Class AI-Powered CRM & Quoting System
 
-**Version:** 2.3.0  
+**Version:** 2.4.0  
 **Status:** Production Ready  
 **Architecture:** Multi-Tenant SaaS
 
@@ -134,7 +134,14 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 ### 🎯 Lead Generation Campaigns
 - **AI-powered lead discovery** using GPT-5-mini with web search
-- **10+ campaign types** (IT/MSP, Education, Healthcare, Manufacturing, etc.)
+- **Dynamic campaign prompts** that adapt to each tenant's business profile
+- **13+ campaign types** including new advanced types:
+  - **Dynamic Business Search** - AI adapts to tenant's services and target markets
+  - **Service Gap Analysis** - Find businesses missing tenant's services
+  - **Custom Search** - User-defined AI search queries with tenant context
+  - **Company List Import** - Analyze specific companies with tenant targeting
+  - **Similar Business Lookup** - Find companies like existing customers
+  - Traditional types: IT/MSP, Education, Healthcare, Manufacturing, etc.
 - **Multi-source data enrichment:**
   - Google Maps API (locations, ratings)
   - Companies House API (financials, directors)
@@ -144,6 +151,7 @@ docker-compose -f docker-compose.prod.yml up -d --build
 - **Background processing** (3-10 minutes per campaign)
 - **Real-time campaign monitoring**
 - **Lead-to-customer conversion** with DISCOVERY status
+- **Tenant-specific targeting** - Campaigns automatically use tenant's business profile
 
 ### 🔐 Authentication & Security
 - **JWT-based authentication**

@@ -6,6 +6,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0] - 2025-10-13
+
+### 🚀 Dynamic Campaign Prompts & Advanced Campaign Types
+- **NEW: Dynamic Campaign Prompts Based on Tenant Profile**
+  - Campaign prompts now automatically adapt to each tenant's business profile
+  - Includes tenant's company name, description, services, target markets, and USPs
+  - All campaign types now use tenant-specific targeting for better lead relevance
+  - Enhanced lead generation accuracy and targeting precision
+
+- **NEW: Advanced Campaign Types**
+  - **Dynamic Business Search** - AI-powered search based on tenant's services and target markets
+  - **Service Gap Analysis** - Find businesses missing services the tenant offers
+  - **Custom Search** - Allow users to write their own AI search queries with tenant context
+  - **Enhanced Company List Import** - Analyze specific companies with tenant targeting
+  - **Improved Similar Business Lookup** - Find companies like existing customers with tenant context
+
+- **Enhanced Campaign Intelligence**
+  - Campaigns now identify specific opportunities for each tenant's services
+  - Better lead qualification based on tenant's unique selling points
+  - Improved targeting alignment with tenant's business profile
+  - Enhanced search terms generation based on tenant services
+
+### 🔧 Campaign System Improvements
+- **Dynamic Prompt Building**
+  - Automatic tenant context integration in all campaign prompts
+  - Service-specific targeting in campaign instructions
+  - Target market alignment in campaign focus areas
+  - USP integration for better lead qualification
+
+- **Enhanced Campaign Types Support**
+  - Added support for all new campaign types in prompt building
+  - Improved search terms generation for advanced campaign types
+  - Better campaign validation and error handling
+  - Enhanced campaign type descriptions and user guidance
+
+---
+
 ## [2.3.0] - 2025-10-13
 
 ### 🤖 AI Discovery Analysis System
