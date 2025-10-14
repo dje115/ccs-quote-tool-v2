@@ -205,6 +205,12 @@ async def get_prompt_types():
             "label": "Custom Search",
             "description": "Write your own AI search query",
             "requires_company_name": False
+        },
+        {
+            "value": "company_list",
+            "label": "Company List Import",
+            "description": "Analyze specific companies from your list",
+            "requires_company_name": False
         }
     ]
 

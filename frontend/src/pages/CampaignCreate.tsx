@@ -50,9 +50,19 @@ const CampaignCreate: React.FC = () => {
     distance_miles: 20,
     max_results: 50,
     custom_prompt: '',
+    company_names: '',
     exclude_duplicates: true,
     include_existing_customers: false
   });
+
+  // Campaign types that don't require postcode
+  const nonLocationBasedTypes = [
+    'custom_search', 
+    'similar_business',
+    'company_list'
+  ];
+
+  const requiresPostcode = !nonLocationBasedTypes.includes(formData.prompt_type);
 
   useEffect(() => {
     loadPromptTypes();
@@ -86,7 +96,18 @@ const CampaignCreate: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await campaignAPI.create(formData);
+      // Prepare the data for submission
+      const submitData = {
+        ...formData,
+        // Convert company_names string to array if it exists
+        company_names: formData.company_names 
+          ? formData.company_names.split('\n').filter(name => name.trim() !== '')
+          : undefined,
+        // Don't send postcode if not required
+        postcode: requiresPostcode ? formData.postcode : undefined
+      };
+
+      const response = await campaignAPI.create(submitData);
       navigate('/campaigns');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to create campaign');
@@ -207,34 +228,38 @@ const CampaignCreate: React.FC = () => {
               <Divider sx={{ mb: 3 }} />
 
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    required
-                    label="Postcode"
-                    value={formData.postcode}
-                    onChange={handleChange('postcode')}
-                    placeholder="e.g., LE17 5NJ"
-                    helperText="Center point for your search"
-                  />
-                </Grid>
+                {requiresPostcode && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      required
+                      label="Postcode"
+                      value={formData.postcode}
+                      onChange={handleChange('postcode')}
+                      placeholder="e.g., LE17 5NJ"
+                      helperText="Center point for your search"
+                    />
+                  </Grid>
+                )}
 
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Distance (miles)</InputLabel>
-                    <Select
-                      value={formData.distance_miles}
-                      onChange={handleChange('distance_miles')}
-                      label="Distance (miles)"
-                    >
-                      <MenuItem value={10}>10 miles</MenuItem>
-                      <MenuItem value={15}>15 miles</MenuItem>
-                      <MenuItem value={20}>20 miles</MenuItem>
-                      <MenuItem value={30}>30 miles</MenuItem>
-                      <MenuItem value={50}>50 miles</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
+                {requiresPostcode && (
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Distance (miles)</InputLabel>
+                      <Select
+                        value={formData.distance_miles}
+                        onChange={handleChange('distance_miles')}
+                        label="Distance (miles)"
+                      >
+                        <MenuItem value={10}>10 miles</MenuItem>
+                        <MenuItem value={15}>15 miles</MenuItem>
+                        <MenuItem value={20}>20 miles</MenuItem>
+                        <MenuItem value={30}>30 miles</MenuItem>
+                        <MenuItem value={50}>50 miles</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                )}
 
                 <Grid item xs={12}>
                   <FormControl fullWidth>
@@ -252,6 +277,22 @@ const CampaignCreate: React.FC = () => {
                     </Select>
                   </FormControl>
                 </Grid>
+
+                {formData.prompt_type === 'company_list' && (
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      label="Company Names"
+                      value={formData.company_names}
+                      onChange={handleChange('company_names')}
+                      placeholder="Enter company names, one per line:&#10;Central Technology Ltd&#10;Test Company Ltd&#10;Another Company Ltd"
+                      helperText="Enter the company names you want to analyze, one per line"
+                      required
+                    />
+                  </Grid>
+                )}
               </Grid>
             </Paper>
 
