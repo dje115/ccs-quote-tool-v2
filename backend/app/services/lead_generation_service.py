@@ -262,13 +262,24 @@ SEARCH STRATEGY:
     
     def _build_comprehensive_prompt(self, campaign: LeadGenerationCampaign) -> str:
         """
-        Build comprehensive AI prompt based on campaign type
-        Migrated from v1 with all campaign type variations
+        Build comprehensive AI prompt based on campaign type and tenant context
+        
+        Returns dynamic prompt that adapts to tenant's business profile
         """
         
-        # Base prompt structure
+        # Get tenant context for dynamic prompt building
+        tenant_context = self._build_tenant_context()
+        
+        # Base prompt structure with tenant context
         base = f"""
-TASK: Find {campaign.max_results} REAL UK businesses near {campaign.postcode} (within {campaign.distance_miles} miles)
+TASK: Find {campaign.max_results} REAL UK businesses near {campaign.postcode} (within {campaign.distance_miles} miles) that would be ideal prospects for {tenant_context['company_name']}.
+
+ABOUT {tenant_context['company_name'].upper()}:
+{tenant_context['company_description']}
+
+{tenant_context['services_context']}
+{tenant_context['target_markets_context']}
+{tenant_context['usps_context']}
 
 Campaign Focus: {campaign.prompt_type}
 
@@ -285,8 +296,9 @@ FOR EACH BUSINESS FOUND:
 - Extract exact company name from their website
 - Get actual postcode from contact page
 - Get real contact details (email/phone) from website
-- Note their business focus and why they need IT/cabling services
+- Note their business focus and why they need {tenant_context['company_name']}'s services
 - Assess lead quality (score 60-95)
+- Identify specific opportunities for {tenant_context['company_name']} to help this business
 
 OUTPUT FORMAT - Valid JSON:
 {{
@@ -295,7 +307,7 @@ OUTPUT FORMAT - Valid JSON:
     {{
       "company_name": "Real Company Name Ltd",
       "website": "https://realcompany.com",
-      "description": "Specific reason why they need structured cabling/IT services",
+      "description": "Specific reason why they need {tenant_context['company_name']}'s services",
       "contact_name": "Contact Person Name",
       "contact_email": "contact@realcompany.com",
       "contact_phone": "01234 567890",
@@ -305,17 +317,18 @@ OUTPUT FORMAT - Valid JSON:
       "company_size": "Micro/Small/Medium/Large",
       "lead_score": 85,
       "timeline": "Within 3 months/6 months/1 year",
-      "project_value": "Small/Medium/Large"
+      "project_value": "Small/Medium/Large",
+      "opportunity_reason": "Why this business would benefit from {tenant_context['company_name']}'s services"
     }}
   ]
 }}
 """
         
-        # Add campaign-type-specific instructions
+        # Add campaign-type-specific instructions with tenant context
         if campaign.prompt_type == 'it_msp_expansion':
-            base += """
+            base += f"""
 
-SPECIFIC FOCUS - IT/MSP BUSINESSES:
+SPECIFIC FOCUS - IT/MSP BUSINESSES FOR {tenant_context['company_name'].upper()}:
 ✓ INCLUDE: IT Support Companies, Managed Service Providers (MSPs), Computer Repair Shops,
   IT Consultancies, Software Development Firms, Web Design Agencies, Technology Resellers,
   Network Support Companies, Cybersecurity Firms
@@ -323,74 +336,134 @@ SPECIFIC FOCUS - IT/MSP BUSINESSES:
 ✗ EXCLUDE: Universities, Schools, Hospitals, Retail Stores, Government Buildings,
   Hotels, Entertainment Venues, Libraries, Museums
 
-TARGET: Small to medium IT businesses that serve customers but DON'T currently offer
-structured cabling installation. They are perfect partnership/referral prospects.
+TARGET: Small to medium IT businesses that could benefit from {tenant_context['company_name']}'s services.
+Look for businesses that might need {tenant_context['services_context']} or could be partnership opportunities.
 """
         
         elif campaign.prompt_type == 'education':
-            base += """
+            base += f"""
 
 SPECIFIC FOCUS - EDUCATION SECTOR:
 Find: Primary schools, Secondary schools, Colleges, Universities, Training centers,
 Educational technology companies, E-learning platforms
-Focus on institutions with aging IT infrastructure or expansion plans.
+Focus on institutions that would benefit from {tenant_context['company_name']}'s services.
+Look for {tenant_context['services_context']} opportunities in education.
 """
         
         elif campaign.prompt_type == 'manufacturing':
-            base += """
+            base += f"""
 
 SPECIFIC FOCUS - MANUFACTURING:
 Find: Manufacturing plants, Industrial facilities, Engineering companies,
 Production facilities, Factory automation companies
-Focus on businesses modernizing operations or implementing IoT/Industry 4.0.
+Focus on businesses that could use {tenant_context['company_name']}'s expertise.
+Look for {tenant_context['services_context']} opportunities in manufacturing.
 """
         
         elif campaign.prompt_type == 'healthcare':
-            base += """
+            base += f"""
 
 SPECIFIC FOCUS - HEALTHCARE:
 Find: Hospitals, Medical practices, Dental offices, Veterinary clinics,
 Healthcare technology companies, Care homes
-Focus on facilities with patient data systems requiring secure networking.
+Focus on facilities that would benefit from {tenant_context['company_name']}'s services.
+Look for {tenant_context['services_context']} opportunities in healthcare.
 """
         
         elif campaign.prompt_type == 'retail_office':
-            base += """
+            base += f"""
 
 SPECIFIC FOCUS - RETAIL & OFFICE:
 Find: Retail stores, Office buildings, Business centers, Commercial properties,
 Professional services firms, Coworking spaces
-Focus on businesses renovating, expanding, or upgrading their premises.
+Focus on businesses that could use {tenant_context['company_name']}'s services.
+Look for {tenant_context['services_context']} opportunities in retail/office environments.
 """
         
         elif campaign.prompt_type == 'competitor_verification':
-            base += """
+            base += f"""
 
 SPECIAL MODE - COMPETITOR VERIFICATION:
 This campaign is for verifying identified competitor companies.
 For each, verify: Company exists, Current status, Contact details, Services offered
+Focus: Understand competitive landscape for {tenant_context['company_name']}
 """
         
         elif campaign.prompt_type == 'location_based':
-            base += """
+            base += f"""
 
 SPECIAL MODE - LOCATION-BASED SEARCH:
 Search for businesses at or near specific verified addresses.
-Focus on finding similar businesses in the same geographic areas.
+Focus on finding businesses that could benefit from {tenant_context['company_name']}'s services in the same geographic areas.
 """
         
-        base += """
+        elif campaign.prompt_type == 'company_list':
+            base += f"""
+
+SPECIAL MODE - COMPANY LIST ANALYSIS:
+This campaign analyzes specific companies provided by the user.
+Focus on researching each company to understand their business and identify opportunities for {tenant_context['company_name']}.
+Look for {tenant_context['services_context']} opportunities with each company.
+"""
+        
+        base += f"""
 
 QUALITY REQUIREMENTS:
 ✓ Better to return 10 verified businesses than 50 fake ones
 ✓ Each business must be REAL and currently trading
 ✓ Include source URLs where you found the information
-✓ Prioritize businesses with clear IT infrastructure needs
+✓ Prioritize businesses that match {tenant_context['company_name']}'s target markets
+✓ Focus on businesses that would clearly benefit from {tenant_context['company_name']}'s services
 
 OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
 """
         
         return base
+    
+    def _build_tenant_context(self) -> Dict[str, str]:
+        """
+        Build tenant context for dynamic prompt generation
+        
+        Returns structured context about the tenant's business
+        """
+        if not self.tenant:
+            return {
+                'company_name': 'our company',
+                'company_description': 'We provide professional services to businesses.',
+                'services_context': 'our services',
+                'target_markets_context': '',
+                'usps_context': ''
+            }
+        
+        # Build services context
+        services_context = ""
+        if self.tenant.products_services and len(self.tenant.products_services) > 0:
+            services_list = self.tenant.products_services[:5]  # First 5 services
+            services_context = f"We specialize in: {', '.join(services_list)}"
+            if len(self.tenant.products_services) > 5:
+                services_context += f" and {len(self.tenant.products_services) - 5} other services"
+        
+        # Build target markets context
+        target_markets_context = ""
+        if self.tenant.target_markets and len(self.tenant.target_markets) > 0:
+            markets_list = self.tenant.target_markets[:3]  # First 3 markets
+            target_markets_context = f"Primary target markets: {', '.join(markets_list)}"
+            if len(self.tenant.target_markets) > 3:
+                target_markets_context += f" and {len(self.tenant.target_markets) - 3} other sectors"
+        
+        # Build USPs context
+        usps_context = ""
+        if self.tenant.unique_selling_points and len(self.tenant.unique_selling_points) > 0:
+            usps_list = self.tenant.unique_selling_points[:3]  # First 3 USPs
+            usps_context = f"Key advantages: {', '.join(usps_list)}"
+        
+        return {
+            'company_name': self.tenant.company_name or 'our company',
+            'company_description': self.tenant.company_description or 'We provide professional services to businesses.',
+            'services_context': services_context or 'our services',
+            'target_markets_context': target_markets_context,
+            'usps_context': usps_context
+        }
     
     def _get_search_terms(self, prompt_type: str) -> str:
         """Get search terms for campaign type"""
@@ -403,7 +476,8 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
             'competitor_verification': 'IT services structured cabling competitors',
             'location_based': 'businesses companies near',
             'new_businesses': 'new businesses recently opened',
-            'planning_applications': 'planning applications construction renovation'
+            'planning_applications': 'planning applications construction renovation',
+            'company_list': 'business research company analysis'
         }
         return terms.get(prompt_type, 'businesses companies')
     
