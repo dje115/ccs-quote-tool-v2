@@ -241,7 +241,7 @@ const CompanyProfile: React.FC = () => {
     
     if (action === 'discard') {
       // Mark this field as discarded by removing it from ai_data
-      setAutoFillResults(prev => {
+      setAutoFillResults((prev: any) => {
         if (!prev) return prev;
         const newAiData = { ...prev.ai_data };
         delete newAiData[field as keyof typeof newAiData];
@@ -291,7 +291,7 @@ const CompanyProfile: React.FC = () => {
     });
     
     // Remove the field from auto-fill results after applying
-    setAutoFillResults(prev => {
+    setAutoFillResults((prev: any) => {
       if (!prev) return prev;
       const newAiData = { ...prev.ai_data };
       delete newAiData[field as keyof typeof newAiData];

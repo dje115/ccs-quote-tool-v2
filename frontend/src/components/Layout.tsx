@@ -32,6 +32,8 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import SimpleLanguageSelector from './SimpleLanguageSelector';
+import GlobalAIMonitor from './GlobalAIMonitor';
+import AIMonitorBadge from './AIMonitorBadge';
 
 const drawerWidth = 240;
 
@@ -134,6 +136,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {menuItems.find(item => item.path === location.pathname)?.text || 'CCS Quote Tool'}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <AIMonitorBadge />
             <SimpleLanguageSelector />
             <Typography variant="body2">
               {user.email || 'User'}

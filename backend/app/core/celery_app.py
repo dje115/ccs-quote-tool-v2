@@ -11,7 +11,7 @@ celery_app = Celery(
     "ccs_quote_tool",
     broker=os.getenv("REDIS_URL", "redis://redis:6379/0"),
     backend=os.getenv("REDIS_URL", "redis://redis:6379/0"),
-    include=["app.tasks.campaign_tasks"]  # Import task modules
+    include=["app.tasks.campaign_tasks", "app.tasks.activity_tasks"]  # Import task modules
 )
 
 # Celery configuration

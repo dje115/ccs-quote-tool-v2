@@ -18,7 +18,12 @@ import {
   IconButton,
   LinearProgress,
   Alert,
-  Divider
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -27,7 +32,8 @@ import {
   Refresh as RefreshIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-  PersonAdd as PersonAddIcon
+  PersonAdd as PersonAddIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { campaignAPI } from '../services/api';
@@ -38,6 +44,12 @@ const CampaignDetail: React.FC = () => {
   const [campaign, setCampaign] = useState<any>(null);
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    description: '',
+    company_names: [] as string[]
+  });
 
   useEffect(() => {
     if (campaignId) {
@@ -100,6 +112,33 @@ const CampaignDetail: React.FC = () => {
     }
   };
 
+  const handleOpenEdit = () => {
+    if (campaign) {
+      setEditFormData({
+        name: campaign.name || '',
+        description: campaign.description || '',
+        company_names: campaign.company_names || []
+      });
+      setEditDialogOpen(true);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!campaignId) return;
+    
+    try {
+      await campaignAPI.update(campaignId, {
+        name: editFormData.name,
+        description: editFormData.description
+      });
+      
+      setEditDialogOpen(false);
+      loadCampaign();
+    } catch (error) {
+      alert('Failed to update campaign');
+    }
+  };
+
   const handleConvertLead = async (leadId: string) => {
     try {
       await campaignAPI.convertLead(leadId);
@@ -157,6 +196,11 @@ const CampaignDetail: React.FC = () => {
           <Button startIcon={<RefreshIcon />} onClick={loadCampaign} variant="outlined">
             Refresh
           </Button>
+          {campaign.status === 'draft' && (
+            <Button startIcon={<EditIcon />} onClick={handleOpenEdit} variant="outlined" color="primary">
+              Edit
+            </Button>
+          )}
           {campaign.status === 'running' && (
             <Button startIcon={<StopIcon />} onClick={handleStop} variant="outlined" color="warning">
               Stop
@@ -385,6 +429,50 @@ const CampaignDetail: React.FC = () => {
           </Table>
         </TableContainer>
       </Paper>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Edit Campaign</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="Campaign Name"
+              fullWidth
+              value={editFormData.name}
+              onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+            />
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              rows={3}
+              value={editFormData.description}
+              onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+            />
+            {editFormData.company_names.length > 0 && (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Companies ({editFormData.company_names.length}):
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                  {editFormData.company_names.map((name, index) => (
+                    <Chip key={index} label={name} size="small" />
+                  ))}
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  Note: Company list cannot be edited after creation
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveEdit} variant="contained" color="primary">
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

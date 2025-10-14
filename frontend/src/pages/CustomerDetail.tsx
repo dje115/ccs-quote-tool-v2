@@ -42,6 +42,7 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   Language as WebsiteIcon,
+  Language as LanguageIcon,
   Business as BusinessIcon,
   Psychology as AiIcon,
   ExpandMore as ExpandMoreIcon,
@@ -62,6 +63,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI } from '../services/api';
 import CustomerOverviewTab from '../components/CustomerOverviewTab';
+import ActivityCenter from '../components/ActivityCenter';
 import ContactDialog from '../components/ContactDialog';
 
 const CustomerDetail: React.FC = () => {
@@ -88,6 +90,47 @@ const CustomerDetail: React.FC = () => {
     }
   }, [id]);
 
+  // Poll for AI analysis completion (persists across navigation like campaigns)
+  useEffect(() => {
+    if (!customer) return;
+    
+    // Check if analysis is running or queued
+    const isAnalysisActive = customer.ai_analysis_status === 'running' || customer.ai_analysis_status === 'queued';
+    
+    if (isAnalysisActive) {
+      console.log(`AI analysis is ${customer.ai_analysis_status} for ${customer.company_name}, polling for completion...`);
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const customerRes = await customerAPI.get(id!);
+          const updatedCustomer = customerRes.data;
+          
+          // Check if status changed to completed
+          if (updatedCustomer.ai_analysis_status === 'completed') {
+            console.log('AI analysis completed! Reloading data...');
+            clearInterval(pollInterval);
+            setAiAnalysisSuccess('AI analysis completed successfully!');
+            await loadCustomerData();
+            setTimeout(() => setAiAnalysisSuccess(null), 5000);
+          } else if (updatedCustomer.ai_analysis_status === 'failed') {
+            console.log('AI analysis failed.');
+            clearInterval(pollInterval);
+            setAiAnalysisError('AI analysis failed. Please try again.');
+            await loadCustomerData();
+            setTimeout(() => setAiAnalysisError(null), 5000);
+          }
+        } catch (pollError) {
+          console.error('Error polling for analysis completion:', pollError);
+        }
+      }, 3000);
+      
+      // Cleanup on unmount or when customer changes
+      return () => {
+        clearInterval(pollInterval);
+      };
+    }
+  }, [customer?.ai_analysis_status, id]);
+
   const loadCustomerData = async () => {
     try {
       setLoading(true);
@@ -113,19 +156,27 @@ const CustomerDetail: React.FC = () => {
       setAiAnalysisError(null);
       setAiAnalysisSuccess(null);
 
+      // Queue the background task
       const response = await customerAPI.runAiAnalysis(id!);
       
       if (response.data.success) {
-        setAiAnalysisSuccess('AI analysis completed successfully!');
-        // Reload customer data to get updated analysis
+        setAiAnalysisSuccess('AI analysis running in background. You can navigate away - it will continue processing.');
+        
+        // Reload to show the 'queued' status
         await loadCustomerData();
+        
+        // Don't manage polling here - it will be handled by useEffect based on status
+        setAiAnalysisLoading(false);
+        
+        // Clear success message after 5 seconds
+        setTimeout(() => setAiAnalysisSuccess(null), 5000);
       } else {
-        setAiAnalysisError(response.data.error || 'AI analysis failed');
+        setAiAnalysisError(response.data.error || 'Failed to queue AI analysis');
+        setAiAnalysisLoading(false);
       }
     } catch (error: any) {
       console.error('Error running AI analysis:', error);
       setAiAnalysisError(error.response?.data?.detail || 'Failed to run AI analysis');
-    } finally {
       setAiAnalysisLoading(false);
     }
   };
@@ -222,27 +273,78 @@ const CustomerDetail: React.FC = () => {
     setEditingContact(null);
   };
 
-  const handleAddCompetitorsToCampaign = () => {
-    // Show confirmation dialog
-    if (!customer?.ai_analysis_raw?.competitors) {
+  const handleAddCompetitorsToCampaign = async (competitor?: string) => {
+    // Determine which competitors to add
+    const competitorsToAdd = competitor ? [competitor] : 
+      (Array.isArray(customer?.ai_analysis_raw?.competitors) ? customer.ai_analysis_raw.competitors : []);
+    
+    if (competitorsToAdd.length === 0) {
       setAiAnalysisError('No competitors data available');
+      setTimeout(() => setAiAnalysisError(null), 3000);
       return;
     }
 
+    // Generate campaign name with date/time
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric' 
+    });
+    const timeStr = now.toLocaleTimeString('en-GB', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    const campaignName = competitor ? 
+      `Competitor: ${competitor} ${dateStr} ${timeStr}` : 
+      `Competitors of ${customer?.company_name} ${dateStr} ${timeStr}`;
+
     const confirmed = window.confirm(
-      `Create a lead generation campaign for competitors?\n\n` +
-      `This will create a campaign to analyze and track these competitor companies.\n\n` +
-      `Campaign will be named: "Competitors of ${customer.company_name}"\n\n` +
-      `Note: Lead generation campaigns feature is coming soon.`
+      competitor ? 
+      `Create DRAFT campaign for "${competitor}"?\n\nThis will create a draft campaign that you can review and start when ready.` :
+      `Create DRAFT campaign to analyze all ${competitorsToAdd.length} competitors?\n\nThis will create a draft campaign that you can review and start when ready.`
     );
 
-    if (confirmed) {
-      // TODO: Implement API call to create competitors campaign
-      // For now, show a placeholder message
-      setAiAnalysisSuccess(
-        'Competitors campaign feature is under development. This will create a lead generation campaign to analyze competitor companies.'
-      );
-      setTimeout(() => setAiAnalysisSuccess(null), 5000);
+    if (!confirmed) return;
+
+    try {
+      setAiAnalysisLoading(true);
+      
+      // Create a company list campaign
+      const campaignData = {
+        name: campaignName,
+        description: competitor ? 
+          `Competitor analysis of ${competitor} (from ${customer?.company_name})` :
+          `Competitor analysis from ${customer?.company_name}`,
+        prompt_type: 'company_list',
+        company_names: competitorsToAdd,
+        source_customer_id: customer?.id,
+        exclude_duplicates: true,
+        include_existing_customers: false
+      };
+
+      const response = await campaignAPI.create(campaignData);
+      
+      if (response.data) {
+        // Campaign created as DRAFT - user can review and start it manually
+        setAiAnalysisSuccess(
+          `✅ Campaign "${campaignName}" created as DRAFT! ` +
+          `It will analyze ${competitorsToAdd.length} ${competitorsToAdd.length === 1 ? 'company' : 'companies'}. ` +
+          `Go to Campaigns to review and start it.`
+        );
+        setTimeout(() => {
+          setAiAnalysisSuccess(null);
+          // Optionally navigate to campaigns page
+          // navigate('/campaigns');
+        }, 5000);
+      }
+    } catch (error: any) {
+      console.error('Error creating competitor campaign:', error);
+      setAiAnalysisError(error.response?.data?.detail || 'Failed to create competitor campaign');
+      setTimeout(() => setAiAnalysisError(null), 3000);
+    } finally {
+      setAiAnalysisLoading(false);
     }
   };
 
@@ -329,11 +431,14 @@ const CustomerDetail: React.FC = () => {
         <Button
           variant="contained"
           color="primary"
-          startIcon={aiAnalysisLoading ? <CircularProgress size={20} color="inherit" /> : <AiIcon />}
+          startIcon={(aiAnalysisLoading || customer?.ai_analysis_status === 'running' || customer?.ai_analysis_status === 'queued') ? 
+            <CircularProgress size={20} color="inherit" /> : <AiIcon />}
           onClick={runAiAnalysis}
-          disabled={aiAnalysisLoading}
+          disabled={aiAnalysisLoading || customer?.ai_analysis_status === 'running' || customer?.ai_analysis_status === 'queued'}
         >
-          {aiAnalysisLoading ? 'Analyzing...' : 'AI Analysis'}
+          {customer?.ai_analysis_status === 'running' ? 'Running...' : 
+           customer?.ai_analysis_status === 'queued' ? 'Queued...' : 
+           aiAnalysisLoading ? 'Analyzing...' : 'AI Analysis'}
         </Button>
         <Button
           variant="outlined"
@@ -1302,6 +1407,102 @@ const CustomerDetail: React.FC = () => {
       {/* Tab Panel 6: Business Intelligence - Opportunities, Competitors, Risks */}
       {currentTab === 6 && (
         <Box>
+          {/* Website Intelligence Section */}
+          {customer?.website_data && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h5" gutterBottom sx={{ color: '#2196f3', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LanguageIcon /> Website Intelligence
+              </Typography>
+              <Divider sx={{ mb: 3 }} />
+              
+              <Grid container spacing={2}>
+                {/* Website Title & Description */}
+                {customer.website_data.website_title && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Website Title
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {customer.website_data.website_title}
+                    </Typography>
+                  </Grid>
+                )}
+                
+                {customer.website_data.website_description && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Description
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {customer.website_data.website_description}
+                    </Typography>
+                  </Grid>
+                )}
+                
+                {/* Keywords/Key Phrases */}
+                {customer.website_data.key_phrases && customer.website_data.key_phrases.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Key Topics & Keywords
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                      {customer.website_data.key_phrases.slice(0, 15).map((phrase: any, index: number) => (
+                        <Chip 
+                          key={index}
+                          label={typeof phrase === 'string' ? phrase : phrase[0]}
+                          color="primary"
+                          variant="outlined"
+                          size="small"
+                        />
+                      ))}
+                    </Box>
+                  </Grid>
+                )}
+                
+                {/* Contact Information from Website */}
+                {customer.website_data.contact_info && customer.website_data.contact_info.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Contact Information Found
+                    </Typography>
+                    <Box sx={{ mt: 1 }}>
+                      {customer.website_data.contact_info.slice(0, 5).map((contact: string, index: number) => (
+                        <Chip 
+                          key={index}
+                          label={contact}
+                          icon={<PhoneIcon />}
+                          sx={{ mr: 1, mb: 1 }}
+                          size="small"
+                        />
+                      ))}
+                    </Box>
+                  </Grid>
+                )}
+                
+                {/* Locations Mentioned */}
+                {customer.website_data.locations && customer.website_data.locations.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Locations Mentioned
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                      {customer.website_data.locations.slice(0, 10).map((location: string, index: number) => (
+                        <Chip 
+                          key={index}
+                          label={location}
+                          icon={<PlaceIcon />}
+                          color="secondary"
+                          variant="outlined"
+                          size="small"
+                        />
+                      ))}
+                    </Box>
+                  </Grid>
+                )}
+              </Grid>
+            </Paper>
+          )}
+
           {/* Opportunities Section */}
           {customer?.ai_analysis_raw?.opportunities && (
             <Paper sx={{ p: 3, mb: 3 }}>
@@ -1329,13 +1530,43 @@ const CustomerDetail: React.FC = () => {
                   startIcon={<AddIcon />}
                   onClick={() => handleAddCompetitorsToCampaign()}
                 >
-                  Add to Lead Campaign
+                  Add All to Lead Campaign
                 </Button>
               </Box>
               <Divider sx={{ mb: 3 }} />
-              <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>
-                {customer.ai_analysis_raw.competitors}
-              </Typography>
+              {Array.isArray(customer.ai_analysis_raw.competitors) ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {customer.ai_analysis_raw.competitors.map((competitor: string, index: number) => (
+                    <Box 
+                      key={index} 
+                      sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        p: 2,
+                        backgroundColor: '#fff3e0',
+                        borderRadius: 1,
+                        '&:hover': { backgroundColor: '#ffe0b2' }
+                      }}
+                    >
+                      <Typography variant="body1">{competitor}</Typography>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="primary"
+                        startIcon={<AddIcon />}
+                        onClick={() => handleAddCompetitorsToCampaign(competitor)}
+                      >
+                        Add to Campaign
+                      </Button>
+                    </Box>
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>
+                  {customer.ai_analysis_raw.competitors}
+                </Typography>
+              )}
             </Paper>
           )}
 
@@ -1363,169 +1594,11 @@ const CustomerDetail: React.FC = () => {
         </Box>
       )}
 
-      {/* Tab Panel 7: Activity - CRM Actions & Communications */}
-      {currentTab === 7 && (
-        <Box>
-          {/* Activity Overview */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <PhoneIcon /> Activity Center
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Manage all sales activities, communications, and engagement tracking for this customer.
-            </Typography>
-            
-            <Grid container spacing={3}>
-              {/* Email Templates */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <EmailIcon color="primary" /> Email Templates
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Generate AI-powered email templates for different scenarios
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Button variant="outlined" size="small" disabled>Initial Outreach Email</Button>
-                      <Button variant="outlined" size="small" disabled>Follow-up Email</Button>
-                      <Button variant="outlined" size="small" disabled>Quote Email</Button>
-                      <Button variant="outlined" size="small" disabled>Thank You Email</Button>
-                    </Box>
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
-                      Coming Soon
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Call Logging */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <PhoneIcon color="primary" /> Call Logging
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Log calls with notes, outcomes, and follow-up actions
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Button variant="outlined" size="small" disabled>Log New Call</Button>
-                      <Button variant="outlined" size="small" disabled>View Call History</Button>
-                      <Button variant="outlined" size="small" disabled>Schedule Follow-up</Button>
-                      <Button variant="outlined" size="small" disabled>AI Call Summary</Button>
-                    </Box>
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
-                      Coming Soon
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Notes & Tasks */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <EditIcon color="primary" /> Notes & Tasks
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Add notes, create tasks, and set reminders
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Button variant="outlined" size="small" disabled>Add Note</Button>
-                      <Button variant="outlined" size="small" disabled>Create Task</Button>
-                      <Button variant="outlined" size="small" disabled>Set Reminder</Button>
-                      <Button variant="outlined" size="small" disabled>View Timeline</Button>
-                    </Box>
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
-                      Coming Soon
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Meeting Scheduler */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <BusinessIcon color="primary" /> Meeting Management
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Schedule meetings, site visits, and demos
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Button variant="outlined" size="small" disabled>Schedule Meeting</Button>
-                      <Button variant="outlined" size="small" disabled>Log Site Visit</Button>
-                      <Button variant="outlined" size="small" disabled>Book Demo</Button>
-                      <Button variant="outlined" size="small" disabled>Meeting Notes</Button>
-                    </Box>
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
-                      Coming Soon
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Document Management */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <DescriptionIcon color="primary" /> Documents
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Upload and manage customer documents
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Button variant="outlined" size="small" disabled>Upload Document</Button>
-                      <Button variant="outlined" size="small" disabled>View Documents</Button>
-                      <Button variant="outlined" size="small" disabled>Share Document</Button>
-                      <Button variant="outlined" size="small" disabled>Document History</Button>
-                    </Box>
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
-                      Coming Soon
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* AI Sales Assistant */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%', border: '1px solid #e0e0e0' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <AiIcon color="primary" /> AI Sales Assistant
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Get AI-powered suggestions and insights
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Button variant="outlined" size="small" disabled>Suggest Next Action</Button>
-                      <Button variant="outlined" size="small" disabled>Draft Email</Button>
-                      <Button variant="outlined" size="small" disabled>Sales Strategy</Button>
-                      <Button variant="outlined" size="small" disabled>Objection Handling</Button>
-                    </Box>
-                    <Typography variant="caption" color="warning.main" sx={{ mt: 2, display: 'block' }}>
-                      Coming Soon
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          </Paper>
-
-          {/* Activity Timeline Placeholder */}
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Activity Timeline</Typography>
-            <Alert severity="info">
-              <Typography variant="body2">
-                Activity timeline will show all interactions, calls, emails, meetings, and notes in chronological order.
-              </Typography>
-            </Alert>
-          </Paper>
-        </Box>
+      {/* Tab Panel 7: Activity - AI-Powered Activity Center */}
+      {currentTab === 7 && customer && (
+        <Paper sx={{ p: 0 }}>
+          <ActivityCenter customerId={customer.id} />
+        </Paper>
       )}
 
       {/* Tab Panel 8: Quotes */}

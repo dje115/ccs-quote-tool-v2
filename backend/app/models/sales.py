@@ -65,12 +65,15 @@ class SalesActivity(Base, TimestampMixin):
     
     # Content
     subject = Column(String(255), nullable=True)  # e.g., "Follow-up call regarding structured cabling quote"
-    notes = Column(Text, nullable=False)  # Detailed notes about the interaction
+    notes = Column(Text, nullable=False)  # Original notes from user
+    notes_cleaned = Column(Text, nullable=True)  # AI-cleaned/enhanced version
+    ai_suggested_action = Column(Text, nullable=True)  # AI-suggested next action
     outcome = Column(Enum(ActivityOutcome), nullable=True)
     
     # AI assistance used
     ai_suggestions_used = Column(JSON, default=list)  # Track which AI suggestions were used
     ai_context = Column(JSON, default=dict)  # Store AI context that was provided
+    ai_processing_date = Column(DateTime(timezone=True), nullable=True)  # When AI processed this
     
     # Follow-up
     follow_up_required = Column(Boolean, default=False)

@@ -87,40 +87,58 @@ class AIAnalysisService:
         return prompt
     
     async def _discover_website(self, company_name: str) -> str:
-        """Use AI to discover company website via simple search"""
+        """Use AI with web search to discover company website (same as campaign method)"""
         try:
             if not self.openai_client:
                 return None
             
-            prompt = f"""Find the official website URL for the company: {company_name}
+            print(f"[WEBSITE DISCOVERY] Using Responses API with web search for: {company_name}")
+            
+            # Use Responses API with web search (same as campaigns)
+            response = self.openai_client.responses.create(
+                model="gpt-5-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that finds company websites. Respond only with the URL or NOT_FOUND."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Find the official website URL for the company: {company_name}
 
 Please respond with ONLY the website URL (e.g., https://example.com) or "NOT_FOUND" if you cannot find it.
 Do not include any explanation, just the URL or NOT_FOUND."""
-
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that finds company websites. Respond only with the URL or NOT_FOUND."},
-                    {"role": "user", "content": prompt}
+                    }
                 ],
+                tools=[{"type": "web_search"}],  # Enable web search like campaigns
                 max_completion_tokens=10000,
                 timeout=120.0
             )
             
-            website = response.choices[0].message.content.strip()
+            # Extract website from response
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                website = response.choices[0].message.content.strip()
+            elif hasattr(response, 'output'):
+                website = response.output.strip()
+            else:
+                website = str(response).strip()
             
             if website and website != "NOT_FOUND" and ("http://" in website or "https://" in website):
                 # Clean up the URL
-                website = website.strip().rstrip('/')
+                website = website.strip().rstrip('/').split()[0]  # Take first URL if multiple
+                print(f"[WEBSITE DISCOVERY] Found: {website}")
                 return website
             
+            print(f"[WEBSITE DISCOVERY] Not found for {company_name}")
             return None
             
         except Exception as e:
             print(f"[ERROR] Error discovering website: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
-    async def analyze_company(self, company_name: str, company_number: str = None, website: str = None, known_facts: str = None) -> Dict[str, Any]:
+    async def analyze_company(self, company_name: str, company_number: str = None, website: str = None, known_facts: str = None, excluded_addresses: list = None) -> Dict[str, Any]:
         """Comprehensive company analysis using AI, Companies House, Google Maps, and web scraping"""
         try:
             # If no website provided, try to find it via Google search
@@ -180,6 +198,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 "google_maps_data": google_maps_data,
                 "web_scraping_data": web_scraping_data,
                 "known_facts": known_facts,
+                "excluded_addresses": excluded_addresses or [],
                 "analysis_timestamp": asyncio.get_event_loop().time()
             }
             
@@ -347,6 +366,24 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             if known_facts:
                 company_info += f"\n\n**IMPORTANT - Known Facts (User-Verified Information):**\n{known_facts}\n\nPlease take these user-provided facts into account when analyzing the company. They represent verified information that should take precedence over conflicting data from other sources."
             
+            # Add excluded addresses (user has marked as "Not this business")
+            excluded_addresses = data.get('excluded_addresses', [])
+            if excluded_addresses and len(excluded_addresses) > 0:
+                company_info += f"\n\n**EXCLUDED LOCATIONS (NOT this business):**"
+                company_info += f"\nThe following {len(excluded_addresses)} locations have been verified as NOT belonging to this company:"
+                
+                # Look up the location details from Google Maps data
+                maps_locations = data.get('google_maps_data', {}).get('locations', [])
+                for excluded_id in excluded_addresses:
+                    # Find the location details
+                    excluded_location = next((loc for loc in maps_locations if loc.get('place_id') == excluded_id), None)
+                    if excluded_location:
+                        company_info += f"\n- {excluded_location.get('formatted_address', excluded_id)} (IGNORE THIS ADDRESS)"
+                    else:
+                        company_info += f"\n- Location ID: {excluded_id} (IGNORE THIS ADDRESS)"
+                
+                company_info += f"\n\n**CRITICAL:** Do NOT use the above excluded addresses in your analysis. Do NOT mention them as company locations. They have been verified as belonging to different businesses with similar names."
+            
             # Get tenant profile information to contextualize the analysis
             tenant_context = ""
             if self.db and self.tenant_id:
@@ -426,7 +463,9 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **Competitive Landscape**: Identify potential competitors or similar companies in their sector
+            9. **Competitive Landscape**: Identify 5-10 actual UK competitor companies by name that operate in the same sector/market as this business.
+                Include their company names only (one per line), so they can be researched for lead generation.
+                These should be real, identifiable UK companies that offer similar products/services.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
                 Be specific about which of our offerings might align with their needs.
@@ -471,7 +510,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 "it_budget_estimate": "string (budget range)",
                 "growth_potential": "string (High/Medium/Low)",
                 "technology_needs": "string (predicted IT needs)",
-                "competitors": "string (competitor analysis)",
+                "competitors": ["array of 5-10 competitor company names as strings"],
                 "opportunities": "string (business opportunities)",
                 "risks": "string (risk factors)",
                 "actionable_recommendations": ["array of 5-10 specific strings, each describing how we can help them"],

@@ -22,7 +22,7 @@ import {
   TrendingUp as ConvertIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { campaignAPI, customerAPI } from '../services/api';
+import { campaignAPI, customerAPI, leadAPI } from '../services/api';
 
 const LeadDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -65,6 +65,7 @@ const LeadDetail: React.FC = () => {
       // Use the campaign API convert endpoint
       const response = await campaignAPI.convertLead(lead.id);
       
+      console.log('[convertLead] Success response:', response.data);
       alert('Discovery converted to CRM lead successfully!');
       
       // Navigate to the new customer record
@@ -73,9 +74,13 @@ const LeadDetail: React.FC = () => {
       } else {
         navigate('/customers');
       }
-    } catch (error) {
-      console.error('Error converting discovery:', error);
-      alert('Failed to convert discovery to CRM lead');
+    } catch (error: any) {
+      console.error('[convertLead] Full error:', error);
+      console.error('[convertLead] Error response:', error.response);
+      console.error('[convertLead] Error data:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to convert discovery';
+      alert(`Failed to convert discovery: ${errorMessage}`);
     } finally {
       setConverting(false);
     }

@@ -25,7 +25,9 @@ import {
   Card,
   CardContent,
   Alert,
-  CircularProgress
+  CircularProgress,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -40,7 +42,8 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   CheckBox as CheckBoxIcon,
-  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
+  FilterList as FilterListIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -81,6 +84,7 @@ const Leads: React.FC = () => {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [converting, setConverting] = useState(false);
+  const [showConverted, setShowConverted] = useState(false);
 
   useEffect(() => {
     loadLeads();
@@ -106,9 +110,13 @@ const Leads: React.FC = () => {
       (lead.contact_email && lead.contact_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (lead.postcode && lead.postcode.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesStatus = filterStatus === 'all' || lead.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || lead.status.toUpperCase() === filterStatus.toUpperCase();
     
-    return matchesSearch && matchesStatus;
+    // Hide converted discoveries by default (when showConverted is FALSE)
+    // Only show converted when showConverted is TRUE
+    const matchesConvertedFilter = showConverted ? true : lead.status.toUpperCase() !== 'CONVERTED';
+    
+    return matchesSearch && matchesStatus && matchesConvertedFilter;
   });
 
   const getStatusColor = (status: string) => {
@@ -274,10 +282,12 @@ const Leads: React.FC = () => {
     </Box>
   );
 
+  // Calculate stats from ALL leads (not filtered)
   const leadStats = {
     total: leads.length,
-    new: leads.filter(l => l.status === 'new').length,
-    qualified: leads.filter(l => l.status === 'qualified').length,
+    new: leads.filter(l => l.status.toUpperCase() === 'NEW').length,
+    qualified: leads.filter(l => l.status.toUpperCase() === 'QUALIFIED').length,
+    converted: leads.filter(l => l.status.toUpperCase() === 'CONVERTED').length,
     highScore: leads.filter(l => l.lead_score >= 80).length
   };
 
@@ -313,36 +323,52 @@ const Leads: React.FC = () => {
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <LeadStatsCard
-            title="Total Discoveries"
-            value={leadStats.total}
-            color="#1976d2"
-            icon={<BusinessIcon />}
-          />
+          <Tooltip title="Total number of discoveries generated from all campaigns" arrow>
+            <div>
+              <LeadStatsCard
+                title="Total Discoveries"
+                value={leadStats.total}
+                color="#1976d2"
+                icon={<BusinessIcon />}
+              />
+            </div>
+          </Tooltip>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <LeadStatsCard
-            title="New Discoveries"
-            value={leadStats.new}
-            color="#ff9800"
-            icon={<TrendingUpIcon />}
-          />
+          <Tooltip title="Discoveries that are new and haven't been contacted yet" arrow>
+            <div>
+              <LeadStatsCard
+                title="New Discoveries"
+                value={leadStats.new}
+                color="#ff9800"
+                icon={<TrendingUpIcon />}
+              />
+            </div>
+          </Tooltip>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <LeadStatsCard
-            title="Qualified"
-            value={leadStats.qualified}
-            color="#4caf50"
-            icon={<CheckCircleIcon />}
-          />
+          <Tooltip title="Discoveries that have been successfully converted to CRM leads for follow-up" arrow>
+            <div>
+              <LeadStatsCard
+                title="Converted to CRM"
+                value={leadStats.converted}
+                color="#4caf50"
+                icon={<CheckCircleIcon />}
+              />
+            </div>
+          </Tooltip>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <LeadStatsCard
-            title="High Score"
-            value={leadStats.highScore}
-            color="#e91e63"
-            icon={<AssessmentIcon />}
-          />
+          <Tooltip title="Discoveries with a lead score of 80 or higher - these are high-quality prospects based on AI analysis" arrow>
+            <div>
+              <LeadStatsCard
+                title="High Score (80+)"
+                value={leadStats.highScore}
+                color="#e91e63"
+                icon={<AssessmentIcon />}
+              />
+            </div>
+          </Tooltip>
         </Grid>
       </Grid>
 
@@ -364,7 +390,7 @@ const Leads: React.FC = () => {
               }}
             />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <TextField
               fullWidth
               select
@@ -379,6 +405,18 @@ const Leads: React.FC = () => {
                 </option>
               ))}
             </TextField>
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showConverted}
+                  onChange={(e) => setShowConverted(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Show Converted"
+            />
           </Grid>
         </Grid>
       </Paper>

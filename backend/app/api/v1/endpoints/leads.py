@@ -37,6 +37,13 @@ class LeadUpdate(BaseModel):
     contact_phone: str | None = None
 
 
+class CompetitorLeadsCreate(BaseModel):
+    """Schema for creating leads from competitor names"""
+    company_names: List[str]
+    source_customer_id: Optional[str] = None  # The customer whose competitors these are
+    source_customer_name: Optional[str] = None
+
+
 @router.get("/", response_model=List[LeadResponse])
 async def list_leads(
     skip: int = 0,
@@ -130,3 +137,55 @@ async def delete_lead(
     db.commit()
     
     return None
+
+
+@router.post("/from-competitors")
+async def create_leads_from_competitors(
+    data: CompetitorLeadsCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create discovery leads from competitor company names
+    These will be queued for AI analysis
+    """
+    created_leads = []
+    skipped_duplicates = []
+    
+    for company_name in data.company_names:
+        # Check if lead already exists
+        existing_lead = db.query(Lead).filter_by(
+            tenant_id=current_user.tenant_id,
+            company_name=company_name,
+            is_deleted=False
+        ).first()
+        
+        if existing_lead:
+            skipped_duplicates.append(company_name)
+            continue
+        
+        # Create new lead
+        lead = Lead(
+            id=str(uuid.uuid4()),
+            tenant_id=current_user.tenant_id,
+            company_name=company_name,
+            status=LeadStatus.DISCOVERY,
+            source=LeadSource.COMPETITOR_ANALYSIS,
+            lead_score=50,  # Default score
+            qualification_reason=f"Competitor of {data.source_customer_name}" if data.source_customer_name else "Competitor analysis",
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(lead)
+        created_leads.append(company_name)
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "created_count": len(created_leads),
+        "skipped_count": len(skipped_duplicates),
+        "created_leads": created_leads,
+        "skipped_duplicates": skipped_duplicates,
+        "message": f"Created {len(created_leads)} discovery leads from competitors"
+    }

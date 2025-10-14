@@ -53,9 +53,13 @@ class LeadGenerationCampaign(BaseModel):
     custom_prompt = Column(Text, nullable=True)
     
     # Search parameters
-    postcode = Column(String(20), nullable=False)
+    postcode = Column(String(20), nullable=True)  # Optional for company list campaigns
     distance_miles = Column(Integer, default=20)
     max_results = Column(Integer, default=100)
+    
+    # Company name list (for competitor analysis, imports, etc.)
+    company_names = Column(JSON, nullable=True)  # List of company names to analyze
+    source_customer_id = Column(String(36), nullable=True)  # If from competitor analysis
     
     # Campaign settings
     include_existing_customers = Column(Boolean, default=False)

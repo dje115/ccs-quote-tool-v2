@@ -8,6 +8,7 @@ import './i18n';
 
 // Components
 import Layout from './components/Layout';
+import GlobalAIMonitor from './components/GlobalAIMonitor';
 
 // Pages
 import Login from './pages/Login';
@@ -50,6 +51,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
+        <GlobalAIMonitor />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

@@ -28,7 +28,7 @@ celery_app.conf.update(
 )
 
 # Auto-discover tasks
-celery_app.autodiscover_tasks(["app.services"])
+celery_app.autodiscover_tasks(["app.services", "app.tasks"])
 
 
 def init_celery():

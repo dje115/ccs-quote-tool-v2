@@ -122,18 +122,30 @@ class LeadGenerationService:
             print(f"\n{'='*80}")
             print(f"🚀 LEAD GENERATION CAMPAIGN: {campaign.name}")
             print(f"{'='*80}")
-            print(f"📍 Location: {campaign.postcode} (±{campaign.distance_miles} miles)")
-            print(f"🎯 Target: {campaign.max_results} businesses")
-            print(f"🏷️  Type: {campaign.prompt_type}")
-            print(f"{'='*80}\n")
             
-            # Step 1: Use GPT-5-mini with web search to find businesses
-            print("🔍 Step 1: AI Web Search for Real Businesses")
-            ai_response = await self._search_with_ai(campaign)
-            
-            # Step 2: Parse AI response
-            print("\n📊 Step 2: Parsing AI Results")
-            leads_data = self._parse_ai_response(ai_response)
+            # Check if this is a company name list campaign
+            if campaign.company_names and len(campaign.company_names) > 0:
+                print(f"📋 Company List Campaign")
+                print(f"🎯 Processing {len(campaign.company_names)} companies")
+                print(f"🏷️  Type: {campaign.prompt_type}")
+                print(f"{'='*80}\n")
+                
+                # Create leads data directly from company names
+                leads_data = [{'company_name': name} for name in campaign.company_names]
+                print(f"✓ Created {len(leads_data)} leads from company list")
+            else:
+                print(f"📍 Location: {campaign.postcode} (±{campaign.distance_miles} miles)")
+                print(f"🎯 Target: {campaign.max_results} businesses")
+                print(f"🏷️  Type: {campaign.prompt_type}")
+                print(f"{'='*80}\n")
+                
+                # Step 1: Use GPT-5-mini with web search to find businesses
+                print("🔍 Step 1: AI Web Search for Real Businesses")
+                ai_response = await self._search_with_ai(campaign)
+                
+                # Step 2: Parse AI response
+                print("\n📊 Step 2: Parsing AI Results")
+                leads_data = self._parse_ai_response(ai_response)
             print(f"✓ Found {len(leads_data)} potential leads from AI")
             
             # Step 3: Enrich and deduplicate leads
@@ -783,8 +795,7 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 companies_house_data=lead.companies_house_data,
                 website_data=lead.website_data,
                 google_maps_data=lead.google_maps_data,
-                ai_analysis_raw=lead.ai_analysis,  # Copy full AI analysis too
-                created_by=user_id
+                ai_analysis_raw=lead.ai_analysis  # Copy full AI analysis too
             )
             
             self.db.add(customer)
@@ -807,7 +818,11 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
             
         except Exception as e:
             self.db.rollback()
-            return {'success': False, 'error': str(e)}
+            import traceback
+            error_detail = f"{type(e).__name__}: {str(e)}"
+            print(f"[ERROR] Failed to convert discovery to CRM lead: {error_detail}")
+            print(f"[ERROR] Traceback: {traceback.format_exc()}")
+            return {'success': False, 'error': error_detail}
     
     async def generate_quick_lead_summary(self, lead_data: Dict[str, Any]) -> Optional[str]:
         """

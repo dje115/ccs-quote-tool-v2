@@ -106,6 +106,8 @@ export const leadAPI = {
   get: (id: string) => apiClient.get(`/leads/${id}`),
   update: (id: string, data: any) => apiClient.put(`/leads/${id}`, data),
   delete: (id: string) => apiClient.delete(`/leads/${id}`),
+  createFromCompetitors: (data: { company_names: string[], source_customer_id?: string, source_customer_name?: string }) => 
+    apiClient.post('/leads/from-competitors', data),
 };
 
 // Campaign API
@@ -157,6 +159,15 @@ export const settingsAPI = {
   get: (endpoint: string) => apiClient.get(`/settings${endpoint}`),
   post: (endpoint: string, data?: any) => apiClient.post(`/settings${endpoint}`, data),
   put: (endpoint: string, data?: any) => apiClient.put(`/settings${endpoint}`, data),
+};
+
+// Activity API
+export const activityAPI = {
+  createActivity: (data: any) => apiClient.post('/activities/', data),
+  getCustomerActivities: (customerId: string, params?: any) => apiClient.get(`/activities/customer/${customerId}`, { params }),
+  getActionSuggestions: (customerId: string, forceRefresh: boolean = false) => apiClient.get(`/activities/customer/${customerId}/suggestions`, { params: { force_refresh: forceRefresh } }),
+  refreshSuggestionsBackground: (customerId: string) => apiClient.post(`/activities/customer/${customerId}/suggestions/refresh`),
+  getPendingFollowUps: (daysAhead?: number) => apiClient.get('/activities/pending-followups', { params: { days_ahead: daysAhead } }),
 };
 
 

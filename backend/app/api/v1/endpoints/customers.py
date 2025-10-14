@@ -11,10 +11,10 @@ import uuid
 from datetime import datetime
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, check_permission
+from app.core.dependencies import get_current_user, get_current_tenant, check_permission
 from app.core.api_keys import get_api_keys
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
-from app.models.tenant import User
+from app.models.tenant import User, Tenant
 from app.services.ai_analysis_service import AIAnalysisService
 
 router = APIRouter()
@@ -64,6 +64,10 @@ class CustomerResponse(BaseModel):
     linkedin_url: str | None = None
     linkedin_data: dict | None = None
     website_data: dict | None = None
+    ai_analysis_status: str | None = None
+    ai_analysis_task_id: str | None = None
+    ai_analysis_started_at: datetime | None = None
+    ai_analysis_completed_at: datetime | None = None
     
     class Config:
         from_attributes = True
@@ -358,10 +362,21 @@ async def confirm_registration(
 async def run_ai_analysis(
     customer_id: str,
     current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Run AI analysis on customer using Companies House, Google Maps, and OpenAI"""
+    """
+    Queue AI analysis for customer to run in background
+    
+    Analysis runs asynchronously using Celery and includes:
+    - Website discovery (using web search like campaigns)
+    - Companies House data retrieval
+    - Google Maps location data
+    - Website scraping and LinkedIn data
+    - Comprehensive AI business intelligence
+    """
     from sqlalchemy import select
+    from app.core.celery_app import celery_app
     
     # Get customer
     stmt = select(Customer).where(
@@ -375,100 +390,36 @@ async def run_ai_analysis(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    try:
-        # Get API keys from tenant settings
-        from sqlalchemy import select as sql_select
-        from app.models.tenant import Tenant
-        
-        tenant_stmt = sql_select(Tenant).where(Tenant.id == current_user.tenant_id)
-        tenant_result = db.execute(tenant_stmt)
-        tenant = tenant_result.scalars().first()
-        
-        # Get API keys with fallback (tenant first, then system-wide)
-        api_keys = get_api_keys(db, tenant)
-        
-        print(f"[AI ANALYSIS] Using API keys from: {api_keys.source}")
-        print(f"[AI ANALYSIS] OpenAI configured: {bool(api_keys.openai)}")
-        print(f"[AI ANALYSIS] Companies House configured: {bool(api_keys.companies_house)}")
-        print(f"[AI ANALYSIS] Google Maps configured: {bool(api_keys.google_maps)}")
-        
-        if not api_keys.openai:
-            raise HTTPException(
-                status_code=400,
-                detail="OpenAI API key not configured. Please configure API keys in Settings."
-            )
-        
-        # Initialize AI analysis service with tenant's API keys and context
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=tenant.id,
-            db=db
-        )
-        
-        print(f"[AI ANALYSIS] Starting analysis for customer: {customer.company_name}")
-        
-        # Run the AI analysis
-        analysis_result = await ai_service.analyze_company(
-            company_name=customer.company_name,
-            company_number=customer.company_registration,
-            website=customer.website,
-            known_facts=customer.known_facts
-        )
-        
-        if analysis_result.get('success'):
-            # Store the results in customer record
-            customer.ai_analysis_raw = analysis_result.get('analysis')
-            customer.lead_score = analysis_result.get('analysis', {}).get('lead_score')
-            customer.companies_house_data = analysis_result.get('source_data', {}).get('companies_house')
-            customer.google_maps_data = analysis_result.get('source_data', {}).get('google_maps')
-            
-            # Store web scraping data (website and LinkedIn)
-            web_scraping_data = analysis_result.get('source_data', {}).get('web_scraping', {})
-            if web_scraping_data:
-                # Store LinkedIn data
-                linkedin_data = web_scraping_data.get('linkedin', {})
-                if linkedin_data.get('linkedin_url'):
-                    customer.linkedin_url = linkedin_data.get('linkedin_url')
-                customer.linkedin_data = linkedin_data if linkedin_data else None
-                
-                # Store website analysis data
-                website_data = web_scraping_data.get('website', {})
-                customer.website_data = website_data if website_data else None
-            
-            # Update company registration if found and not already set
-            if not customer.company_registration:
-                ch_data = analysis_result.get('source_data', {}).get('companies_house', {})
-                if ch_data.get('company_number'):
-                    customer.company_registration = ch_data.get('company_number')
-            
-            db.commit()
-            db.refresh(customer)
-            
-            print(f"[AI ANALYSIS] Successfully completed for {customer.company_name}")
-            
-            return {
-                'success': True,
-                'message': 'AI analysis completed successfully',
-                'analysis': analysis_result.get('analysis'),
-                'source_data': analysis_result.get('source_data')
-            }
-        else:
-            print(f"[AI ANALYSIS] Failed: {analysis_result.get('error')}")
-            return {
-                'success': False,
-                'error': analysis_result.get('error', 'AI analysis failed')
-            }
+    print(f"\n{'='*80}")
+    print(f"🔄 QUEUEING AI ANALYSIS TO CELERY")
+    print(f"Customer: {customer.company_name} ({customer_id})")
+    print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    print(f"{'='*80}\n")
     
-    except Exception as e:
-        print(f"[AI ANALYSIS] Exception: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error running AI analysis: {str(e)}"
-        )
+    # Queue the AI analysis task to Celery
+    task = celery_app.send_task(
+        'run_ai_analysis',
+        args=[customer_id, str(current_tenant.id)]
+    )
+    
+    print(f"✓ Task queued: {task.id}")
+    
+    # Update customer with task tracking info (like campaigns)
+    from datetime import datetime, timezone
+    customer.ai_analysis_status = 'queued'
+    customer.ai_analysis_task_id = task.id
+    customer.ai_analysis_started_at = datetime.now(timezone.utc)
+    customer.ai_analysis_completed_at = None
+    db.commit()
+    
+    return {
+        'success': True,
+        'message': 'AI analysis queued in background. The page will refresh automatically when complete.',
+        'task_id': task.id,
+        'status': 'queued',
+        'customer_name': customer.company_name
+    }
+
 
 
 @router.post("/{customer_id}/addresses/exclude")

@@ -38,6 +38,10 @@ async def lifespan(app: FastAPI):
     init_celery()
     print("✅ Celery initialized")
     
+    # Cleanup any stuck AI analysis tasks from previous runs
+    from app.startup_cleanup import cleanup_stuck_ai_tasks
+    cleanup_stuck_ai_tasks()
+    
     print("🎉 CCS Quote Tool v2 is ready!")
     
     yield

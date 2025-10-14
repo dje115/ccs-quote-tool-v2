@@ -32,11 +32,17 @@ class CampaignCreate(BaseModel):
     """Schema for creating a new campaign"""
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
-    prompt_type: str = Field(..., description="Campaign type (it_msp_expansion, education, etc.)")
-    postcode: str = Field(..., description="UK postcode for search center")
+    prompt_type: str = Field(..., description="Campaign type (it_msp_expansion, education, company_list, etc.)")
+    
+    # Location-based search (optional - not used for company_list campaigns)
+    postcode: Optional[str] = Field(None, description="UK postcode for search center")
     distance_miles: int = Field(default=20, ge=1, le=200)
     max_results: int = Field(default=100, ge=1, le=500)
     custom_prompt: Optional[str] = None
+    
+    # Company name list (for competitor analysis, imports, etc.)
+    company_names: Optional[List[str]] = Field(None, description="List of company names to analyze")
+    source_customer_id: Optional[str] = Field(None, description="Source customer ID if from competitor analysis")
     
     # Advanced options
     include_existing_customers: bool = False
@@ -229,9 +235,20 @@ async def create_campaign(
     
     Campaign must be explicitly started using POST /{campaign_id}/start
     This allows for review and configuration before execution
+    
+    Supports two types of campaigns:
+    1. Location-based: Requires postcode + distance
+    2. Company list: Requires company_names array
     """
     
     try:
+        # Validation: Must have either postcode OR company_names
+        if not campaign_data.postcode and not campaign_data.company_names:
+            raise HTTPException(
+                status_code=400,
+                detail="Campaign must have either a postcode (for location search) or company_names (for specific companies)"
+            )
+        
         # Create campaign record
         campaign = LeadGenerationCampaign(
             id=str(uuid.uuid4()),
@@ -242,8 +259,10 @@ async def create_campaign(
             prompt_type=campaign_data.prompt_type,
             postcode=campaign_data.postcode,
             distance_miles=campaign_data.distance_miles,
-            max_results=campaign_data.max_results,
+            max_results=campaign_data.max_results if not campaign_data.company_names else len(campaign_data.company_names or []),
             custom_prompt=campaign_data.custom_prompt,
+            company_names=campaign_data.company_names,
+            source_customer_id=campaign_data.source_customer_id,
             include_existing_customers=campaign_data.include_existing_customers,
             exclude_duplicates=campaign_data.exclude_duplicates,
             minimum_company_size=campaign_data.minimum_company_size,
@@ -706,15 +725,23 @@ async def convert_lead_to_customer(
     - LEAD → PROSPECT → OPPORTUNITY → CUSTOMER
     - or LEAD → PROSPECT → CUSTOMER
     """
+    print(f"[CONVERT] Starting conversion for lead_id: {lead_id}")
+    print(f"[CONVERT] Tenant: {current_tenant.company_name} (ID: {current_tenant.id})")
+    print(f"[CONVERT] User: {current_user.email} (ID: {current_user.id})")
+    
     service = LeadGenerationService(db, current_tenant.id)
     result = await service.convert_lead_to_customer(lead_id, current_user.id)
     
+    print(f"[CONVERT] Service result: {result}")
+    
     if not result['success']:
+        print(f"[CONVERT] Conversion failed: {result.get('error')}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=result['error']
         )
     
+    print(f"[CONVERT] Conversion successful! Customer ID: {result.get('customer_id')}")
     return result
 
 

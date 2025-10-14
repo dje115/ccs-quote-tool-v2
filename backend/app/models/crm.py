@@ -127,6 +127,19 @@ class Customer(BaseModel):
     excluded_addresses = Column(JSON, nullable=True)
     manual_addresses = Column(JSON, nullable=True)
     
+    # AI Action Suggestions Cache
+    # Stores AI-generated action suggestions to avoid regenerating on every page load
+    # User can click "Refresh Suggestions" to regenerate
+    ai_suggestions = Column(JSON, nullable=True)  # Cached AI action suggestions
+    ai_suggestions_date = Column(DateTime(timezone=True), nullable=True)  # When suggestions were generated
+    
+    # AI Analysis Task Tracking (for background processing)
+    # Allows tracking of analysis status across page navigation (like campaigns)
+    ai_analysis_status = Column(String(20), nullable=True)  # 'queued', 'running', 'completed', 'failed'
+    ai_analysis_task_id = Column(String(100), nullable=True)  # Celery task ID
+    ai_analysis_started_at = Column(DateTime(timezone=True), nullable=True)  # When analysis started
+    ai_analysis_completed_at = Column(DateTime(timezone=True), nullable=True)  # When analysis completed
+    
     # Relationships
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
     interactions = relationship("CustomerInteraction", back_populates="customer", cascade="all, delete-orphan")
