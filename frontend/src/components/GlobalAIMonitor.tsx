@@ -23,13 +23,11 @@ const GlobalAIMonitor: React.FC = () => {
       return;
     }
 
-    console.log('[GlobalAIMonitor] Starting polling...');
     setIsPolling(true);
 
-    // Poll every 5 seconds to check for running analyses
+    // Poll every 15 seconds to check for running analyses
     const pollInterval = setInterval(async () => {
       try {
-        console.log('[GlobalAIMonitor] Polling for active analyses...');
         // Get all customers and check their AI analysis status
         const response = await customerAPI.list({ limit: 1000 });
         const customers = response.data.items || [];
@@ -38,14 +36,16 @@ const GlobalAIMonitor: React.FC = () => {
           customer.ai_analysis_status === 'running' || customer.ai_analysis_status === 'queued'
         );
         
-        console.log('[GlobalAIMonitor] Found active analyses:', activeAnalyses.length, activeAnalyses.map((a: any) => a.company_name));
+        // Only log when there are actual active analyses
+        if (activeAnalyses.length > 0) {
+          console.log('[GlobalAIMonitor] Active analyses:', activeAnalyses.length, activeAnalyses.map((a: any) => a.company_name));
+        }
         
         // Check if any previously running analysis has completed
         runningAnalyses.forEach((prevAnalysis: any) => {
           const stillRunning = activeAnalyses.find((a: any) => a.id === prevAnalysis.id);
           if (!stillRunning) {
             // Analysis completed!
-            console.log('[GlobalAIMonitor] Analysis completed:', prevAnalysis.company_name);
             setShowCompletion(`AI analysis completed for ${prevAnalysis.company_name}`);
             setTimeout(() => setShowCompletion(null), 5000);
           }
@@ -56,14 +56,11 @@ const GlobalAIMonitor: React.FC = () => {
         // Silently ignore auth errors (user logged out)
         if (error?.response?.status !== 401 && error?.response?.status !== 403) {
           console.error('[GlobalAIMonitor] Error polling for AI analyses:', error);
-        } else {
-          console.log('[GlobalAIMonitor] Auth error, stopping poll');
         }
       }
-    }, 5000);
+    }, 15000);
 
     return () => {
-      console.log('[GlobalAIMonitor] Cleanup - stopping poll');
       clearInterval(pollInterval);
     };
   }, [runningAnalyses]);
