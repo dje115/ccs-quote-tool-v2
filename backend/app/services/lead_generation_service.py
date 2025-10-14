@@ -406,6 +406,60 @@ Focus on researching each company to understand their business and identify oppo
 Look for {tenant_context['services_context']} opportunities with each company.
 """
         
+        elif campaign.prompt_type == 'dynamic_business_search':
+            base += f"""
+
+DYNAMIC BUSINESS SEARCH FOR {tenant_context['company_name'].upper()}:
+This is an AI-powered search that adapts to {tenant_context['company_name']}'s specific business profile.
+
+SEARCH STRATEGY:
+- Use {tenant_context['services_context']} as primary search criteria
+- Target businesses in {tenant_context['target_markets_context']}
+- Look for companies that would benefit from {tenant_context['usps_context']}
+- Focus on businesses that match {tenant_context['company_name']}'s ideal customer profile
+
+DYNAMIC SEARCH TERMS:
+Generate search terms based on {tenant_context['company_name']}'s services and find businesses that:
+1. Need these specific services
+2. Are in {tenant_context['company_name']}'s target markets
+3. Would benefit from {tenant_context['company_name']}'s unique advantages
+"""
+        
+        elif campaign.prompt_type == 'gap_analysis':
+            base += f"""
+
+SERVICE GAP ANALYSIS FOR {tenant_context['company_name'].upper()}:
+Find businesses that are missing services that {tenant_context['company_name']} offers.
+
+GAP ANALYSIS FOCUS:
+- Look for businesses that offer some services but are missing {tenant_context['services_context']}
+- Identify companies that could expand their service portfolio with {tenant_context['company_name']}'s offerings
+- Find businesses with incomplete service stacks that {tenant_context['company_name']} could complete
+- Target companies that need to add {tenant_context['company_name']}'s services to compete better
+
+IDENTIFY GAPS:
+For each business found, identify:
+1. What services they currently offer
+2. What services from {tenant_context['company_name']}'s portfolio they're missing
+3. Why adding these services would benefit their business
+4. How {tenant_context['company_name']} could help fill the gap
+"""
+        
+        elif campaign.prompt_type == 'custom_search':
+            base += f"""
+
+CUSTOM SEARCH FOR {tenant_context['company_name'].upper()}:
+This campaign uses a custom search query provided by the user.
+
+CUSTOM QUERY: {campaign.custom_prompt if campaign.custom_prompt else 'No custom query provided'}
+
+SEARCH APPROACH:
+- Execute the custom search query while keeping {tenant_context['company_name']}'s business context in mind
+- Filter results to focus on businesses that could benefit from {tenant_context['services_context']}
+- Prioritize companies in {tenant_context['target_markets_context']}
+- Look for opportunities that align with {tenant_context['company_name']}'s strengths
+"""
+        
         base += f"""
 
 QUALITY REQUIREMENTS:
@@ -477,7 +531,10 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
             'location_based': 'businesses companies near',
             'new_businesses': 'new businesses recently opened',
             'planning_applications': 'planning applications construction renovation',
-            'company_list': 'business research company analysis'
+            'company_list': 'business research company analysis',
+            'dynamic_business_search': 'dynamic business search AI-powered',
+            'gap_analysis': 'service gaps missing services incomplete',
+            'custom_search': 'custom search query specific requirements'
         }
         return terms.get(prompt_type, 'businesses companies')
     

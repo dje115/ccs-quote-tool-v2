@@ -187,6 +187,24 @@ async def get_prompt_types():
             "label": "Planning Applications",
             "description": "Find businesses with construction/renovation plans",
             "requires_company_name": False
+        },
+        {
+            "value": "dynamic_business_search",
+            "label": "Dynamic Business Search",
+            "description": "AI-powered search based on your company's services and target markets",
+            "requires_company_name": False
+        },
+        {
+            "value": "gap_analysis",
+            "label": "Service Gap Analysis",
+            "description": "Find businesses missing services you offer",
+            "requires_company_name": False
+        },
+        {
+            "value": "custom_search",
+            "label": "Custom Search",
+            "description": "Write your own AI search query",
+            "requires_company_name": False
         }
     ]
 
