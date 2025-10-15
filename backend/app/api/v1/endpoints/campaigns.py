@@ -84,6 +84,7 @@ class LeadResponse(BaseModel):
     """Schema for lead response"""
     id: str
     campaign_id: Optional[str]
+    campaign_name: Optional[str] = None  # Campaign name from relationship
     company_name: str
     website: Optional[str]
     address: Optional[str]
@@ -514,6 +515,56 @@ async def restart_campaign(
     }
 
 
+@router.post("/{campaign_id}/stop", status_code=status.HTTP_200_OK)
+async def stop_campaign(
+    campaign_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """
+    Stop a running or queued campaign
+    
+    Sets campaign status to CANCELLED to prevent further execution.
+    Note: This only prevents new execution - if already running in Celery,
+    the worker will complete its current task but won't start new ones.
+    """
+    campaign = db.query(LeadGenerationCampaign).filter(
+        and_(
+            LeadGenerationCampaign.id == campaign_id,
+            LeadGenerationCampaign.tenant_id == current_tenant.id
+        )
+    ).first()
+    
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    if campaign.status not in [LeadGenerationStatus.RUNNING, LeadGenerationStatus.QUEUED]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only stop RUNNING or QUEUED campaigns. Current status: {campaign.status.value}"
+        )
+    
+    # Set status to cancelled
+    campaign.status = LeadGenerationStatus.CANCELLED
+    campaign.updated_at = datetime.utcnow()
+    campaign.updated_by = current_user.id
+    db.commit()
+    
+    print(f"\n{'='*80}")
+    print(f"🛑 STOPPING CAMPAIGN")
+    print(f"Campaign: {campaign.name} ({campaign.id})")
+    print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    print(f"{'='*80}\n")
+    
+    return {
+        "success": True,
+        "message": f"Campaign '{campaign.name}' stopped successfully",
+        "campaign_id": str(campaign.id),
+        "status": "cancelled"
+    }
+
+
 @router.post("/{campaign_id}/reset-to-draft", status_code=status.HTTP_200_OK)
 async def reset_campaign_to_draft(
     campaign_id: str,
@@ -669,12 +720,19 @@ async def list_all_leads(
     status_filter: Optional[str] = None,
     min_score: Optional[int] = None,
     search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """List all leads across all campaigns for the tenant"""
-    query = db.query(Lead).filter(
+    from sqlalchemy.orm import joinedload
+    
+    # Join with campaign to get campaign name
+    query = db.query(Lead).options(
+        joinedload(Lead.campaign)
+    ).filter(
         and_(
             Lead.tenant_id == current_tenant.id,
             Lead.is_deleted == False
@@ -693,6 +751,7 @@ async def list_all_leads(
         query = query.filter(Lead.lead_score >= min_score)
     
     if search:
+        from sqlalchemy import or_
         search_pattern = f"%{search}%"
         query = query.filter(
             or_(
@@ -702,12 +761,66 @@ async def list_all_leads(
             )
         )
     
-    leads = query.order_by(
-        desc(Lead.lead_score),
-        desc(Lead.created_at)
-    ).offset(skip).limit(limit).all()
+    # Apply sorting
+    if sort_by:
+        from sqlalchemy import asc, desc as sql_desc
+        
+        if sort_by == "company_name":
+            order_column = Lead.company_name
+        elif sort_by == "postcode":
+            order_column = Lead.postcode
+        elif sort_by == "lead_score":
+            order_column = Lead.lead_score
+        elif sort_by == "created_at":
+            order_column = Lead.created_at
+        else:
+            order_column = Lead.lead_score  # Default
+        
+        if sort_order == "asc":
+            query = query.order_by(asc(order_column))
+        else:
+            query = query.order_by(sql_desc(order_column))
+    else:
+        # Default sorting by lead score descending
+        query = query.order_by(desc(Lead.lead_score), desc(Lead.created_at))
     
-    return leads
+    leads = query.offset(skip).limit(limit).all()
+    
+    # Convert leads to response format with campaign names
+    lead_responses = []
+    for lead in leads:
+        lead_dict = {
+            'id': lead.id,
+            'campaign_id': lead.campaign_id,
+            'campaign_name': lead.campaign.name if lead.campaign else None,
+            'company_name': lead.company_name,
+            'website': lead.website,
+            'address': lead.address,
+            'postcode': lead.postcode,
+            'business_sector': lead.business_sector,
+            'company_size': lead.company_size,
+            'contact_name': lead.contact_name,
+            'contact_email': lead.contact_email,
+            'contact_phone': lead.contact_phone,
+            'status': lead.status.value if lead.status else 'new',
+            'lead_score': lead.lead_score,
+            'source': lead.source.value if lead.source else 'campaign',
+            'potential_project_value': lead.potential_project_value,
+            'timeline_estimate': lead.timeline_estimate,
+            'company_registration': lead.company_registration,
+            'registration_confirmed': lead.registration_confirmed,
+            'converted_to_customer_id': lead.converted_to_customer_id,
+            'qualification_reason': lead.qualification_reason,
+            'ai_analysis': lead.ai_analysis,
+            'linkedin_data': lead.linkedin_data,
+            'companies_house_data': lead.companies_house_data,
+            'google_maps_data': lead.google_maps_data,
+            'website_data': lead.website_data,
+            'created_at': lead.created_at
+        }
+        lead_responses.append(LeadResponse(**lead_dict))
+    
+    return lead_responses
 
 
 @router.get("/leads/{lead_id}", response_model=LeadResponse)

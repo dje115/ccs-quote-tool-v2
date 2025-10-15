@@ -107,3 +107,4 @@ On the Company Profile page, sections appear in this order:
 - It shows the date of the last analysis
 - You can run the analysis multiple times to update insights as your profile changes
 
+

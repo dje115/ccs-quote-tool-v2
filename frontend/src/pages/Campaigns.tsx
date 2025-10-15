@@ -113,13 +113,34 @@ const Campaigns: React.FC = () => {
     }
   };
 
+  const handleDeleteCampaign = async (campaignId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent row click
+    
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the draft campaign "${campaign.name}"?\n\nThis action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      await campaignAPI.delete(campaignId);
+      loadCampaigns(); // Refresh list
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      alert('Failed to delete campaign');
+    }
+  };
+
   const handleStopCampaign = async (campaignId: string, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent row click
     if (!window.confirm('Are you sure you want to stop this campaign?')) return;
     
     try {
-      // await campaignAPI.stop(campaignId); // TODO: Add stop endpoint
-      alert('Stop functionality coming soon');
+      await campaignAPI.stop(campaignId);
+      alert('Campaign stopped successfully');
       loadCampaigns(); // Refresh list
     } catch (error) {
       console.error('Error stopping campaign:', error);
@@ -443,21 +464,38 @@ const Campaigns: React.FC = () => {
                     <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                       <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                         {campaign.status === 'draft' && (
-                          <Tooltip title="Start Campaign">
-                            <IconButton
-                              size="small"
-                              color="success"
-                              onClick={(e) => handleStartCampaign(campaign.id, e)}
-                              sx={{
-                                '&:hover': {
-                                  backgroundColor: 'success.light',
-                                  color: 'white'
-                                }
-                              }}
-                            >
-                              <PlayArrowIcon />
-                            </IconButton>
-                          </Tooltip>
+                          <>
+                            <Tooltip title="Start Campaign">
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={(e) => handleStartCampaign(campaign.id, e)}
+                                sx={{
+                                  '&:hover': {
+                                    backgroundColor: 'success.light',
+                                    color: 'white'
+                                  }
+                                }}
+                              >
+                                <PlayArrowIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete Draft Campaign">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={(e) => handleDeleteCampaign(campaign.id, e)}
+                                sx={{
+                                  '&:hover': {
+                                    backgroundColor: 'error.light',
+                                    color: 'white'
+                                  }
+                                }}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </>
                         )}
                         {campaign.status === 'queued' && (
                           <>

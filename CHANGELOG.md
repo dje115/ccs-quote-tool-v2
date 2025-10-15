@@ -6,6 +6,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.0] - 2025-10-14
+
+### 🔧 Bug Fixes & UI Improvements
+- **FIXED: Campaign Name Display in Discoveries**
+  - Discoveries page now correctly shows actual campaign names instead of "N/A campaign"
+  - Added campaign name field to LeadResponse schema
+  - Enhanced backend endpoint to join with campaign table for complete campaign information
+  - Improved lead-to-campaign relationship tracking
+
+- **NEW: Advanced Sorting Functionality**
+  - Added clickable column headers with visual sort indicators (arrows)
+  - Sortable columns: Company Name, Location (Postcode), Lead Score, Created Date
+  - Backend API now supports sort_by and sort_order parameters
+  - Default sorting by lead score (descending) for optimal lead prioritization
+  - Real-time sorting without page refresh
+
+- **FIXED: Campaign Stop Button Functionality**
+  - Added missing `/campaigns/{campaign_id}/stop` backend endpoint
+  - Campaign stop buttons now actually work instead of showing "coming soon"
+  - Proper campaign status management (RUNNING/QUEUED → CANCELLED)
+  - Enhanced campaign control and user experience
+
+- **Enhanced Google Maps Data Extraction**
+  - Fixed website and phone number extraction from Google Maps during campaign execution
+  - Added place details API call to fetch comprehensive business information
+  - Improved lead enrichment with contact information (phone, website, address)
+  - Better data quality for campaign-generated leads
+
+- **UI/UX Improvements**
+  - Added sorting icons (ArrowUpward/ArrowDownward) for clear visual feedback
+  - Improved table header styling with hover effects and cursor pointers
+  - Enhanced campaign management with working stop/start functionality
+  - Better error handling and user feedback throughout the application
+
+### 🔄 Technical Improvements
+- Enhanced backend API endpoints with proper relationship loading
+- Improved SQL queries with joinedload for campaign information
+- Better error handling and validation in campaign management
+- Enhanced data consistency between frontend and backend
+
+---
+
 ## [2.4.0] - 2025-10-13
 
 ### 🚀 Dynamic Campaign Prompts & Advanced Campaign Types

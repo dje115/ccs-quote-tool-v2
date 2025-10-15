@@ -13,3 +13,4 @@ COMMENT ON TYPE customerstatus IS 'Customer lifecycle stages: LEAD → PROSPECT 
 -- New values are always added at the end
 -- This doesn't affect application logic as we don't rely on enum ordering
 
+

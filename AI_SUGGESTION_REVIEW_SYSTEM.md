@@ -199,3 +199,4 @@ The `/company-profile/auto-fill` endpoint returns:
 - [ ] Undo/redo functionality
 - [ ] Version history of profile changes
 
+

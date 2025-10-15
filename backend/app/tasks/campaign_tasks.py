@@ -142,3 +142,4 @@ def test_celery_task(message: str = "Hello from Celery!"):
     print(f"✅ Celery test task executed: {message}")
     return {"success": True, "message": message}
 
+

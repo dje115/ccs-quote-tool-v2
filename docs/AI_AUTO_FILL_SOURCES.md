@@ -200,3 +200,4 @@ Each data source is scraped independently with try/catch blocks:
 - **v2.1.0** (2025-10-12): Enhanced multi-source scraping, keyword extraction, detailed source display
 - **v2.0.0** (2025-10-10): Initial AI Auto-Fill implementation
 
+

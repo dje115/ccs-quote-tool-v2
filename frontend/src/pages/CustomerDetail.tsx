@@ -58,7 +58,8 @@ import {
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
   Info as InfoIcon,
-  Lightbulb as LightbulbIcon
+  Lightbulb as LightbulbIcon,
+  AutoAwesome as SparkleIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI } from '../services/api';
@@ -569,8 +570,25 @@ const CustomerDetail: React.FC = () => {
               </Typography>
               <Divider sx={{ mb: 2 }} />
               <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                Generated during campaign discovery phase
+                {customer.ai_analysis_raw.light_analysis ? 
+                  'Generated during campaign discovery phase (Light Analysis)' : 
+                  'Generated during campaign discovery phase'}
               </Typography>
+
+              {/* Light Analysis (from campaign execution) */}
+              {customer.ai_analysis_raw.light_analysis && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: '#f3f4f6', borderRadius: 2, border: '1px solid #e5e7eb' }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SparkleIcon /> Quick Business Analysis
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                    Light analysis generated during campaign execution for quick insights
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+                    {customer.ai_analysis_raw.light_analysis.light_analysis || customer.ai_analysis_raw.light_analysis}
+                  </Typography>
+                </Box>
+              )}
 
               {/* Company Profile */}
               {customer.ai_analysis_raw.company_profile && (

@@ -1,6 +1,6 @@
 # CCS Quote Tool v2 - World-Class AI-Powered CRM & Quoting System
 
-**Version:** 2.4.0  
+**Version:** 2.5.0  
 **Status:** Production Ready  
 **Architecture:** Multi-Tenant SaaS
 
@@ -142,6 +142,8 @@ docker-compose -f docker-compose.prod.yml up -d --build
   - **Company List Import** - Analyze specific companies with tenant targeting
   - **Similar Business Lookup** - Find companies like existing customers
   - Traditional types: IT/MSP, Education, Healthcare, Manufacturing, etc.
+- **Enhanced campaign management** with working stop/start/restart functionality
+- **Improved data extraction** with comprehensive Google Maps place details (phone, website)
 - **Multi-source data enrichment:**
   - Google Maps API (locations, ratings)
   - Companies House API (financials, directors)
@@ -172,6 +174,10 @@ docker-compose -f docker-compose.prod.yml up -d --build
 - **Responsive design** for all screen sizes
 - **Dark mode support** (coming soon)
 - **Emoji icons** for visual hierarchy
+- **Advanced sorting functionality** with visual indicators
+- **Enhanced table interactions** with clickable headers and hover effects
+- **Improved campaign management** with working controls
+- **Better data display** with proper campaign names and relationships
 
 ---
 

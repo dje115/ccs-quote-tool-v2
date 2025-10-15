@@ -161,3 +161,4 @@ When changing enum values:
 - Database Schema: Check with `docker-compose exec db psql -U postgres -d ccs_crm -c "\dT+ customerstatus"`
 - Migration Examples: See scripts like `add_uppercase_enums.py`, `fix_all_enum_values.py`
 
+

@@ -178,3 +178,4 @@ def has_all_permissions(user_permissions: List[str], required_permissions: List[
     
     return all(perm in user_permissions for perm in required_permissions)
 
+

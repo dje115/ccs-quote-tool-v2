@@ -96,16 +96,16 @@ const CampaignCreate: React.FC = () => {
     setLoading(true);
 
     try {
-      // Prepare the data for submission
-      const submitData = {
-        ...formData,
-        // Convert company_names string to array if it exists
-        company_names: formData.company_names 
-          ? formData.company_names.split('\n').filter(name => name.trim() !== '')
-          : undefined,
-        // Don't send postcode if not required
-        postcode: requiresPostcode ? formData.postcode : undefined
-      };
+        // Prepare the data for submission
+        const submitData = {
+          ...formData,
+          // Convert company_names string to array if it exists
+          company_names: formData.company_names 
+            ? formData.company_names.split('\n').filter(name => name.trim() !== '')
+            : undefined,
+          // Send empty string for postcode if not required (backend expects string, not undefined)
+          postcode: requiresPostcode ? formData.postcode : ''
+        };
 
       const response = await campaignAPI.create(submitData);
       navigate('/campaigns');

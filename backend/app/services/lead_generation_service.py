@@ -123,6 +123,9 @@ class LeadGenerationService:
             print(f"🚀 LEAD GENERATION CAMPAIGN: {campaign.name}")
             print(f"{'='*80}")
             
+            # Initialize ai_response variable
+            ai_response = ""
+            
             # Check if this is a company name list campaign
             if campaign.company_names and len(campaign.company_names) > 0:
                 print(f"📋 Company List Campaign")
@@ -615,6 +618,16 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                     google_data = await self._get_google_maps_data(company_name, lead_data.get('postcode'))
                     if google_data:
                         lead_data['google_maps_data'] = google_data
+                        
+                        # Extract website and phone from Google Maps if not already set
+                        if not lead_data.get('website') and google_data.get('website'):
+                            lead_data['website'] = google_data.get('website')
+                            print(f"    ✓ Website from Google Maps: {google_data.get('website')}")
+                        
+                        if not lead_data.get('contact_phone') and google_data.get('phone_number'):
+                            lead_data['contact_phone'] = google_data.get('phone_number')
+                            print(f"    ✓ Phone from Google Maps: {google_data.get('phone_number')}")
+                        
                         print(f"    ✓ Google Maps data added")
                 
                 # Enrich with Companies House
@@ -668,7 +681,7 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
         return existing_customer is not None
     
     async def _get_google_maps_data(self, company_name: str, postcode: Optional[str]) -> Optional[Dict]:
-        """Get Google Maps data including multiple locations"""
+        """Get Google Maps data including phone and website via place details"""
         try:
             if not self.gmaps_client:
                 return None
@@ -678,10 +691,26 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
             places_result = self.gmaps_client.places(search_query)
             
             if places_result and places_result.get('results'):
-                # Return first result (main location)
+                # Get first result (main location)
                 place = places_result['results'][0]
-                return {
-                    'place_id': place.get('place_id'),
+                place_id = place.get('place_id')
+                
+                # Fetch detailed information including phone and website
+                place_details = {}
+                if place_id:
+                    try:
+                        details_result = self.gmaps_client.place(
+                            place_id,
+                            fields=['formatted_phone_number', 'website', 'international_phone_number']
+                        )
+                        if details_result and details_result.get('result'):
+                            place_details = details_result['result']
+                    except Exception as details_error:
+                        print(f"    [WARN] Could not fetch place details: {details_error}")
+                
+                # Combine search result with details
+                result = {
+                    'place_id': place_id,
                     'name': place.get('name'),
                     'formatted_address': place.get('formatted_address'),
                     'location': place.get('geometry', {}).get('location'),
@@ -689,6 +718,14 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                     'types': place.get('types'),
                     'total_locations': len(places_result['results'])  # Count of all locations
                 }
+                
+                # Add phone and website from place details
+                if place_details.get('formatted_phone_number'):
+                    result['phone_number'] = place_details['formatted_phone_number']
+                if place_details.get('website'):
+                    result['website'] = place_details['website']
+                
+                return result
             
             return None
             
@@ -765,6 +802,31 @@ OUTPUT: Return ONLY the JSON object. No markdown code fences. No explanations.
                 
                 # Generate quick telesales summary
                 quick_summary = await self.generate_quick_lead_summary(lead_data)
+                
+                # Generate light AI analysis for campaign leads
+                print(f"  🤖 Running light AI analysis for {company_name}")
+                try:
+                    from app.services.ai_analysis_service import AIAnalysisService
+                    
+                    # Initialize AI service with proper API key resolution
+                    # The AIAnalysisService will automatically resolve API keys from database
+                    ai_service = AIAnalysisService(
+                        tenant_id=self.tenant_id,
+                        db=self.db
+                    )
+                    
+                    light_analysis = await ai_service.analyze_company_light(
+                        company_name=company_name,
+                        website=lead_data.get('website'),
+                        companies_house_data=lead_data.get('companies_house_data'),
+                        google_maps_data=lead_data.get('google_maps_data')
+                    )
+                    # Merge light analysis into lead_data
+                    lead_data['light_analysis'] = light_analysis
+                    print(f"  ✓ Light AI analysis completed for {company_name}")
+                except Exception as e:
+                    print(f"  ⚠️ Light AI analysis failed for {company_name}: {e}")
+                    lead_data['light_analysis'] = {"error": str(e)}
                 
                 # Create lead record
                 lead = Lead(

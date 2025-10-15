@@ -232,3 +232,4 @@ Once in CRM, users can move customers through stages:
 - **One-way conversion**: Converting a discovery to CRM is one-way. The discovery remains in the campaign system but marked as converted.
 - **Lead score preserved**: The AI-calculated lead score from the campaign is carried over to the CRM record.
 
+

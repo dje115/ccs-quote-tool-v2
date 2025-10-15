@@ -43,7 +43,9 @@ import {
   Email as EmailIcon,
   CheckBox as CheckBoxIcon,
   CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
-  FilterList as FilterListIcon
+  FilterList as FilterListIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -85,16 +87,26 @@ const Leads: React.FC = () => {
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [converting, setConverting] = useState(false);
   const [showConverted, setShowConverted] = useState(false);
+  const [sortBy, setSortBy] = useState<string>('lead_score');
+  const [sortOrder, setSortOrder] = useState<string>('desc');
 
   useEffect(() => {
     loadLeads();
   }, []);
 
+  useEffect(() => {
+    loadLeads();
+  }, [sortBy, sortOrder]);
+
   const loadLeads = async () => {
     try {
       setLoading(true);
-      // Fetch all campaign leads (discoveries)
-      const response = await campaignAPI.listAllLeads();
+      // Fetch all campaign leads (discoveries) with sorting
+      const params = {
+        sort_by: sortBy,
+        sort_order: sortOrder
+      };
+      const response = await campaignAPI.listAllLeads(params);
       setLeads(response.data || []);
     } catch (error) {
       console.error('Error loading discoveries:', error);
@@ -219,6 +231,17 @@ const Leads: React.FC = () => {
         return [...prev, leadId];
       }
     });
+  };
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      // Toggle sort order if same column
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new column and default to descending
+      setSortBy(column);
+      setSortOrder('desc');
+    }
   };
 
   const handleBulkConvert = async () => {
@@ -433,13 +456,53 @@ const Leads: React.FC = () => {
                   }
                 </IconButton>
               </TableCell>
-              <TableCell>Company</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('company_name')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Company
+                  {sortBy === 'company_name' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell>Contact</TableCell>
-              <TableCell>Location</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('postcode')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Location
+                  {sortBy === 'postcode' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell>Status</TableCell>
-              <TableCell>Lead Score</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('lead_score')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Lead Score
+                  {sortBy === 'lead_score' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell>Campaign</TableCell>
-              <TableCell>Created</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('created_at')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Created
+                  {sortBy === 'created_at' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>

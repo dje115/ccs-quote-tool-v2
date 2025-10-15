@@ -6,6 +6,7 @@ AI Analysis Service for Company Analysis and Lead Generation
 import json
 import asyncio
 from typing import Dict, List, Optional, Any
+from datetime import datetime, timezone
 from openai import OpenAI
 import httpx
 
@@ -23,17 +24,63 @@ class AIAnalysisService:
                  google_maps_api_key: Optional[str] = None,
                  tenant_id: Optional[str] = None,
                  db=None):
-        self.openai_api_key = openai_api_key or settings.OPENAI_API_KEY
-        self.companies_house_api_key = companies_house_api_key or settings.COMPANIES_HOUSE_API_KEY
-        self.google_maps_api_key = google_maps_api_key or settings.GOOGLE_MAPS_API_KEY
+        # Set tenant_id and db FIRST (needed for API key resolution)
         self.tenant_id = tenant_id
         self.db = db
+        
+        # Use provided API keys or resolve from database with fallback
+        if openai_api_key and companies_house_api_key and google_maps_api_key:
+            # API keys provided directly (e.g., from endpoints that already resolved them)
+            self.openai_api_key = openai_api_key
+            self.companies_house_api_key = companies_house_api_key
+            self.google_maps_api_key = google_maps_api_key
+        else:
+            # Resolve API keys from database with tenant → system fallback
+            self._resolve_api_keys_from_db()
         
         self.openai_client = None
         self.companies_house_service = CompaniesHouseService(api_key=self.companies_house_api_key)
         self.google_maps_service = GoogleMapsService(api_key=self.google_maps_api_key)
         self.web_scraping_service = WebScrapingService()
         self._initialize_client()
+    
+    def _resolve_api_keys_from_db(self):
+        """Resolve API keys from database with tenant → system fallback"""
+        try:
+            from app.core.api_keys import get_api_keys
+            from app.models.tenant import Tenant
+            
+            if not self.db or not self.tenant_id:
+                # Fallback to environment variables if no database context
+                self.openai_api_key = settings.OPENAI_API_KEY
+                self.companies_house_api_key = settings.COMPANIES_HOUSE_API_KEY
+                self.google_maps_api_key = settings.GOOGLE_MAPS_API_KEY
+                return
+            
+            # Get tenant
+            tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            if not tenant:
+                # Fallback to environment variables if tenant not found
+                self.openai_api_key = settings.OPENAI_API_KEY
+                self.companies_house_api_key = settings.COMPANIES_HOUSE_API_KEY
+                self.google_maps_api_key = settings.GOOGLE_MAPS_API_KEY
+                return
+            
+            # Use the centralized API key resolution with fallback
+            api_keys = get_api_keys(self.db, tenant)
+            
+            self.openai_api_key = api_keys.openai
+            self.companies_house_api_key = api_keys.companies_house
+            self.google_maps_api_key = api_keys.google_maps
+            
+            print(f"[AI ANALYSIS] API keys resolved from: {api_keys.source}")
+            
+        except Exception as e:
+            print(f"[AI ANALYSIS] Error resolving API keys from database: {e}")
+            # Fallback to environment variables
+            self.openai_api_key = settings.OPENAI_API_KEY
+            self.companies_house_api_key = settings.COMPANIES_HOUSE_API_KEY
+            self.google_maps_api_key = settings.GOOGLE_MAPS_API_KEY
     
     def _initialize_client(self):
         """Initialize OpenAI client"""
@@ -570,6 +617,160 @@ Do not include any explanation, just the URL or NOT_FOUND."""
         except Exception as e:
             print(f"[ERROR] Error in AI analysis: {e}")
             return {"error": str(e)}
+    
+    async def analyze_company_light(self, company_name: str, website: str = None, companies_house_data: dict = None, google_maps_data: dict = None) -> Dict[str, Any]:
+        """
+        Light AI analysis for campaign-generated leads
+        Provides basic business intelligence and extracts contact information
+        """
+        try:
+            print(f"[AI ANALYSIS LIGHT] Analyzing {company_name}")
+            
+            # Build comprehensive context from available data
+            context_parts = [f"Company: {company_name}"]
+            
+            if website:
+                context_parts.append(f"Website: {website}")
+            
+            # Add Companies House data with more detail
+            if companies_house_data:
+                context_parts.append(f"\nCompanies House Data:")
+                if companies_house_data.get('company_number'):
+                    context_parts.append(f"- Company Number: {companies_house_data.get('company_number')}")
+                if companies_house_data.get('company_status'):
+                    context_parts.append(f"- Status: {companies_house_data.get('company_status')}")
+                if companies_house_data.get('company_type'):
+                    context_parts.append(f"- Type: {companies_house_data.get('company_type')}")
+                if companies_house_data.get('date_of_creation'):
+                    context_parts.append(f"- Founded: {companies_house_data.get('date_of_creation')}")
+                if companies_house_data.get('registered_office_address'):
+                    context_parts.append(f"- Registered Address: {companies_house_data.get('registered_office_address')}")
+                if companies_house_data.get('sic_codes'):
+                    context_parts.append(f"- SIC Codes: {companies_house_data.get('sic_codes')}")
+                
+                # Add director information (potential contacts)
+                if companies_house_data.get('officers'):
+                    context_parts.append(f"- Directors: {companies_house_data.get('officers')}")
+            
+            # Add Google Maps data with contact info
+            if google_maps_data:
+                context_parts.append(f"\nGoogle Maps Data:")
+                if google_maps_data.get('formatted_address'):
+                    context_parts.append(f"- Address: {google_maps_data.get('formatted_address')}")
+                if google_maps_data.get('rating'):
+                    context_parts.append(f"- Rating: {google_maps_data.get('rating')}/5")
+                if google_maps_data.get('types'):
+                    business_types = [t.replace('_', ' ').title() for t in google_maps_data.get('types', [])]
+                    context_parts.append(f"- Business Type: {', '.join(business_types[:3])}")
+                if google_maps_data.get('formatted_phone_number'):
+                    context_parts.append(f"- Phone: {google_maps_data.get('formatted_phone_number')}")
+                if google_maps_data.get('website'):
+                    context_parts.append(f"- Website: {google_maps_data.get('website')}")
+                if google_maps_data.get('business_status'):
+                    context_parts.append(f"- Status: {google_maps_data.get('business_status')}")
+            
+            context = "\n".join(context_parts)
+            
+            # Get tenant context for analysis
+            tenant_context = await self._get_tenant_context()
+            
+            # Simplified light AI analysis prompt for business intelligence
+            prompt = f"""
+            Analyze this UK company and provide business intelligence:
+            
+            Company Data:
+            {context}
+            
+            About {tenant_context['company_name']}:
+            {tenant_context['company_description']}
+            Services: {', '.join(tenant_context['products_services'][:5])}
+            Target Markets: {', '.join(tenant_context['target_markets'][:3])}
+            
+            Provide a concise business analysis:
+            - Business Overview (2-3 sentences about what they do)
+            - Key Opportunities for {tenant_context['company_name']} (2-3 specific opportunities)
+            - Potential Challenges (1-2 challenges or considerations)
+            - Recommended Sales Approach (1-2 sentences on how to engage)
+            
+            Focus on factual, actionable insights based on the data provided.
+            Be concise and professional. Keep the total response under 400 words.
+            """
+            
+            # Call OpenAI with more tokens for contact extraction
+            # Note: gpt-5-mini doesn't support temperature parameter
+            response = self.openai_client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {"role": "system", "content": "You are a business intelligence analyst specializing in UK companies. Extract contact information and provide actionable business insights."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_completion_tokens=10000,  # High token limit for comprehensive analysis
+                timeout=120.0  # 2 minute timeout for API call
+            )
+            
+            analysis_text = response.choices[0].message.content
+            print(f"[AI ANALYSIS LIGHT] Generated {len(analysis_text) if analysis_text else 0} characters")
+            
+            # Return simplified analysis
+            return {
+                "company_name": company_name,
+                "light_analysis": analysis_text,
+                "analysis_type": "light",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "data_sources": {
+                    "website": bool(website),
+                    "companies_house": bool(companies_house_data),
+                    "google_maps": bool(google_maps_data)
+                }
+            }
+            
+        except Exception as e:
+            print(f"[AI ANALYSIS LIGHT] Error: {e}")
+            return {
+                "company_name": company_name,
+                "light_analysis": f"Quick analysis unavailable for {company_name}. Error: {str(e)}",
+                "analysis_type": "light",
+                "error": str(e)
+            }
+    
+    async def _get_tenant_context(self) -> Dict[str, Any]:
+        """
+        Get tenant context for AI analysis
+        
+        Returns structured context about the tenant's business
+        """
+        try:
+            from app.models.tenant import Tenant
+            
+            # Get tenant from database
+            tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            
+            if not tenant:
+                return {
+                    'company_name': 'our company',
+                    'company_description': 'We provide professional services to businesses.',
+                    'products_services': ['Professional services'],
+                    'target_markets': ['General business'],
+                    'unique_selling_points': ['Quality service']
+                }
+            
+            return {
+                'company_name': tenant.company_name or 'our company',
+                'company_description': tenant.company_description or 'We provide professional services to businesses.',
+                'products_services': tenant.products_services or ['Professional services'],
+                'target_markets': tenant.target_markets or ['General business'],
+                'unique_selling_points': tenant.unique_selling_points or ['Quality service']
+            }
+            
+        except Exception as e:
+            print(f"[AI ANALYSIS] Error getting tenant context: {e}")
+            return {
+                'company_name': 'our company',
+                'company_description': 'We provide professional services to businesses.',
+                'products_services': ['Professional services'],
+                'target_markets': ['General business'],
+                'unique_selling_points': ['Quality service']
+            }
     
     async def analyze_financial_data(self, company_number: str) -> Dict[str, Any]:
         """Analyze financial data from Companies House"""
