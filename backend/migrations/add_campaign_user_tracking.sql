@@ -17,3 +17,4 @@ COMMENT ON COLUMN lead_generation_campaigns.updated_by IS 'User ID who last upda
 -- Note: These are nullable to support existing campaigns and system-generated campaigns
 
 
+

@@ -13,3 +13,4 @@ COMMENT ON TYPE customerstatus IS 'Customer lifecycle stages: DISCOVERY (identif
 -- When a company is contacted or imported to CRM, they move from DISCOVERY to LEAD
 
 
+

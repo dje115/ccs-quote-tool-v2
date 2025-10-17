@@ -1,6 +1,6 @@
 # CCS Quote Tool v2 - World-Class AI-Powered CRM & Quoting System
 
-**Version:** 2.5.0  
+**Version:** 2.6.0  
 **Status:** Production Ready  
 **Architecture:** Multi-Tenant SaaS
 
@@ -100,7 +100,7 @@ docker-compose -f docker-compose.prod.yml up -d --build
 - **Material-UI (MUI)** - Component library
 - **Vite** - Build tool and dev server
 - **TypeScript** - Type safety
-- **React Router** - Navigation
+- **React Router v7** - Navigation (upgraded from v6)
 - **Axios** - HTTP client
 
 **Admin Portal:**
@@ -412,7 +412,7 @@ See **[DEVELOPMENT_ENVIRONMENT.md](./DEVELOPMENT_ENVIRONMENT.md)** for detailed 
 
 ## 📝 Version History
 
-### v2.2.2 (Current) - October 2025
+### v2.6.0 (Current) - October 2025
 
 **Major Features:**
 - ✅ Complete lead generation campaign system
@@ -422,14 +422,19 @@ See **[DEVELOPMENT_ENVIRONMENT.md](./DEVELOPMENT_ENVIRONMENT.md)** for detailed 
 - ✅ Modern UI with gradient statistics cards
 - ✅ Development environment with hot-reload
 - ✅ Comprehensive documentation
+- ✅ Enhanced campaign management with working controls
+- ✅ Fixed dashboard statistics and lead counts
+- ✅ Improved delete functionality across all components
 
 **Technical:**
 - ✅ Development/Production Docker configurations
 - ✅ FastAPI BackgroundTasks for campaign processing
-- ✅ React with Material-UI
+- ✅ React 18 with Material-UI and Vite
+- ✅ React Router v7 (upgraded from v6)
 - ✅ Vue.js admin portal
 - ✅ PostgreSQL 16 + Redis 7
 - ✅ Multi-tenant architecture
+- ✅ Enhanced error handling and null safety
 
 See **[CHANGELOG.md](./CHANGELOG.md)** for complete history.
 

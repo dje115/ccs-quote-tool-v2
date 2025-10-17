@@ -8,6 +8,7 @@ from .crm import Customer, Contact, CustomerInteraction, CustomerStatus, Busines
 from .leads import LeadGenerationCampaign, Lead, LeadInteraction, LeadGenerationPrompt, LeadGenerationStatus, LeadStatus, LeadSource
 from .quotes import Quote, QuoteItem, QuoteTemplate, PricingItem, QuoteStatus
 from .sales import SalesActivity, SalesNote, ActivityType, ActivityOutcome
+from .sector import Sector
 
 __all__ = [
     "Base",
@@ -15,6 +16,7 @@ __all__ = [
     "Customer", "Contact", "CustomerInteraction", "CustomerStatus", "BusinessSector", "BusinessSize", "ContactRole",
     "LeadGenerationCampaign", "Lead", "LeadInteraction", "LeadGenerationPrompt", "LeadGenerationStatus", "LeadStatus", "LeadSource",
     "Quote", "QuoteItem", "QuoteTemplate", "PricingItem", "QuoteStatus",
-    "SalesActivity", "SalesNote", "ActivityType", "ActivityOutcome"
+    "SalesActivity", "SalesNote", "ActivityType", "ActivityOutcome",
+    "Sector"
 ]
 

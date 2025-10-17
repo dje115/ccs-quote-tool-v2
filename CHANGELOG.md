@@ -6,6 +6,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.6.0] - 2025-10-17
+
+### 🚀 React Router v7 Upgrade
+- **UPGRADED: React Router from v6 to v7**
+  - Updated to latest React Router v7.9.4
+  - Fixed all import statements across 21 frontend files
+  - Corrected import paths: `react-router` → `react-router-dom` for DOM components
+  - Enhanced navigation performance and compatibility
+  - Future-proof routing with latest React Router features
+
+### 🔧 Critical Bug Fixes & UI Improvements
+- **FIXED: Dashboard Statistics Display**
+  - Resolved NaN values in "New Leads" and "Total Leads" dashboard cards
+  - Fixed field name mismatch between frontend and backend (leads_created → total_leads)
+  - Corrected dashboard queries to use Lead table instead of Customer table for discovery counts
+  - Enhanced statistics calculation with proper null safety
+
+- **FIXED: Campaign Management System**
+  - Fixed missing campaign ID in Celery task data causing campaign execution failures
+  - Resolved campaign lead counts not displaying in campaigns table
+  - Added proper campaign completion statistics (leads_created, total_found)
+  - Enhanced campaign detail page with null-safety for leads array
+  - Fixed "TypeError: leads.map is not a function" crashes
+
+- **FIXED: Campaign Delete Functionality**
+  - Resolved delete buttons not working on campaigns list page
+  - Fixed backend filtering to exclude soft-deleted campaigns from lists
+  - Enhanced error handling and user feedback for delete operations
+  - Added proper confirmation dialogs and cleanup
+
+- **FIXED: Campaign Detail Page Crashes**
+  - Added comprehensive null-safety checks for leads data
+  - Fixed undefined leads array causing application crashes
+  - Enhanced error handling in loadLeads function
+  - Improved API response parsing with fallback values
+
+### ✨ Enhanced Campaign Features
+- **NEW: Advanced Sorting Functionality**
+  - Added clickable column headers with visual sort indicators (↑↓)
+  - Sortable columns: Created Date, Campaign Name, Status, Lead Count
+  - Default sorting by created date (descending) for newest campaigns first
+  - Backend API support for sort_by and sort_order parameters
+  - Real-time sorting without page refresh
+
+- **NEW: Enhanced Campaign Display**
+  - Added sector information display in campaign lists
+  - Show search parameters (postcode, distance, max results) in campaign cards
+  - Display custom prompt information for custom search campaigns
+  - Added campaign detail endpoint for viewing individual campaign leads
+  - Improved campaign status tracking and monitoring
+
+- **NEW: Campaign Leads Endpoint**
+  - Added `/api/v1/campaigns/{campaign_id}/leads` endpoint
+  - Comprehensive lead data with external data sources
+  - Campaign relationship tracking
+  - Proper tenant isolation and security
+
+### 🔧 Technical Improvements
+- **Enhanced Error Handling**
+  - Added comprehensive null-safety checks throughout frontend
+  - Improved API error handling and user feedback
+  - Better logging and debugging capabilities
+  - Enhanced validation and data integrity
+
+- **Database & API Enhancements**
+  - Fixed campaign statistics tracking in database
+  - Enhanced soft delete functionality for campaigns
+  - Improved API response consistency
+  - Better field mapping between frontend and backend
+
+- **Frontend Architecture**
+  - Upgraded React Router to v7 for better performance
+  - Enhanced TypeScript type safety
+  - Improved component error boundaries
+  - Better state management and data flow
+
+### 🐛 Bug Fixes
+- Fixed campaign execution stuck in "RUNNING" state
+- Fixed dashboard showing incorrect lead counts
+- Fixed campaign table "Leads" column displaying empty values
+- Fixed campaign detail page 404 errors for leads endpoint
+- Fixed delete button functionality across all campaign interfaces
+- Fixed React Router import errors preventing application startup
+- Fixed frontend compilation errors with React Router v7
+
+### 📚 Documentation Updates
+- Updated README.md to version 2.6.0
+- Added React Router v7 upgrade information
+- Enhanced troubleshooting guide for common issues
+- Updated technical specifications and requirements
+
+### 🎨 UI/UX Improvements
+- Enhanced campaign list display with better information hierarchy
+- Improved sorting visual feedback with arrow indicators
+- Better error messages and user feedback
+- Cleaner campaign detail page layout
+- Enhanced responsive design for all screen sizes
+
+---
+
 ## [2.5.0] - 2025-10-14
 
 ### 🔧 Bug Fixes & UI Improvements

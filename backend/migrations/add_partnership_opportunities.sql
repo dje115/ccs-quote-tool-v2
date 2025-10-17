@@ -4,3 +4,4 @@
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS partnership_opportunities TEXT;
 
 
+

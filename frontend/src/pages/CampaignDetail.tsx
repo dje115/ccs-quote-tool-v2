@@ -84,9 +84,13 @@ const CampaignDetail: React.FC = () => {
     try {
       if (!campaignId) return;
       const response = await campaignAPI.getLeads(campaignId);
-      setLeads(response.data || []);
+      // Ensure leads is always an array
+      const leadsData = response.data?.data || response.data || [];
+      setLeads(Array.isArray(leadsData) ? leadsData : []);
     } catch (error) {
       console.error('Error loading leads:', error);
+      // Set empty array on error to prevent map errors
+      setLeads([]);
     }
   };
 
@@ -108,6 +112,7 @@ const CampaignDetail: React.FC = () => {
       await campaignAPI.delete(campaignId);
       navigate('/campaigns');
     } catch (error) {
+      console.error('Delete error:', error);
       alert('Failed to delete campaign');
     }
   };
@@ -206,11 +211,9 @@ const CampaignDetail: React.FC = () => {
               Stop
             </Button>
           )}
-          {(campaign.status === 'completed' || campaign.status === 'failed' || campaign.status === 'cancelled') && (
-            <Button startIcon={<DeleteIcon />} onClick={handleDelete} variant="outlined" color="error">
-              Delete
-            </Button>
-          )}
+          <Button startIcon={<DeleteIcon />} onClick={handleDelete} variant="outlined" color="error">
+            Delete
+          </Button>
         </Box>
       </Box>
 
@@ -289,26 +292,18 @@ const CampaignDetail: React.FC = () => {
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <Typography variant="body2" color="text.secondary">
-              Postcode:
-            </Typography>
-            <Typography variant="body1" fontWeight="500">
-              {campaign.postcode}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">
-              Distance:
-            </Typography>
-            <Typography variant="body1" fontWeight="500">
-              {campaign.distance_miles} miles
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">
               Campaign Type:
             </Typography>
             <Typography variant="body1" fontWeight="500">
               {campaign.prompt_type.replace(/_/g, ' ').toUpperCase()}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="text.secondary">
+              Target Sector:
+            </Typography>
+            <Typography variant="body1" fontWeight="500" sx={{ color: 'primary.main' }}>
+              🎯 {campaign.sector_name || 'Not specified'}
             </Typography>
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -319,6 +314,54 @@ const CampaignDetail: React.FC = () => {
               {campaign.max_results}
             </Typography>
           </Grid>
+          {campaign.postcode && (
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">
+                Postcode:
+              </Typography>
+              <Typography variant="body1" fontWeight="500">
+                {campaign.postcode}
+              </Typography>
+            </Grid>
+          )}
+          {campaign.distance_miles && (
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">
+                Distance:
+              </Typography>
+              <Typography variant="body1" fontWeight="500">
+                {campaign.distance_miles} miles
+              </Typography>
+            </Grid>
+          )}
+          {campaign.custom_prompt && (
+            <Grid item xs={12}>
+              <Typography variant="body2" color="text.secondary">
+                Search Prompt:
+              </Typography>
+              <Typography variant="body1" sx={{ 
+                backgroundColor: '#f5f5f5', 
+                p: 2, 
+                borderRadius: 1, 
+                border: '1px solid #e0e0e0',
+                fontStyle: 'italic'
+              }}>
+                "{campaign.custom_prompt}"
+              </Typography>
+            </Grid>
+          )}
+          {campaign.company_names && campaign.company_names.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="body2" color="text.secondary">
+                Target Companies ({campaign.company_names.length}):
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                {campaign.company_names.map((name: string, index: number) => (
+                  <Chip key={index} label={name} size="small" variant="outlined" />
+                ))}
+              </Box>
+            </Grid>
+          )}
           {campaign.description && (
             <Grid item xs={12}>
               <Typography variant="body2" color="text.secondary">
@@ -329,14 +372,56 @@ const CampaignDetail: React.FC = () => {
               </Typography>
             </Grid>
           )}
+          <Grid item xs={12} sm={6}>
+            <Typography variant="body2" color="text.secondary">
+              Created:
+            </Typography>
+            <Typography variant="body1" fontWeight="500">
+              {new Date(campaign.created_at).toLocaleString()}
+            </Typography>
+          </Grid>
+          {campaign.completed_at && (
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">
+                Completed:
+              </Typography>
+              <Typography variant="body1" fontWeight="500">
+                {new Date(campaign.completed_at).toLocaleString()}
+              </Typography>
+            </Grid>
+          )}
         </Grid>
       </Paper>
+
+      {/* AI Analysis Summary */}
+      {campaign.ai_analysis_summary && (
+        <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+          <Typography variant="h6" fontWeight="600" gutterBottom>
+            AI Analysis Summary
+          </Typography>
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="body2" sx={{ 
+            backgroundColor: '#f8f9fa', 
+            p: 2, 
+            borderRadius: 1, 
+            border: '1px solid #e9ecef',
+            whiteSpace: 'pre-wrap',
+            fontFamily: 'monospace',
+            fontSize: '0.875rem'
+          }}>
+            {typeof campaign.ai_analysis_summary === 'string' 
+              ? campaign.ai_analysis_summary 
+              : JSON.stringify(campaign.ai_analysis_summary, null, 2)
+            }
+          </Typography>
+        </Paper>
+      )}
 
       {/* Leads Table */}
       <Paper sx={{ borderRadius: 2 }}>
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
           <Typography variant="h6" fontWeight="600">
-            Leads ({leads.length})
+            Leads ({(leads || []).length})
           </Typography>
         </Box>
         <TableContainer>
@@ -352,7 +437,7 @@ const CampaignDetail: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {leads.length === 0 ? (
+              {(leads || []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Typography color="text.secondary">
@@ -364,7 +449,7 @@ const CampaignDetail: React.FC = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                leads.map((lead) => (
+                (leads || []).map((lead) => (
                   <TableRow key={lead.id} hover>
                     <TableCell>
                       <Typography variant="body2" fontWeight="500">

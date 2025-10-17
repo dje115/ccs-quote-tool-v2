@@ -55,6 +55,7 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
         
         print(f"✓ Campaign found: {campaign.name}")
         print(f"   Type: {campaign.prompt_type}")
+        print(f"   Custom Prompt: '{campaign.custom_prompt}'")
         print(f"   Location: {campaign.postcode} (±{campaign.distance_miles} miles)")
         print(f"   Target: {campaign.max_results} leads")
         

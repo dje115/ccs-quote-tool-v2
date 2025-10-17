@@ -89,16 +89,21 @@ async def get_dashboard(
     try:
         tenant_id = current_tenant.id
         
-        # Get customer counts by status
+        # Get discovery/leads count from Lead table (discoveries)
         discovery_count = db.execute(
-            select(func.count(Customer.id)).where(
+            select(func.count(Lead.id)).where(
                 and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.DISCOVERY
+                    Lead.tenant_id == tenant_id,
+                    Lead.is_deleted == False
                 )
             )
         ).scalar() or 0
         
+        print(f"🔍 Dashboard Debug - Tenant ID: {tenant_id}")
+        print(f"🔍 Dashboard Debug - Discovery Count: {discovery_count}")
+        
+        # Get customer counts by status
+        # Note: "total_leads" in frontend refers to discoveries from Lead table, not Customer.LEAD status
         leads_count = db.execute(
             select(func.count(Customer.id)).where(
                 and_(
@@ -254,12 +259,14 @@ async def get_dashboard(
             month_start = month_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
             
+            # Count new discoveries (leads) from Lead table for monthly trends
             new_leads = db.execute(
-                select(func.count(Customer.id)).where(
+                select(func.count(Lead.id)).where(
                     and_(
-                        Customer.tenant_id == tenant_id,
-                        Customer.created_at >= month_start,
-                        Customer.created_at <= month_end
+                        Lead.tenant_id == tenant_id,
+                        Lead.created_at >= month_start,
+                        Lead.created_at <= month_end,
+                        Lead.is_deleted == False
                     )
                 )
             ).scalar() or 0
@@ -376,10 +383,12 @@ async def get_dashboard(
             for lead in top_leads_query
         ]
         
+        print(f"🔍 Dashboard Debug - Returning stats: total_leads={discovery_count}, total_discovery={discovery_count}")
+        
         return DashboardResponse(
             stats=DashboardStats(
                 total_discovery=discovery_count,
-                total_leads=leads_count,
+                total_leads=discovery_count,  # Frontend expects total_leads to be discoveries count
                 total_prospects=prospects_count,
                 total_opportunities=opportunities_count,
                 total_customers=customers_count,
@@ -509,13 +518,14 @@ async def ai_dashboard_query(
             month_start = month_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
             
+            # Count new discoveries (leads) from Lead table for AI query context
             new_leads = db.execute(
-                select(func.count(Customer.id)).where(
+                select(func.count(Lead.id)).where(
                     and_(
-                        Customer.tenant_id == tenant_id,
-                        Customer.created_at >= month_start,
-                        Customer.created_at <= month_end,
-                        Customer.status == CustomerStatus.LEAD
+                        Lead.tenant_id == tenant_id,
+                        Lead.created_at >= month_start,
+                        Lead.created_at <= month_end,
+                        Lead.is_deleted == False
                     )
                 )
             ).scalar() or 0

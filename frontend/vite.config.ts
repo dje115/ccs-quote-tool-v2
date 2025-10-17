@@ -15,6 +15,7 @@ export default defineConfig({
         target: 'http://backend:8000',
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '/api'),
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
             // Remove the host header to avoid validation issues
@@ -43,6 +44,7 @@ export default defineConfig({
     }
   }
 })
+
 
 
 

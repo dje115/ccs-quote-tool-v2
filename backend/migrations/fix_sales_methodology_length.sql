@@ -10,3 +10,4 @@ ALTER COLUMN sales_methodology TYPE TEXT;
 COMMENT ON COLUMN tenants.sales_methodology IS 'Sales approach methodology (e.g., consultative, solution-based, value-based) - can include detailed description';
 
 
+

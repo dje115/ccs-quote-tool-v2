@@ -46,13 +46,14 @@ interface Campaign {
   id: string;
   name: string;
   description?: string;
+  sector_name: string;
   prompt_type: string;
   postcode: string;
   distance_miles: number;
   max_results: number;
   status: string;
   total_found: number;
-  leads_created: number;
+  total_leads: number;  // Backend returns this as 'total_leads', not 'leads_created'
   duplicates_found: number;
   errors_count: number;
   created_at: string;
@@ -65,24 +66,29 @@ const Campaigns: React.FC = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
+  const [sortBy, setSortBy] = useState<'created_at' | 'name' | 'status' | 'total_leads'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Calculate statistics
   const totalCampaigns = campaigns.length;
-  const totalLeads = campaigns.reduce((sum, c) => sum + c.leads_created, 0);
+  const totalLeads = campaigns.reduce((sum, c) => sum + (c.total_leads || 0), 0);
   const newLeads = campaigns
     .filter(c => c.status === 'completed')
-    .reduce((sum, c) => sum + c.leads_created, 0);
+    .reduce((sum, c) => sum + (c.total_leads || 0), 0);
   const convertedLeads = 0; // TODO: Get from API
 
   useEffect(() => {
     loadCampaigns();
     const interval = setInterval(loadCampaigns, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [sortBy, sortOrder]);
 
   const loadCampaigns = async () => {
     try {
-      const response = await campaignAPI.list();
+      const response = await campaignAPI.list({
+        sort_by: sortBy,
+        sort_order: sortOrder
+      });
       setCampaigns(response.data || []);
       setLoading(false);
     } catch (error) {
@@ -356,6 +362,59 @@ const Campaigns: React.FC = () => {
         </Grid>
       </Grid>
 
+      {/* Tips Section */}
+      <Paper sx={{ mt: 3, p: 3, borderRadius: 3, background: '#f8f9fa' }}>
+        <Typography variant="h6" gutterBottom fontWeight="600">
+          💡 Lead Generation Tips
+        </Typography>
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Typography>📍</Typography>
+              <Box>
+                <Typography variant="subtitle2" fontWeight="600">Location Targeting</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Use specific postcodes and reasonable distances (10-30 miles) for better results. Target areas where you can easily travel for site visits.
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Typography>👥</Typography>
+              <Box>
+                <Typography variant="subtitle2" fontWeight="600">Follow Up Quickly</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Contact new leads within 24-48 hours while they're still warm. Set up follow-up reminders and track your contact attempts.
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Typography>🎯</Typography>
+              <Box>
+                <Typography variant="subtitle2" fontWeight="600">Quality Over Quantity</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Start with smaller, more focused campaigns (50-100 leads) and test your approach before running larger searches.
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Typography>📊</Typography>
+              <Box>
+                <Typography variant="subtitle2" fontWeight="600">Track Your Success</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Monitor which campaign types and prompts generate the best leads. Use this data to improve future campaigns.
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
+
       {/* Recent Campaigns Section */}
       <Paper sx={{ borderRadius: 3, overflow: 'hidden' }}>
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -387,10 +446,63 @@ const Campaigns: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableCell><strong>Campaign</strong></TableCell>
-                <TableCell><strong>Status</strong></TableCell>
-                <TableCell align="right"><strong>Leads</strong></TableCell>
-                <TableCell><strong>Created</strong></TableCell>
+                <TableCell 
+                  sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => {
+                    if (sortBy === 'name') {
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortBy('name');
+                      setSortOrder('asc');
+                    }
+                  }}
+                >
+                  <strong>Campaign</strong>
+                  {sortBy === 'name' && (sortOrder === 'asc' ? ' ↑' : ' ↓')}
+                </TableCell>
+                <TableCell 
+                  sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => {
+                    if (sortBy === 'status') {
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortBy('status');
+                      setSortOrder('asc');
+                    }
+                  }}
+                >
+                  <strong>Status</strong>
+                  {sortBy === 'status' && (sortOrder === 'asc' ? ' ↑' : ' ↓')}
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => {
+                    if (sortBy === 'total_leads') {
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortBy('total_leads');
+                      setSortOrder('desc');
+                    }
+                  }}
+                >
+                  <strong>Leads</strong>
+                  {sortBy === 'total_leads' && (sortOrder === 'asc' ? ' ↑' : ' ↓')}
+                </TableCell>
+                <TableCell 
+                  sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => {
+                    if (sortBy === 'created_at') {
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortBy('created_at');
+                      setSortOrder('desc');
+                    }
+                  }}
+                >
+                  <strong>Created</strong>
+                  {sortBy === 'created_at' && (sortOrder === 'asc' ? ' ↑' : ' ↓')}
+                </TableCell>
                 <TableCell align="center"><strong>Actions</strong></TableCell>
               </TableRow>
             </TableHead>
@@ -438,9 +550,17 @@ const Campaigns: React.FC = () => {
                       <Typography variant="body1" fontWeight="500">
                         {campaign.name}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {campaign.postcode} • {campaign.distance_miles} miles
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        🎯 {campaign.sector_name}
                       </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        📍 {campaign.postcode} • {campaign.distance_miles} miles • Max: {campaign.max_results}
+                      </Typography>
+                      {campaign.prompt_type === 'custom_search' && campaign.description && (
+                        <Typography variant="caption" color="primary.main" display="block" sx={{ mt: 0.5 }}>
+                          🔍 Custom: {campaign.description.substring(0, 50)}{campaign.description.length > 50 ? '...' : ''}
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -453,7 +573,7 @@ const Campaigns: React.FC = () => {
                     </TableCell>
                     <TableCell align="right">
                       <Typography variant="body1" fontWeight="600" color="primary">
-                        {campaign.leads_created}
+                        {campaign.total_leads || 0}
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -586,106 +706,6 @@ const Campaigns: React.FC = () => {
         </TableContainer>
       </Paper>
 
-      {/* Quick Actions */}
-      <Grid container spacing={2} sx={{ mt: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/campaigns/new')}
-            sx={{ py: 1.5, borderRadius: 2, textTransform: 'none' }}
-          >
-            New Campaign
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<StarIcon />}
-            onClick={() => navigate('/leads?status=new')}
-            sx={{ py: 1.5, borderRadius: 2, textTransform: 'none' }}
-          >
-            New Leads
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<CheckCircleIcon />}
-            onClick={() => navigate('/leads?status=qualified')}
-            sx={{ py: 1.5, borderRadius: 2, textTransform: 'none' }}
-          >
-            Qualified Leads
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<CampaignIcon />}
-            onClick={() => navigate('/campaigns')}
-            sx={{ py: 1.5, borderRadius: 2, textTransform: 'none' }}
-          >
-            All Campaigns
-          </Button>
-        </Grid>
-      </Grid>
-
-      {/* Tips Section */}
-      <Paper sx={{ mt: 3, p: 3, borderRadius: 3, background: '#f8f9fa' }}>
-        <Typography variant="h6" gutterBottom fontWeight="600">
-          💡 Lead Generation Tips
-        </Typography>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>📍</Typography>
-              <Box>
-                <Typography variant="subtitle2" fontWeight="600">Location Targeting</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Use specific postcodes and reasonable distances (10-30 miles) for better results. Target areas where you can easily travel for site visits.
-                </Typography>
-              </Box>
-            </Box>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>👥</Typography>
-              <Box>
-                <Typography variant="subtitle2" fontWeight="600">Follow Up Quickly</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Contact new leads within 24-48 hours while they're still warm. Set up follow-up reminders and track your contact attempts.
-                </Typography>
-              </Box>
-            </Box>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>🎯</Typography>
-              <Box>
-                <Typography variant="subtitle2" fontWeight="600">Quality Over Quantity</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Start with smaller, more focused campaigns (50-100 leads) and test your approach before running larger searches.
-                </Typography>
-              </Box>
-            </Box>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>📊</Typography>
-              <Box>
-                <Typography variant="subtitle2" fontWeight="600">Track Your Success</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Monitor which campaign types and prompts generate the best leads. Use this data to improve future campaigns.
-                </Typography>
-              </Box>
-            </Box>
-          </Grid>
-        </Grid>
-      </Paper>
     </Container>
   );
 };

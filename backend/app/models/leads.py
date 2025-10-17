@@ -69,6 +69,7 @@ class LeadGenerationCampaign(BaseModel):
     
     # Status and tracking
     status = Column(Enum(LeadGenerationStatus), default=LeadGenerationStatus.DRAFT, nullable=False)
+    task_id = Column(String(255), nullable=True)  # Celery task ID for tracking
     total_found = Column(Integer, default=0)
     leads_created = Column(Integer, default=0)
     duplicates_found = Column(Integer, default=0)

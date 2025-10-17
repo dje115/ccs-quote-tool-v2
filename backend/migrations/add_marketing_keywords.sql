@@ -8,3 +8,4 @@ ADD COLUMN IF NOT EXISTS marketing_keywords JSON DEFAULT '[]'::json;
 COMMENT ON COLUMN tenants.marketing_keywords IS 'SEO/Marketing keywords extracted from AI auto-fill analysis, used for marketing campaigns and content generation';
 
 
+

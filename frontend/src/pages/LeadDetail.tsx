@@ -44,7 +44,7 @@ const LeadDetail: React.FC = () => {
       // Fetch from campaigns API - this is a discovery/campaign lead
       // We need to get all leads and find the one with this ID
       const response = await campaignAPI.listAllLeads();
-      const foundLead = response.data.find((l: any) => l.id === id);
+      const foundLead = response.data.data.find((l: any) => l.id === id);
       setLead(foundLead);
     } catch (error) {
       console.error('Error loading discovery:', error);
@@ -344,14 +344,6 @@ const LeadDetail: React.FC = () => {
               )}
             </Grid>
 
-            {lead.description && (
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Description
-                </Typography>
-                <Typography>{lead.description}</Typography>
-              </Box>
-            )}
 
             {lead.project_value && (
               <Box sx={{ mt: 2 }}>

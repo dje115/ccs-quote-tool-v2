@@ -233,3 +233,4 @@ Once in CRM, users can move customers through stages:
 - **Lead score preserved**: The AI-calculated lead score from the campaign is carried over to the CRM record.
 
 
+

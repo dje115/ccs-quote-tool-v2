@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CCS Quote Tool v2 API",
     description="Multi-tenant SaaS CRM and Quoting Platform with AI-powered features",
-    version="2.0.0",
+    version="2.6.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",

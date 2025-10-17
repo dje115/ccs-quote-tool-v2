@@ -19,6 +19,36 @@ class CompaniesHouseService:
         self.api_key = api_key or settings.COMPANIES_HOUSE_API_KEY
         self.timeout = 30.0
     
+    async def search_company(self, company_name: str) -> Optional[Dict[str, Any]]:
+        """Search for a company by name"""
+        try:
+            headers = {'Authorization': self.api_key}
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/search/companies",
+                    headers=headers,
+                    params={'q': company_name, 'items_per_page': 1}
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                if data.get('items'):
+                    company = data['items'][0]
+                    return {
+                        'company_number': company.get('company_number', ''),
+                        'company_status': company.get('company_status', ''),
+                        'company_type': company.get('company_type', ''),
+                        'title': company.get('title', ''),
+                        'address_snippet': company.get('address_snippet', ''),
+                        'description': company.get('description', ''),
+                        'date_of_creation': company.get('date_of_creation', '')
+                    }
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ Companies House search error: {e}")
+            return None
+    
     async def get_company_profile(self, company_number: str) -> Dict[str, Any]:
         """Get comprehensive company profile"""
         try:

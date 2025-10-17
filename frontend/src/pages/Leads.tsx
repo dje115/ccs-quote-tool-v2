@@ -68,6 +68,7 @@ interface Lead {
   campaign_id: string;
   campaign_name?: string;
   description?: string;
+  qualification_reason?: string;
   project_value?: string;
   timeline?: string;
   created_at: string;
@@ -107,7 +108,7 @@ const Leads: React.FC = () => {
         sort_order: sortOrder
       };
       const response = await campaignAPI.listAllLeads(params);
-      setLeads(response.data || []);
+      setLeads(response.data?.data || []);
     } catch (error) {
       console.error('Error loading discoveries:', error);
     } finally {
@@ -561,8 +562,40 @@ const Leads: React.FC = () => {
                         </Typography>
                       )}
                       {lead.contact_phone && (
-                        <Typography variant="caption" display="block" color="text.secondary">
-                          {lead.contact_phone}
+                        <Typography 
+                          variant="caption" 
+                          display="block" 
+                          color="primary"
+                          sx={{ 
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            '&:hover': { textDecoration: 'none' }
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`tel:${lead.contact_phone}`, '_self');
+                          }}
+                        >
+                          📞 {lead.contact_phone}
+                        </Typography>
+                      )}
+                      {lead.website && (
+                        <Typography 
+                          variant="caption" 
+                          display="block" 
+                          color="primary"
+                          sx={{ 
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            '&:hover': { textDecoration: 'none' }
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = lead.website.startsWith('http') ? lead.website : `https://${lead.website}`;
+                            window.open(url, '_blank');
+                          }}
+                        >
+                          🌐 {lead.website}
                         </Typography>
                       )}
                     </Box>

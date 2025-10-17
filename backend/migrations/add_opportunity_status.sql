@@ -14,3 +14,4 @@ COMMENT ON TYPE customerstatus IS 'Customer lifecycle stages: LEAD → PROSPECT 
 -- This doesn't affect application logic as we don't rely on enum ordering
 
 
+
