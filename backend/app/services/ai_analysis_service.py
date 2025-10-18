@@ -606,6 +606,18 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             
             analysis = json.loads(result_text)
             
+            # Normalize competitors field to always be an array
+            if 'competitors' in analysis:
+                competitors = analysis['competitors']
+                # If competitors is a string (description), keep it as-is since the frontend handles both formats
+                # If it's already an array, keep it as-is
+                # This ensures consistent handling in the frontend
+                if isinstance(competitors, str):
+                    # If it looks like a single company name (no common description words), keep as array of one
+                    if not any(word in competitors.lower() for word in ['contractor', 'firm', 'company', 'include', 'type', 'local', 'regional', 'national']):
+                        analysis['competitors'] = [competitors]
+                    # Otherwise keep as description string - frontend will display as-is
+            
             # Calculate lead score based on AI analysis
             analysis['lead_score'] = self._calculate_lead_score(analysis)
             

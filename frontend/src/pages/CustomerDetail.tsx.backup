@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   Container,
   Paper,
@@ -63,7 +63,6 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI } from '../services/api';
-import api from '../services/api';
 import CustomerOverviewTab from '../components/CustomerOverviewTab';
 import ActivityCenter from '../components/ActivityCenter';
 import ContactDialog from '../components/ContactDialog';
@@ -326,12 +325,12 @@ const CustomerDetail: React.FC = () => {
         include_existing_customers: false
       };
 
-      const response = await api.post('/campaigns/', campaignData);
+      const response = await campaignAPI.create(campaignData);
       
       if (response.data) {
         // Campaign created as DRAFT - user can review and start it manually
         setAiAnalysisSuccess(
-          `✅ Campaign "${campaignName}" created as DRAFT! ` +
+          `Ô£à Campaign "${campaignName}" created as DRAFT! ` +
           `It will analyze ${competitorsToAdd.length} ${competitorsToAdd.length === 1 ? 'company' : 'companies'}. ` +
           `Go to Campaigns to review and start it.`
         );
@@ -450,6 +449,7 @@ const CustomerDetail: React.FC = () => {
           Edit
         </Button>
       </Box>
+
       {/* AI Analysis Alerts */}
       {aiAnalysisError && (
         <Alert severity="error" onClose={() => setAiAnalysisError(null)} sx={{ mb: 2 }}>
@@ -461,6 +461,7 @@ const CustomerDetail: React.FC = () => {
           {aiAnalysisSuccess}
         </Alert>
       )}
+
       {/* Modern Tabbed Interface */}
       <Paper sx={{ mb: 3 }}>
         {/* First Row of Tabs - Intelligence & Data */}
@@ -525,6 +526,7 @@ const CustomerDetail: React.FC = () => {
           <Tab icon={<DescriptionIcon />} iconPosition="start" label="Quotes" />
         </Tabs>
       </Paper>
+
       {/* Tab Panel 0: Overview - World-Class AI-Powered CRM */}
       {currentTab === 0 && customer && (
         <CustomerOverviewTab
@@ -536,6 +538,7 @@ const CustomerDetail: React.FC = () => {
           onStatusChange={handleStatusChange}
         />
       )}
+
       {/* Tab Panel 1: Discovery Intelligence - Data from Campaign Phase */}
       {currentTab === 1 && customer && (
         <Box>
@@ -602,71 +605,43 @@ const CustomerDetail: React.FC = () => {
               {/* Key Metrics Grid */}
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 {customer.ai_analysis_raw.business_sector && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Business Sector</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.business_sector}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.business_size_category && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Company Size</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.business_size_category}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.estimated_employees && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Estimated Employees</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.estimated_employees}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.estimated_revenue && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Estimated Revenue</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.estimated_revenue}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.technology_maturity && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Technology Maturity</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.technology_maturity}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.it_budget_estimate && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Budget Estimate</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.it_budget_estimate}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.growth_potential && (
-                  <Grid
-                    size={{
-                      xs: 12,
-                      sm: 6
-                    }}>
+                  <Grid item xs={12} sm={6}>
                     <Typography variant="caption" color="text.secondary">Growth Potential</Typography>
                     <Chip 
                       label={customer.ai_analysis_raw.growth_potential} 
@@ -759,12 +734,15 @@ const CustomerDetail: React.FC = () => {
           {!customer.description && (!customer.ai_analysis_raw || Object.keys(customer.ai_analysis_raw).length === 0) && (
             <Paper sx={{ p: 3 }}>
               <Alert severity="info">
-                No discovery intelligence data available. This customer was not created from a campaign discovery.
+                <Typography variant="body2">
+                  No discovery intelligence data available. This customer was not created from a campaign discovery.
+                </Typography>
               </Alert>
             </Paper>
           )}
         </Box>
       )}
+
       {/* Tab Panel 2: AI Analysis */}
       {currentTab === 2 && (
         <Box>
@@ -832,11 +810,7 @@ const CustomerDetail: React.FC = () => {
               <Divider sx={{ mb: 3 }} />
               
               <Grid container spacing={3}>
-                <Grid
-                  size={{
-                    xs: 12,
-                    md: 6
-                  }}>
+                <Grid item xs={12} md={6}>
                   {customer.ai_analysis_raw.business_sector && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Business Sector</Typography>
@@ -857,11 +831,7 @@ const CustomerDetail: React.FC = () => {
                     </Box>
                   )}
                 </Grid>
-                <Grid
-                  size={{
-                    xs: 12,
-                    md: 6
-                  }}>
+                <Grid item xs={12} md={6}>
                   {customer.ai_analysis_raw.it_budget_estimate && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>IT Budget Estimate</Typography>
@@ -902,7 +872,7 @@ const CustomerDetail: React.FC = () => {
               {customer.ai_analysis_raw.technology_needs && (
                 <Box sx={{ mt: 3, p: 3, bgcolor: 'primary.50', borderRadius: 2, borderLeft: 4, borderColor: 'primary.main' }}>
                   <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    💻 Technology Needs
+                    ­ƒÆ╗ Technology Needs
                   </Typography>
                   <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
                     {customer.ai_analysis_raw.technology_needs}
@@ -919,6 +889,7 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
+
       {/* Tab Panel 3: Financial Data */}
       {currentTab === 3 && (
         <Box>
@@ -933,14 +904,10 @@ const CustomerDetail: React.FC = () => {
               
               <Grid container spacing={3}>
                 {/* Current Financial Position */}
-                <Grid
-                  size={{
-                    xs: 12,
-                    md: 6
-                  }}>
+                <Grid item xs={12} md={6}>
                   <Card sx={{ p: 2, bgcolor: '#e3f2fd' }}>
                     <Typography variant="h6" color="primary" gutterBottom>
-                      💰 Current Financial Position
+                      ­ƒÆ░ Current Financial Position
                     </Typography>
                     {customer.companies_house_data.accounts_detail.shareholders_funds && (
                       <Box sx={{ mb: 2 }}>
@@ -970,14 +937,10 @@ const CustomerDetail: React.FC = () => {
                 </Grid>
                 
                 {/* Financial Trends */}
-                <Grid
-                  size={{
-                    xs: 12,
-                    md: 6
-                  }}>
+                <Grid item xs={12} md={6}>
                   <Card sx={{ p: 2, bgcolor: '#f3e5f5' }}>
                     <Typography variant="h6" color="secondary" gutterBottom>
-                      📈 Financial Trends
+                      ­ƒôê Financial Trends
                     </Typography>
                     {customer.companies_house_data.accounts_detail.revenue_growth && (
                       <Box sx={{ mb: 2 }}>
@@ -1028,7 +991,7 @@ const CustomerDetail: React.FC = () => {
                customer.companies_house_data.accounts_detail.detailed_financials.length > 0 && (
                 <Box sx={{ mt: 3 }}>
                   <Typography variant="h6" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    📊 Financial History
+                    ­ƒôè Financial History
                   </Typography>
                   <TableContainer component={Paper}>
                     <Table size="small">
@@ -1057,19 +1020,19 @@ const CustomerDetail: React.FC = () => {
                             <TableCell>
                               {yearData.turnover ? 
                                 (typeof yearData.turnover === 'number' ? 
-                                  `£${yearData.turnover.toLocaleString()}` : yearData.turnover) : 
+                                  `┬ú${yearData.turnover.toLocaleString()}` : yearData.turnover) : 
                                 'N/A'}
                             </TableCell>
                             <TableCell>
                               {yearData.shareholders_funds ? 
                                 (typeof yearData.shareholders_funds === 'number' ? 
-                                  `£${yearData.shareholders_funds.toLocaleString()}` : yearData.shareholders_funds) : 
+                                  `┬ú${yearData.shareholders_funds.toLocaleString()}` : yearData.shareholders_funds) : 
                                 'N/A'}
                             </TableCell>
                             <TableCell>
                               {yearData.cash_at_bank ? 
                                 (typeof yearData.cash_at_bank === 'number' ? 
-                                  `£${yearData.cash_at_bank.toLocaleString()}` : yearData.cash_at_bank) : 
+                                  `┬ú${yearData.cash_at_bank.toLocaleString()}` : yearData.cash_at_bank) : 
                                 'N/A'}
                             </TableCell>
                             <TableCell sx={{ 
@@ -1077,7 +1040,7 @@ const CustomerDetail: React.FC = () => {
                             }}>
                               {yearData.profit_before_tax ? 
                                 (typeof yearData.profit_before_tax === 'number' ? 
-                                  `£${yearData.profit_before_tax.toLocaleString()}` : yearData.profit_before_tax) : 
+                                  `┬ú${yearData.profit_before_tax.toLocaleString()}` : yearData.profit_before_tax) : 
                                 'N/A'}
                             </TableCell>
                             <TableCell>
@@ -1094,7 +1057,7 @@ const CustomerDetail: React.FC = () => {
               {/* AI Analysis Summary (from v1) */}
               <Box sx={{ mt: 3 }}>
                 <Typography variant="h6" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  🎯 Analysis Summary
+                  ­ƒÄ» Analysis Summary
                 </Typography>
                 
                 {/* Financial Health Analysis */}
@@ -1178,6 +1141,7 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
+
       {/* Tab Panel 4: Addresses */}
       {currentTab === 4 && (
         <Box>
@@ -1191,7 +1155,7 @@ const CustomerDetail: React.FC = () => {
                 
                 <Alert severity="info" sx={{ mb: 3 }}>
                   <Typography variant="body2">
-                    📍 <strong>Address Selection</strong><br />
+                    ­ƒôì <strong>Address Selection</strong><br />
                     Select interesting addresses to create targeted lead generation campaigns. Mark irrelevant locations as "Not this business" to hide them.
                   </Typography>
                 </Alert>
@@ -1231,17 +1195,17 @@ const CustomerDetail: React.FC = () => {
                             
                             {place.formatted_address && (
                               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                                📍 {place.formatted_address}
+                                ­ƒôì {place.formatted_address}
                               </Typography>
                             )}
                             {place.formatted_phone_number && (
                               <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                                📞 {place.formatted_phone_number}
+                                ­ƒô× {place.formatted_phone_number}
                               </Typography>
                             )}
                             {place.rating && (
                               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                ⭐ Rating: {place.rating}/5 {place.user_ratings_total && `(${place.user_ratings_total} reviews)`}
+                                Ô¡É Rating: {place.rating}/5 {place.user_ratings_total && `(${place.user_ratings_total} reviews)`}
                               </Typography>
                             )}
                             
@@ -1302,7 +1266,7 @@ const CustomerDetail: React.FC = () => {
                     <Accordion>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                         <Typography>
-                          👁️ Show Excluded Addresses ({customer.excluded_addresses.length})
+                          ­ƒæü´©Å Show Excluded Addresses ({customer.excluded_addresses.length})
                         </Typography>
                       </AccordionSummary>
                       <AccordionDetails>
@@ -1319,7 +1283,7 @@ const CustomerDetail: React.FC = () => {
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Box>
                                     <Typography variant="subtitle2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      🚫 {place.name}
+                                      ­ƒÜ½ {place.name}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
                                       {place.formatted_address}
@@ -1360,7 +1324,7 @@ const CustomerDetail: React.FC = () => {
                                       }
                                     }}
                                   >
-                                    ↺ Restore
+                                    Ôå║ Restore
                                   </Button>
                                 </Box>
                               </Card>
@@ -1381,6 +1345,7 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
+
       {/* Tab Panel 5: Directors */}
       {currentTab === 5 && (
         <Box>
@@ -1394,13 +1359,7 @@ const CustomerDetail: React.FC = () => {
               
               <Grid container spacing={3}>
                 {customer.companies_house_data.accounts_detail.active_directors.map((director: any, index: number) => (
-                  <Grid
-                    key={index}
-                    size={{
-                      xs: 12,
-                      sm: 6,
-                      md: 4
-                    }}>
+                  <Grid item xs={12} sm={6} md={4} key={index}>
                     <Card variant="outlined" sx={{ height: '100%', '&:hover': { boxShadow: 3 }, transition: 'box-shadow 0.3s' }}>
                       <CardContent>
                         <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#1976d2' }}>
@@ -1414,27 +1373,27 @@ const CustomerDetail: React.FC = () => {
                         />
                         {director.appointed_on && (
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            📅 Appointed: {new Date(director.appointed_on).toLocaleDateString()}
+                            ­ƒôà Appointed: {new Date(director.appointed_on).toLocaleDateString()}
                           </Typography>
                         )}
                         {director.nationality && (
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            🌍 Nationality: {String(director.nationality)}
+                            ­ƒîì Nationality: {String(director.nationality)}
                           </Typography>
                         )}
                         {director.occupation && (
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            💼 Occupation: {String(director.occupation)}
+                            ­ƒÆ╝ Occupation: {String(director.occupation)}
                           </Typography>
                         )}
                         {director.address && typeof director.address === 'string' && (
                           <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
-                            📍 {director.address}
+                            ­ƒôì {director.address}
                           </Typography>
                         )}
                         {director.address && typeof director.address === 'object' && (
                           <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
-                            📍 {[director.address.premises, director.address.address_line_1, director.address.locality, director.address.postal_code].filter(Boolean).join(', ')}
+                            ­ƒôì {[director.address.premises, director.address.address_line_1, director.address.locality, director.address.postal_code].filter(Boolean).join(', ')}
                           </Typography>
                         )}
                         <Button 
@@ -1462,6 +1421,7 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
+
       {/* Tab Panel 6: Business Intelligence - Opportunities, Competitors, Risks */}
       {currentTab === 6 && (
         <Box>
@@ -1476,7 +1436,7 @@ const CustomerDetail: React.FC = () => {
               <Grid container spacing={2}>
                 {/* Website Title & Description */}
                 {customer.website_data.website_title && (
-                  <Grid size={12}>
+                  <Grid item xs={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Website Title
                     </Typography>
@@ -1487,7 +1447,7 @@ const CustomerDetail: React.FC = () => {
                 )}
                 
                 {customer.website_data.website_description && (
-                  <Grid size={12}>
+                  <Grid item xs={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Description
                     </Typography>
@@ -1499,7 +1459,7 @@ const CustomerDetail: React.FC = () => {
                 
                 {/* Keywords/Key Phrases */}
                 {customer.website_data.key_phrases && customer.website_data.key_phrases.length > 0 && (
-                  <Grid size={12}>
+                  <Grid item xs={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Key Topics & Keywords
                     </Typography>
@@ -1519,7 +1479,7 @@ const CustomerDetail: React.FC = () => {
                 
                 {/* Contact Information from Website */}
                 {customer.website_data.contact_info && customer.website_data.contact_info.length > 0 && (
-                  <Grid size={12}>
+                  <Grid item xs={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Contact Information Found
                     </Typography>
@@ -1539,7 +1499,7 @@ const CustomerDetail: React.FC = () => {
                 
                 {/* Locations Mentioned */}
                 {customer.website_data.locations && customer.website_data.locations.length > 0 && (
-                  <Grid size={12}>
+                  <Grid item xs={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Locations Mentioned
                     </Typography>
@@ -1651,12 +1611,14 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
+
       {/* Tab Panel 7: Activity - AI-Powered Activity Center */}
       {currentTab === 7 && customer && (
         <Paper sx={{ p: 0 }}>
           <ActivityCenter customerId={customer.id} />
         </Paper>
       )}
+
       {/* Tab Panel 8: Quotes */}
       {currentTab === 8 && (
         <Paper sx={{ p: 3 }}>
@@ -1688,6 +1650,7 @@ const CustomerDetail: React.FC = () => {
           </Button>
         </Paper>
       )}
+
       {/* Contact Dialog */}
       <ContactDialog
         open={addContactOpen}
@@ -1696,6 +1659,7 @@ const CustomerDetail: React.FC = () => {
         contact={editingContact}
         customerId={id!}
       />
+
     </Container>
   );
 };
