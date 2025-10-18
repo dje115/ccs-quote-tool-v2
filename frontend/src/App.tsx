@@ -24,6 +24,8 @@ import Leads from './pages/Leads';
 import LeadDetail from './pages/LeadDetail';
 import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
+import DynamicBusinessSearch from './pages/DynamicBusinessSearch';
+import CompanyListImportCampaign from './pages/CompanyListImportCampaign';
 import CampaignDetail from './pages/CampaignDetail';
 import Quotes from './pages/Quotes';
 import Users from './pages/Users';
@@ -136,7 +138,7 @@ function App() {
             }
           />
           <Route
-            path="/campaigns/new"
+            path="/campaigns/create"
             element={
               <ProtectedRoute>
                 <CampaignCreate />
@@ -144,10 +146,18 @@ function App() {
             }
           />
           <Route
-            path="/campaigns/create"
+            path="/campaigns/new"
             element={
               <ProtectedRoute>
-                <CampaignCreate />
+                <DynamicBusinessSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns/import"
+            element={
+              <ProtectedRoute>
+                <CompanyListImportCampaign />
               </ProtectedRoute>
             }
           />

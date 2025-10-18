@@ -174,7 +174,7 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
             <Grid container spacing={2}>
               {/* Website */}
               {customer?.website && (
-                <Grid item size={12}>
+                <Grid size={12}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <WebsiteIcon color="primary" />
                     <Box sx={{ flexGrow: 1 }}>
@@ -230,7 +230,7 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
 
               {/* Company Registration */}
               {customer?.company_registration && (
-                <Grid item size={12}>
+                <Grid size={12}>
                   <Box sx={{ mt: 2 }}>
                     <Typography variant="caption" color="text.secondary" display="block">
                       Company Registration
@@ -259,7 +259,7 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
               )}
 
               {/* Created & Updated Dates */}
-              <Grid item size={12}>
+              <Grid size={12}>
                 <Divider sx={{ my: 2 }} />
                 <Box sx={{ display: 'flex', gap: 3, justifyContent: 'space-between', flexWrap: 'wrap' }}>
                   {customer?.created_at && (
@@ -377,7 +377,7 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
               <Grid container spacing={2}>
                 {/* LinkedIn */}
                 {(customer.linkedin_url || customer.linkedin_data) && (
-                  <Grid item size={{ xs: 12 }}>
+                  <Grid size={{ xs: 12 }}>
                     <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
                       <Typography variant="subtitle2" fontWeight="600" gutterBottom sx={{ color: '#0077b5' }}>
                         🔗 LinkedIn Profile
@@ -417,21 +417,21 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
                 {customer.website_data && (
                   <>
                     {customer.website_data.website_title && (
-                      <Grid item size={{ xs: 12 }}>
+                      <Grid size={{ xs: 12 }}>
                         <Typography variant="caption" color="text.secondary">Website Title</Typography>
                         <Typography variant="body1" fontWeight="600">{customer.website_data.website_title}</Typography>
                       </Grid>
                     )}
                     
                     {customer.website_data.website_description && (
-                      <Grid item size={{ xs: 12 }}>
+                      <Grid size={{ xs: 12 }}>
                         <Typography variant="caption" color="text.secondary">Description</Typography>
                         <Typography variant="body2">{customer.website_data.website_description}</Typography>
                       </Grid>
                     )}
 
                     {customer.website_data.key_phrases && Array.isArray(customer.website_data.key_phrases) && customer.website_data.key_phrases.length > 0 && (
-                      <Grid item size={{ xs: 12 }}>
+                      <Grid size={{ xs: 12 }}>
                         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
                           Key Topics & Keywords
                         </Typography>
@@ -450,7 +450,7 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
                     )}
 
                     {customer.website_data.contact_info && Array.isArray(customer.website_data.contact_info) && customer.website_data.contact_info.length > 0 && (
-                      <Grid item size={{ xs: 12 }}>
+                      <Grid size={{ xs: 12 }}>
                         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
                           Contact Info Found
                         </Typography>
@@ -594,25 +594,25 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
           {/* KEY STATS DASHBOARD */}
           <Paper sx={{ p: 3, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
             <Grid container spacing={2}>
-              <Grid item size={{ xs: 6, sm: 6 }}>
+              <Grid size={{ xs: 6, sm: 6 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" fontWeight="bold">{customer?.lead_score || 0}</Typography>
                   <Typography variant="caption">Lead Score</Typography>
                 </Box>
               </Grid>
-              <Grid item size={{ xs: 6, sm: 6 }}>
+              <Grid size={{ xs: 6, sm: 6 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" fontWeight="bold">{healthScore}%</Typography>
                   <Typography variant="caption">Health Score</Typography>
                 </Box>
               </Grid>
-              <Grid item size={{ xs: 6, sm: 6 }}>
+              <Grid size={{ xs: 6, sm: 6 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" fontWeight="bold">{contacts?.length || 0}</Typography>
                   <Typography variant="caption">Contacts</Typography>
                 </Box>
               </Grid>
-              <Grid item size={{ xs: 6, sm: 6 }}>
+              <Grid size={{ xs: 6, sm: 6 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Chip 
                     label={customer?.status || 'Unknown'} 
@@ -840,4 +840,6 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
 };
 
 export default CustomerOverviewTab;
+
+
 

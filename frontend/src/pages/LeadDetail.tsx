@@ -174,7 +174,7 @@ const LeadDetail: React.FC = () => {
       <Grid container spacing={3}>
         {/* Quick Telesales Summary */}
         {lead.qualification_reason && (
-          <Grid item size={12}>
+          <Grid size={12}>
             <Paper sx={{ p: 3, mb: 3, bgcolor: 'success.light', border: '2px solid', borderColor: 'success.main' }}>
               <Typography variant="h6" gutterBottom sx={{ color: 'success.dark', fontWeight: 'bold' }}>
                 📞 Quick Telesales Summary
@@ -196,7 +196,6 @@ const LeadDetail: React.FC = () => {
 
         {/* Left Sidebar - Status/Lead Score and Quick Actions */}
         <Grid
-          item
           size={{
             xs: 12,
             md: 4
@@ -275,7 +274,6 @@ const LeadDetail: React.FC = () => {
 
         {/* Company Information - Right side */}
         <Grid
-          item
           size={{
             xs: 12,
             md: 8
@@ -354,7 +352,7 @@ const LeadDetail: React.FC = () => {
               </Grid>
 
               {lead.address && (
-                <Grid item size={{ xs: 12 }}>
+                <Grid size={{ xs: 12 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <BusinessIcon color="action" />
                     <Box>
@@ -368,7 +366,6 @@ const LeadDetail: React.FC = () => {
               )}
 
               <Grid
-                item
                 size={{
                   xs: 12,
                   sm: 6
@@ -386,7 +383,6 @@ const LeadDetail: React.FC = () => {
 
               {lead.campaign_name && (
                 <Grid
-                  item
                   size={{
                     xs: 12,
                     sm: 6
@@ -404,7 +400,7 @@ const LeadDetail: React.FC = () => {
               )}
 
               {lead.website && (
-                <Grid item size={{ xs: 12 }}>
+                <Grid size={{ xs: 12 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <WebsiteIcon color="action" />
                     <Box>
