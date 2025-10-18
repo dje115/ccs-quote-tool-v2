@@ -511,8 +511,14 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 Focus on needs that align with what we offer.
 
             9. **Competitive Landscape**: Identify 5-10 actual UK competitor companies by name that operate in the same sector/market as this business.
+                Focus on companies that:
+                - Operate in the SAME LOCAL AREA or region (if location data available)
+                - Have SIMILAR COMPANY SIZE (not just any company in the sector)
+                - Offer SIMILAR SPECIFIC SERVICES OR PRODUCTS (not just the same broad sector)
+                - Have COMPARABLE BUSINESS MODELS (B2B, B2C, retail, etc.)
                 Include their company names only (one per line), so they can be researched for lead generation.
-                These should be real, identifiable UK companies that offer similar products/services.
+                These should be REAL, IDENTIFIABLE UK companies that directly compete with this specific business based on their market position, size, and offerings.
+                IMPORTANT: Avoid just listing the largest national players if this is a local/regional business. Focus on actual competitors to THIS specific company.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
                 Be specific about which of our offerings might align with their needs.
