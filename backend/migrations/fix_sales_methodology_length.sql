@@ -11,3 +11,5 @@ COMMENT ON COLUMN tenants.sales_methodology IS 'Sales approach methodology (e.g.
 
 
 
+
+

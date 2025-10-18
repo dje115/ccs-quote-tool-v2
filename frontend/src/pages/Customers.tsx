@@ -105,18 +105,31 @@ const Customers: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
           Customers
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddCustomer}
-        >
-          Add Customer
-        </Button>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          Comprehensive Customer Relationship Management
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddCustomer}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
+          >
+            Add Customer
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>

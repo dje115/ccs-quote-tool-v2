@@ -220,7 +220,7 @@ const AIBusinessIntelligence: React.FC = () => {
     if (!currentValue && !hasSuggestion) return null;
 
     return (
-      <Grid item xs={12}>
+      <Grid size={12}>
         <Card elevation={3} sx={{ borderLeft: 4, borderColor: color }}>
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>

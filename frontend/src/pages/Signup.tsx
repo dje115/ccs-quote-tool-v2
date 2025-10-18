@@ -98,7 +98,7 @@ const Signup: React.FC = () => {
         return (
           <>
             <Grid container spacing={2}>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <TextField
                   fullWidth
                   label="First Name"
@@ -108,7 +108,7 @@ const Signup: React.FC = () => {
                   margin="normal"
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <TextField
                   fullWidth
                   label="Last Name"
@@ -119,7 +119,6 @@ const Signup: React.FC = () => {
                 />
               </Grid>
             </Grid>
-            
             <TextField
               fullWidth
               label="Admin Email"
@@ -130,7 +129,6 @@ const Signup: React.FC = () => {
               margin="normal"
               helperText="This will be your login email"
             />
-            
             <TextField
               fullWidth
               label="Password"

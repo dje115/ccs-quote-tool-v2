@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
+  Container,
   Grid,
   Card,
   CardContent,
@@ -293,23 +294,29 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            CRM Dashboard
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            AI-Powered Insights & Analytics
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+    <>
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
+          CRM Dashboard
+        </Typography>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          AI-Powered Insights & Analytics
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
           <Button
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
             onClick={() => navigate('/customers/new')}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
           >
             New Customer
           </Button>
@@ -318,12 +325,18 @@ const Dashboard: React.FC = () => {
             color="primary"
             startIcon={<CampaignIcon />}
             onClick={() => navigate('/campaigns')}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
           >
             New Campaign
           </Button>
         </Box>
       </Box>
-
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
@@ -344,13 +357,17 @@ const Dashboard: React.FC = () => {
           />
         </Tabs>
       </Box>
-
       {/* Tab 0: Overview */}
       {currentTab === 0 && (
         <>
           {/* Key Stats */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} sm={6} md={3}>
+          <Grid container spacing={3} sx={{ mb: 4, width: '100%', justifyContent: 'center' }}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
               <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', cursor: 'pointer' }} onClick={() => navigate('/customers?status=lead')}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -364,7 +381,12 @@ const Dashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
               <Card sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white', cursor: 'pointer' }} onClick={() => navigate('/customers?status=prospect')}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -378,7 +400,12 @@ const Dashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
               <Card sx={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: 'white', cursor: 'pointer' }} onClick={() => navigate('/customers?status=customer')}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -392,7 +419,12 @@ const Dashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
               <Card sx={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', color: 'white'}}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -408,8 +440,12 @@ const Dashboard: React.FC = () => {
           </Grid>
 
           {/* Secondary Stats */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={6} md={3}>
+          <Grid container spacing={3} sx={{ mb: 4, width: '100%', justifyContent: 'center' }}>
+            <Grid
+              size={{
+                xs: 6,
+                md: 3
+              }}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="primary" fontWeight="bold">
                   {stats.conversion_rate}%
@@ -417,7 +453,11 @@ const Dashboard: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Conversion Rate</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid
+              size={{
+                xs: 6,
+                md: 3
+              }}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="success.main" fontWeight="bold">
                   {formatCurrency(stats.avg_deal_value)}
@@ -425,7 +465,11 @@ const Dashboard: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Avg Deal Value</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid
+              size={{
+                xs: 6,
+                md: 3
+              }}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="warning.main" fontWeight="bold">
                   {stats.quotes_pending}
@@ -433,7 +477,11 @@ const Dashboard: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">Pending Quotes</Typography>
               </Paper>
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid
+              size={{
+                xs: 6,
+                md: 3
+              }}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="info.main" fontWeight="bold">
                   {stats.total_cold_leads}
@@ -444,8 +492,12 @@ const Dashboard: React.FC = () => {
           </Grid>
 
           {/* Top Leads & Recent Activity */}
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+          <Grid container spacing={3} sx={{ width: '100%' }}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 6
+              }}>
               <Card>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -496,7 +548,11 @@ const Dashboard: React.FC = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 6
+              }}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -523,11 +579,10 @@ const Dashboard: React.FC = () => {
           </Grid>
         </>
       )}
-
       {/* Tab 1: Analytics */}
       {currentTab === 1 && (
         <Grid container spacing={3}>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -538,7 +593,11 @@ const Dashboard: React.FC = () => {
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -549,7 +608,11 @@ const Dashboard: React.FC = () => {
             </Card>
           </Grid>
 
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -560,7 +623,7 @@ const Dashboard: React.FC = () => {
             </Card>
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -598,12 +661,11 @@ const Dashboard: React.FC = () => {
           </Grid>
         </Grid>
       )}
-
       {/* Tab 2: AI Assistant */}
       {currentTab === 2 && (
         <Grid container spacing={3}>
           {/* AI Query Input Card */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={1} mb={2}>
@@ -640,7 +702,11 @@ const Dashboard: React.FC = () => {
           {/* AI Response with Visualization */}
           {aiResponse && (
             <>
-              <Grid item xs={12} md={aiChartData ? 6 : 12}>
+              <Grid
+                size={{
+                  xs: 12,
+                  md: aiChartData ? 6 : 12
+                }}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent>
                     <Box display="flex" alignItems="center" gap={1} mb={2}>
@@ -680,7 +746,11 @@ const Dashboard: React.FC = () => {
 
               {/* Dynamic Visualization */}
               {aiChartData && (
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card sx={{ height: '100%' }}>
                     <CardContent>
                       <Box display="flex" alignItems="center" gap={1} mb={2}>
@@ -729,7 +799,7 @@ const Dashboard: React.FC = () => {
           )}
 
           {/* Example/Quick Action Questions */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card>
               <CardContent>
                 <Typography variant="h6" fontWeight="bold" gutterBottom>
@@ -765,11 +835,10 @@ const Dashboard: React.FC = () => {
           </Grid>
         </Grid>
       )}
-
       {/* Tab 3: AI Insights */}
       {currentTab === 3 && (
         <Grid container spacing={3}>
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Box display="flex" alignItems="center" gap={1} mb={2}>
               <LightbulbIcon color="warning" sx={{ fontSize: 32 }} />
               <Typography variant="h5" fontWeight="bold">
@@ -779,7 +848,12 @@ const Dashboard: React.FC = () => {
           </Grid>
 
           {ai_insights.map((insight, index) => (
-            <Grid item xs={12} md={6} key={index}>
+            <Grid
+              key={index}
+              size={{
+                xs: 12,
+                md: 6
+              }}>
               <Alert
                 severity={getPriorityColor(insight.priority) as any}
                 sx={{ height: '100%' }}
@@ -802,7 +876,7 @@ const Dashboard: React.FC = () => {
           ))}
 
           {ai_insights.length === 0 && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Card>
                 <CardContent sx={{ textAlign: 'center', py: 8 }}>
                   <LightbulbIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
@@ -818,7 +892,7 @@ const Dashboard: React.FC = () => {
           )}
         </Grid>
       )}
-
+    </Container>
       {/* Status Change Menu */}
       <Menu
         anchorEl={statusMenuAnchor}
@@ -839,7 +913,7 @@ const Dashboard: React.FC = () => {
           Mark as Inactive
         </MenuItem>
       </Menu>
-    </Box>
+    </>
   );
 };
 

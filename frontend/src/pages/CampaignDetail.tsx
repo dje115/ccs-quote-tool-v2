@@ -170,6 +170,11 @@ const CampaignDetail: React.FC = () => {
     );
   }
 
+  // Calculate accurate totals
+  const leadsCreated = campaign.leads_created || campaign.leads_created_count || leads.length || 0;
+  const duplicatesFound = campaign.duplicates_found || campaign.duplicates_count || 0;
+  const totalFound = campaign.total_found || campaign.total_found_count || (leadsCreated + duplicatesFound) || 0;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'running': return 'info';
@@ -216,17 +221,20 @@ const CampaignDetail: React.FC = () => {
           </Button>
         </Box>
       </Box>
-
       {/* Status Alert */}
       {campaign.status === 'running' && (
         <Alert severity="info" sx={{ mb: 3 }}>
           Campaign is currently running. This page will auto-refresh every 10 seconds.
         </Alert>
       )}
-
       {/* Statistics Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card sx={{ borderRadius: 2 }}>
             <CardContent>
               <Typography color="text.secondary" variant="overline">
@@ -243,156 +251,244 @@ const CampaignDetail: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card sx={{ borderRadius: 2 }}>
             <CardContent>
               <Typography color="text.secondary" variant="overline">
                 Total Found
               </Typography>
               <Typography variant="h4" fontWeight="600">
-                {campaign.total_found}
+                {totalFound}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card sx={{ borderRadius: 2 }}>
             <CardContent>
               <Typography color="text.secondary" variant="overline">
                 Leads Created
               </Typography>
               <Typography variant="h4" fontWeight="600" color="primary">
-                {campaign.leads_created}
+                {leadsCreated}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card sx={{ borderRadius: 2 }}>
             <CardContent>
               <Typography color="text.secondary" variant="overline">
                 Duplicates
               </Typography>
               <Typography variant="h4" fontWeight="600" color="text.secondary">
-                {campaign.duplicates_found}
+                {duplicatesFound}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-
       {/* Campaign Details */}
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-        <Typography variant="h6" fontWeight="600" gutterBottom>
+      <Paper sx={{ p: 3, mb: 3, borderRadius: 2, backgroundColor: '#fafafa' }}>
+        <Typography variant="h6" fontWeight="600" gutterBottom sx={{ color: 'primary.main' }}>
           Campaign Details
         </Typography>
-        <Divider sx={{ mb: 2 }} />
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">
-              Campaign Type:
-            </Typography>
-            <Typography variant="body1" fontWeight="500">
-              {campaign.prompt_type.replace(/_/g, ' ').toUpperCase()}
-            </Typography>
+        <Divider sx={{ mb: 3, borderColor: 'primary.main' }} />
+        <Grid container spacing={3}>
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 4
+            }}>
+            <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Campaign Type
+              </Typography>
+              <Typography variant="body1" fontWeight="600" sx={{ color: 'primary.main' }}>
+                {campaign.prompt_type?.replace(/_/g, ' ').toUpperCase() || 'Not specified'}
+              </Typography>
+            </Box>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">
-              Target Sector:
-            </Typography>
-            <Typography variant="body1" fontWeight="500" sx={{ color: 'primary.main' }}>
-              🎯 {campaign.sector_name || 'Not specified'}
-            </Typography>
+          
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 4
+            }}>
+            <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Target Sector
+              </Typography>
+              <Typography variant="body1" fontWeight="600" sx={{ color: 'success.main' }}>
+                🎯 {campaign.sector_name || 'Not specified'}
+              </Typography>
+            </Box>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">
-              Max Results:
-            </Typography>
-            <Typography variant="body1" fontWeight="500">
-              {campaign.max_results}
-            </Typography>
+
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 4
+            }}>
+            <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Max Results
+              </Typography>
+              <Typography variant="body1" fontWeight="600" sx={{ color: 'info.main' }}>
+                {campaign.max_results || 'Not specified'}
+              </Typography>
+            </Box>
           </Grid>
+
           {campaign.postcode && (
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">
-                Postcode:
-              </Typography>
-              <Typography variant="body1" fontWeight="500">
-                {campaign.postcode}
-              </Typography>
-            </Grid>
-          )}
-          {campaign.distance_miles && (
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">
-                Distance:
-              </Typography>
-              <Typography variant="body1" fontWeight="500">
-                {campaign.distance_miles} miles
-              </Typography>
-            </Grid>
-          )}
-          {campaign.custom_prompt && (
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">
-                Search Prompt:
-              </Typography>
-              <Typography variant="body1" sx={{ 
-                backgroundColor: '#f5f5f5', 
-                p: 2, 
-                borderRadius: 1, 
-                border: '1px solid #e0e0e0',
-                fontStyle: 'italic'
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 4
               }}>
-                "{campaign.custom_prompt}"
-              </Typography>
-            </Grid>
-          )}
-          {campaign.company_names && campaign.company_names.length > 0 && (
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">
-                Target Companies ({campaign.company_names.length}):
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                {campaign.company_names.map((name: string, index: number) => (
-                  <Chip key={index} label={name} size="small" variant="outlined" />
-                ))}
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Postcode
+                </Typography>
+                <Typography variant="body1" fontWeight="600" sx={{ color: 'warning.main' }}>
+                  📍 {campaign.postcode}
+                </Typography>
               </Box>
             </Grid>
           )}
-          {campaign.description && (
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">
-                Description:
-              </Typography>
-              <Typography variant="body1">
-                {campaign.description}
-              </Typography>
+
+          {campaign.distance_miles && (
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 4
+              }}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Distance
+                </Typography>
+                <Typography variant="body1" fontWeight="600" sx={{ color: 'secondary.main' }}>
+                  📏 {campaign.distance_miles} miles
+                </Typography>
+              </Box>
             </Grid>
           )}
-          <Grid item xs={12} sm={6}>
-            <Typography variant="body2" color="text.secondary">
-              Created:
-            </Typography>
-            <Typography variant="body1" fontWeight="500">
-              {new Date(campaign.created_at).toLocaleString()}
-            </Typography>
+
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 4
+            }}>
+            <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Created
+              </Typography>
+              <Typography variant="body1" fontWeight="600">
+                📅 {new Date(campaign.created_at).toLocaleString()}
+              </Typography>
+            </Box>
           </Grid>
+
           {campaign.completed_at && (
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">
-                Completed:
-              </Typography>
-              <Typography variant="body1" fontWeight="500">
-                {new Date(campaign.completed_at).toLocaleString()}
-              </Typography>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 4
+              }}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Completed
+                </Typography>
+                <Typography variant="body1" fontWeight="600" sx={{ color: 'success.main' }}>
+                  ✅ {new Date(campaign.completed_at).toLocaleString()}
+                </Typography>
+              </Box>
+            </Grid>
+          )}
+
+          {campaign.custom_prompt && (
+            <Grid size={12}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Search Prompt
+                </Typography>
+                <Typography variant="body1" sx={{ 
+                  backgroundColor: '#f8f9fa', 
+                  p: 2, 
+                  borderRadius: 1, 
+                  border: '1px solid #e9ecef',
+                  fontStyle: 'italic',
+                  color: 'text.secondary'
+                }}>
+                  "{campaign.custom_prompt}"
+                </Typography>
+              </Box>
+            </Grid>
+          )}
+
+          {campaign.company_names && campaign.company_names.length > 0 && (
+            <Grid size={12}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Target Companies ({campaign.company_names.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                  {campaign.company_names.map((name: string, index: number) => (
+                    <Chip 
+                      key={index} 
+                      label={name} 
+                      size="small" 
+                      variant="outlined" 
+                      sx={{ 
+                        backgroundColor: '#e3f2fd',
+                        borderColor: '#2196f3',
+                        color: '#1976d2'
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            </Grid>
+          )}
+
+          {campaign.description && (
+            <Grid size={12}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Description
+                </Typography>
+                <Typography variant="body1" sx={{ color: 'text.primary' }}>
+                  {campaign.description}
+                </Typography>
+              </Box>
             </Grid>
           )}
         </Grid>
       </Paper>
-
       {/* AI Analysis Summary */}
       {campaign.ai_analysis_summary && (
         <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
@@ -416,7 +512,6 @@ const CampaignDetail: React.FC = () => {
           </Typography>
         </Paper>
       )}
-
       {/* Leads Table */}
       <Paper sx={{ borderRadius: 2 }}>
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
@@ -514,7 +609,6 @@ const CampaignDetail: React.FC = () => {
           </Table>
         </TableContainer>
       </Paper>
-
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Edit Campaign</DialogTitle>

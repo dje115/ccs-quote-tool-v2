@@ -104,7 +104,7 @@ const CustomerFormSimple: React.FC<CustomerFormSimpleProps> = ({ open, onClose, 
           </Typography>
 
           <Grid container spacing={3}>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 required
@@ -115,7 +115,11 @@ const CustomerFormSimple: React.FC<CustomerFormSimpleProps> = ({ open, onClose, 
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Website"
@@ -125,7 +129,11 @@ const CustomerFormSimple: React.FC<CustomerFormSimpleProps> = ({ open, onClose, 
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Company Registration Number"
@@ -136,7 +144,11 @@ const CustomerFormSimple: React.FC<CustomerFormSimpleProps> = ({ open, onClose, 
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Email"
@@ -146,7 +158,11 @@ const CustomerFormSimple: React.FC<CustomerFormSimpleProps> = ({ open, onClose, 
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Phone"
@@ -155,7 +171,7 @@ const CustomerFormSimple: React.FC<CustomerFormSimpleProps> = ({ open, onClose, 
               />
             </Grid>
 
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Address"

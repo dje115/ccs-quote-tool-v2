@@ -203,7 +203,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
       case 0:
         return (
           <Grid container spacing={3}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Customer Name"
@@ -212,7 +216,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 required
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Company Name"
@@ -221,7 +229,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 required
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Email"
@@ -230,7 +242,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 onChange={handleInputChange('email')}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Phone"
@@ -238,7 +254,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 onChange={handleInputChange('phone')}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Address"
@@ -248,7 +264,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 rows={2}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Website"
@@ -256,7 +276,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 onChange={handleInputChange('website')}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Company Number"
@@ -265,7 +289,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 placeholder="e.g., 12345678"
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Industry"
@@ -273,7 +297,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 onChange={handleInputChange('industry')}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Description"
@@ -332,10 +356,13 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
               <AssessmentIcon sx={{ mr: 1 }} />
               <Typography variant="h6">AI Analysis Results</Typography>
             </Box>
-            
             {aiAnalysis ? (
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" gutterBottom>
@@ -360,7 +387,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                   </Card>
                 </Grid>
                 
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" gutterBottom>
@@ -382,7 +413,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                   </Card>
                 </Grid>
                 
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" gutterBottom>
@@ -395,7 +426,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                   </Card>
                 </Grid>
                 
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" gutterBottom>
@@ -414,7 +449,11 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                   </Card>
                 </Grid>
                 
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" gutterBottom>
@@ -435,7 +474,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
                 </Grid>
                 
                 {aiAnalysis.recommended_approach && (
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Card>
                       <CardContent>
                         <Typography variant="h6" gutterBottom>
@@ -463,38 +502,61 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
             <Typography variant="h6" gutterBottom>
               Review Customer Information
             </Typography>
-            
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Typography variant="subtitle2">Customer Name:</Typography>
                 <Typography>{formData.name}</Typography>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Typography variant="subtitle2">Company:</Typography>
                 <Typography>{formData.company_name}</Typography>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Typography variant="subtitle2">Email:</Typography>
                 <Typography>{formData.email}</Typography>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Typography variant="subtitle2">Phone:</Typography>
                 <Typography>{formData.phone}</Typography>
               </Grid>
               {aiAnalysis && (
                 <>
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Divider sx={{ my: 2 }} />
                     <Typography variant="h6">AI Analysis Summary</Typography>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="subtitle2">Lead Score:</Typography>
                     <Chip
                       label={`${aiAnalysis.lead_score || 0}/100`}
                       color={getScoreColor(aiAnalysis.lead_score || 0)}
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="subtitle2">Urgency:</Typography>
                     <Chip
                       label={aiAnalysis.urgency || 'Unknown'}

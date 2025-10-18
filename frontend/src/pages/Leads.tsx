@@ -316,13 +316,16 @@ const Leads: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
           Discoveries
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          AI-Generated Lead Intelligence & Management
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
           {selectedLeads.length > 0 && (
             <Button
               variant="contained"
@@ -330,6 +333,13 @@ const Leads: React.FC = () => {
               startIcon={<CheckCircleIcon />}
               onClick={handleBulkConvert}
               disabled={converting}
+              sx={{ 
+                borderRadius: 2,
+                px: 3,
+                py: 1.5,
+                fontWeight: 600,
+                textTransform: 'none'
+              }}
             >
               {converting ? 'Converting...' : `Convert ${selectedLeads.length} to CRM`}
             </Button>
@@ -338,15 +348,26 @@ const Leads: React.FC = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => navigate('/campaigns')}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
           >
             View All Campaigns
           </Button>
         </Box>
       </Box>
-
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+      <Grid container spacing={3} sx={{ mb: 3, justifyContent: 'center' }}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Tooltip title="Total number of discoveries generated from all campaigns" arrow>
             <div>
               <LeadStatsCard
@@ -358,7 +379,12 @@ const Leads: React.FC = () => {
             </div>
           </Tooltip>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Tooltip title="Discoveries that are new and haven't been contacted yet" arrow>
             <div>
               <LeadStatsCard
@@ -370,7 +396,12 @@ const Leads: React.FC = () => {
             </div>
           </Tooltip>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Tooltip title="Discoveries that have been successfully converted to CRM leads for follow-up" arrow>
             <div>
               <LeadStatsCard
@@ -382,7 +413,12 @@ const Leads: React.FC = () => {
             </div>
           </Tooltip>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Tooltip title="Discoveries with a lead score of 80 or higher - these are high-quality prospects based on AI analysis" arrow>
             <div>
               <LeadStatsCard
@@ -395,11 +431,14 @@ const Leads: React.FC = () => {
           </Tooltip>
         </Grid>
       </Grid>
-
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <TextField
               fullWidth
               placeholder="Search discoveries..."
@@ -414,7 +453,11 @@ const Leads: React.FC = () => {
               }}
             />
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 4
+            }}>
             <TextField
               fullWidth
               select
@@ -430,7 +473,11 @@ const Leads: React.FC = () => {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 2
+            }}>
             <FormControlLabel
               control={
                 <Checkbox
@@ -444,7 +491,6 @@ const Leads: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
-
       {/* Discoveries Table */}
       <TableContainer component={Paper}>
         <Table>
@@ -591,7 +637,7 @@ const Leads: React.FC = () => {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const url = lead.website.startsWith('http') ? lead.website : `https://${lead.website}`;
+                            const url = lead.website?.startsWith('http') ? lead.website : `https://${lead.website}`;
                             window.open(url, '_blank');
                           }}
                         >
@@ -654,7 +700,6 @@ const Leads: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
-
       {/* Summary */}
       <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">

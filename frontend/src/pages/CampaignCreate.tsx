@@ -123,7 +123,7 @@ const CampaignCreate: React.FC = () => {
       console.log('✅ Sectors loaded:', response);
       console.log('📊 Number of sectors:', response?.length);
       setSectors(response);
-    } catch (err) {
+    } catch (err: any) {
       console.error('❌ Failed to load sectors:', err);
       console.error('❌ Error details:', err.response?.data);
       setError(t('campaigns.loadSectorsError', 'Failed to load sectors'));
@@ -192,21 +192,18 @@ const CampaignCreate: React.FC = () => {
           </Typography>
         </Alert>
       </Paper>
-
       {/* Success Message */}
       {success && (
         <Alert severity="success" sx={{ mb: 3 }}>
           {t('campaigns.createSuccess', 'Campaign created successfully! Redirecting...')}
         </Alert>
       )}
-
       {/* Error Message */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
       )}
-
       {/* Action Buttons - Always at Top */}
       <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
         <Box display="flex" gap={2} justifyContent="space-between" alignItems="center">
@@ -238,10 +235,13 @@ const CampaignCreate: React.FC = () => {
           </Box>
         </Box>
       </Paper>
-
       <Grid container spacing={3}>
         {/* Main Form */}
-        <Grid item xs={12} lg={8}>
+        <Grid
+          size={{
+            xs: 12,
+            lg: 8
+          }}>
           <Paper elevation={2} sx={{ p: 3 }}>
             {/* Form Header with Action Buttons */}
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -288,7 +288,7 @@ const CampaignCreate: React.FC = () => {
             <form onSubmit={handleSubmit}>
               <Grid container spacing={3}>
                 {/* Target Sector - Moved to Top for Better UX */}
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Typography variant="subtitle1" gutterBottom>
                     {t('campaigns.targetSector', 'Target Sector')}
                   </Typography>
@@ -439,7 +439,11 @@ const CampaignCreate: React.FC = () => {
                 </Grid>
 
                 {/* Campaign Name */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <TextField
                     fullWidth
                     label={t('campaigns.campaignName', 'Campaign Name')}
@@ -458,7 +462,11 @@ const CampaignCreate: React.FC = () => {
                 </Grid>
 
                 {/* Max Results */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <TextField
                     fullWidth
                     type="number"
@@ -479,7 +487,11 @@ const CampaignCreate: React.FC = () => {
                 </Grid>
 
                 {/* Location */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <TextField
                     fullWidth
                     label={t('campaigns.postcode', 'Postcode')}
@@ -499,7 +511,11 @@ const CampaignCreate: React.FC = () => {
                 </Grid>
 
                 {/* Distance */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <TextField
                     fullWidth
                     type="number"
@@ -520,7 +536,7 @@ const CampaignCreate: React.FC = () => {
                 </Grid>
 
                 {/* Submit Buttons - Move to Top */}
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Divider sx={{ my: 2 }} />
                   <Box display="flex" gap={2} justifyContent="flex-end">
                     <Button
@@ -544,7 +560,7 @@ const CampaignCreate: React.FC = () => {
 
 
                 {/* Description */}
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     fullWidth
                     multiline
@@ -557,7 +573,7 @@ const CampaignCreate: React.FC = () => {
                 </Grid>
 
                 {/* Advanced Options */}
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Divider sx={{ my: 2 }} />
                   <FormControlLabel
                     control={
@@ -581,7 +597,11 @@ const CampaignCreate: React.FC = () => {
 
                 {showAdvanced && (
                   <>
-                    <Grid item xs={12} md={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
                       <FormControl fullWidth>
                         <InputLabel>{t('campaigns.promptType', 'Prompt Type')}</InputLabel>
                         <Select
@@ -610,7 +630,7 @@ const CampaignCreate: React.FC = () => {
                     </Grid>
 
                     {campaignData.prompt_type === 'custom_search' && (
-                      <Grid item xs={12}>
+                      <Grid size={12}>
                         <TextField
                           fullWidth
                           multiline
@@ -625,7 +645,7 @@ const CampaignCreate: React.FC = () => {
                     )}
 
                     {/* Deduplication Options */}
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Divider sx={{ my: 2 }} />
                       <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         🚫 {t('campaigns.deduplicationOptions', 'Deduplication Options')}
@@ -637,7 +657,11 @@ const CampaignCreate: React.FC = () => {
                       </Alert>
                       
                       <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}>
+                        <Grid
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
                           <FormControlLabel
                             control={<Switch defaultChecked color="primary" />}
                             label={t('campaigns.checkExistingCustomers', 'Check Existing Customers')}
@@ -648,7 +672,11 @@ const CampaignCreate: React.FC = () => {
                           </Typography>
                         </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                        <Grid
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
                           <FormControlLabel
                             control={<Switch defaultChecked color="primary" />}
                             label={t('campaigns.checkExistingLeads', 'Check Existing Leads')}
@@ -659,7 +687,11 @@ const CampaignCreate: React.FC = () => {
                           </Typography>
                         </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                        <Grid
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
                           <FormControlLabel
                             control={<Switch defaultChecked={false} color="primary" />}
                             label={t('campaigns.checkCompanyNames', 'Check Company Names')}
@@ -670,7 +702,11 @@ const CampaignCreate: React.FC = () => {
                           </Typography>
                         </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                        <Grid
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
                           <FormControlLabel
                             control={<Switch defaultChecked color="primary" />}
                             label={t('campaigns.checkEmailAddresses', 'Check Email Addresses')}
@@ -681,7 +717,11 @@ const CampaignCreate: React.FC = () => {
                           </Typography>
                         </Grid>
                         
-                        <Grid item xs={12} md={6}>
+                        <Grid
+                          size={{
+                            xs: 12,
+                            md: 6
+                          }}>
                           <FormControlLabel
                             control={<Switch defaultChecked={false} color="primary" />}
                             label={t('campaigns.checkPhoneNumbers', 'Check Phone Numbers')}
@@ -701,7 +741,11 @@ const CampaignCreate: React.FC = () => {
         </Grid>
 
         {/* Info Panel */}
-        <Grid item xs={12} lg={4}>
+        <Grid
+          size={{
+            xs: 12,
+            lg: 4
+          }}>
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               {t('campaigns.howItWorks', 'How It Works')}

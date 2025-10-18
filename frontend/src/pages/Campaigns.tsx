@@ -217,33 +217,27 @@ const Campaigns: React.FC = () => {
   const filteredCampaigns = getFilteredCampaigns();
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 2, mb: 4 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <CampaignIcon sx={{ color: 'white', fontSize: 28 }} />
-          </Box>
-          <Typography variant="h4" component="h1" fontWeight="600">
-            Lead Generation
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
+          Lead Generation
+        </Typography>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          AI-Powered Campaign Management & Analytics
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
           <Button
             variant="outlined"
             startIcon={<PeopleIcon />}
             onClick={() => navigate('/leads')}
-            sx={{ borderRadius: 2 }}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
           >
             View All Leads
           </Button>
@@ -268,10 +262,14 @@ const Campaigns: React.FC = () => {
           </Button>
         </Box>
       </Box>
-
       {/* Statistics Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+      <Grid container spacing={2} sx={{ mb: 3, justifyContent: 'center' }}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -295,7 +293,12 @@ const Campaigns: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card
             sx={{
               background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
@@ -319,7 +322,12 @@ const Campaigns: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card
             sx={{
               background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
@@ -343,7 +351,12 @@ const Campaigns: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid
+          size={{
+            xs: 12,
+            sm: 6,
+            md: 3
+          }}>
           <Card sx={{ borderRadius: 3, border: '2px solid #e0e0e0' }}>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -361,16 +374,19 @@ const Campaigns: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
-
       {/* Tips Section */}
       <Paper sx={{ mt: 3, p: 3, borderRadius: 3, background: '#f8f9fa' }}>
         <Typography variant="h6" gutterBottom fontWeight="600">
           💡 Lead Generation Tips
         </Typography>
         <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>📍</Typography>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Typography sx={{ fontSize: '1.2rem' }}>📍</Typography>
               <Box>
                 <Typography variant="subtitle2" fontWeight="600">Location Targeting</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -379,9 +395,13 @@ const Campaigns: React.FC = () => {
               </Box>
             </Box>
           </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>👥</Typography>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Typography sx={{ fontSize: '1.2rem' }}>👥</Typography>
               <Box>
                 <Typography variant="subtitle2" fontWeight="600">Follow Up Quickly</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -390,9 +410,13 @@ const Campaigns: React.FC = () => {
               </Box>
             </Box>
           </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>🎯</Typography>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Typography sx={{ fontSize: '1.2rem' }}>🎯</Typography>
               <Box>
                 <Typography variant="subtitle2" fontWeight="600">Quality Over Quantity</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -401,9 +425,13 @@ const Campaigns: React.FC = () => {
               </Box>
             </Box>
           </Grid>
-          <Grid item xs={12} md={6}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Typography>📊</Typography>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Typography sx={{ fontSize: '1.2rem' }}>📊</Typography>
               <Box>
                 <Typography variant="subtitle2" fontWeight="600">Track Your Success</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -414,7 +442,6 @@ const Campaigns: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
-
       {/* Recent Campaigns Section */}
       <Paper sx={{ borderRadius: 3, overflow: 'hidden' }}>
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -705,7 +732,6 @@ const Campaigns: React.FC = () => {
           </Table>
         </TableContainer>
       </Paper>
-
     </Container>
   );
 };

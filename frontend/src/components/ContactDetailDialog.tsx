@@ -85,11 +85,10 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
           </IconButton>
         </Box>
       </DialogTitle>
-
       <DialogContent dividers>
         <Grid container spacing={3}>
           {/* Role & Status */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <Chip 
                 icon={<BusinessIcon />}
@@ -109,7 +108,7 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
 
           {/* Primary Email */}
           {contact.email && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
                 <Typography variant="subtitle2" color="primary" gutterBottom>
                   Primary Email
@@ -128,7 +127,7 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
 
           {/* Additional Emails */}
           {contact.emails && contact.emails.length > 0 && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                 Additional Email Addresses
               </Typography>
@@ -179,7 +178,7 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
 
           {/* Primary Phone */}
           {contact.phone && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Paper elevation={0} sx={{ p: 2, bgcolor: 'success.50', border: '1px solid', borderColor: 'success.200' }}>
                 <Typography variant="subtitle2" color="success.main" gutterBottom>
                   Primary Phone
@@ -198,7 +197,7 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
 
           {/* Additional Phones */}
           {contact.phones && contact.phones.length > 0 && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                 Additional Phone Numbers
               </Typography>
@@ -249,7 +248,7 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
 
           {/* Notes */}
           {contact.notes && (
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Divider sx={{ mb: 2 }} />
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                 Notes
@@ -263,7 +262,7 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
           )}
 
           {/* Metadata */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Divider sx={{ mb: 2 }} />
             <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
               {contact.created_at && (
@@ -286,7 +285,6 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
           </Grid>
         </Grid>
       </DialogContent>
-
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
         {onEdit && (
@@ -304,6 +302,8 @@ const ContactDetailDialog: React.FC<ContactDetailDialogProps> = ({
 };
 
 export default ContactDetailDialog;
+
+
 
 
 

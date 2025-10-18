@@ -53,3 +53,5 @@ response = self.openai_client.chat.completions.create(
 - `lead_generation_service.py` line 331: Business list generation with web search
 - Various other files use `chat.completions.create()` for regular AI tasks
 
+
+

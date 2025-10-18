@@ -112,24 +112,21 @@ const CustomerEdit: React.FC = () => {
           Edit Customer
         </Typography>
       </Box>
-
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
-
       {success && (
         <Alert severity="success" onClose={() => setSuccess(null)} sx={{ mb: 2 }}>
           {success}
         </Alert>
       )}
-
       <Paper sx={{ p: 4 }}>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             {/* Company Name */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Company Name"
@@ -142,7 +139,11 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Website */}
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Website"
@@ -155,7 +156,11 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Company Registration */}
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Company Registration Number"
@@ -168,7 +173,11 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Email */}
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Main Email"
@@ -182,7 +191,11 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Phone */}
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Main Phone"
@@ -195,7 +208,11 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Billing Address */}
-            <Grid item xs={12} sm={8}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 8
+              }}>
               <TextField
                 fullWidth
                 label="Billing Address"
@@ -209,7 +226,11 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Billing Postcode */}
-            <Grid item xs={12} sm={4}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 4
+              }}>
               <TextField
                 fullWidth
                 label="Postcode"
@@ -222,7 +243,7 @@ const CustomerEdit: React.FC = () => {
             </Grid>
 
             {/* Description */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Description / Notes"
@@ -238,13 +259,17 @@ const CustomerEdit: React.FC = () => {
 
             {/* Created & Updated Dates (Read-only) */}
             {customer && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
                     Record Information
                   </Typography>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        sm: 6
+                      }}>
                       <Typography variant="body2">
                         <strong>Created:</strong> {new Date(customer.created_at).toLocaleString('en-GB', {
                           year: 'numeric',
@@ -255,7 +280,11 @@ const CustomerEdit: React.FC = () => {
                         })}
                       </Typography>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        sm: 6
+                      }}>
                       <Typography variant="body2">
                         <strong>Last Updated:</strong> {new Date(customer.updated_at).toLocaleString('en-GB', {
                           year: 'numeric',

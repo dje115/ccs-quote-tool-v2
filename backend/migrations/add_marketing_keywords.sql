@@ -9,3 +9,5 @@ COMMENT ON COLUMN tenants.marketing_keywords IS 'SEO/Marketing keywords extracte
 
 
 
+
+

@@ -150,20 +150,32 @@ const Users: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
           User Management
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setAddDialogOpen(true)}
-        >
-          Add User
-        </Button>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          Team Member Administration & Permissions
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setAddDialogOpen(true)}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
+          >
+            Add User
+          </Button>
+        </Box>
       </Box>
-
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -235,7 +247,6 @@ const Users: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
-
       {/* Add User Dialog */}
       <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add New User</DialogTitle>
@@ -246,7 +257,11 @@ const Users: React.FC = () => {
             </Alert>
           )}
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="First Name"
@@ -255,7 +270,11 @@ const Users: React.FC = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Last Name"
@@ -264,7 +283,7 @@ const Users: React.FC = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Email"
@@ -274,7 +293,7 @@ const Users: React.FC = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Password"
@@ -285,7 +304,7 @@ const Users: React.FC = () => {
                 helperText="Minimum 8 characters"
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <FormControl fullWidth required>
                 <InputLabel>Role</InputLabel>
                 <Select
@@ -309,7 +328,6 @@ const Users: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Edit User Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit User</DialogTitle>
@@ -320,7 +338,11 @@ const Users: React.FC = () => {
             </Alert>
           )}
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="First Name"
@@ -329,7 +351,11 @@ const Users: React.FC = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Last Name"
@@ -338,7 +364,7 @@ const Users: React.FC = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 label="Email"
@@ -348,7 +374,7 @@ const Users: React.FC = () => {
                 helperText="Email cannot be changed"
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <FormControl fullWidth required>
                 <InputLabel>Role</InputLabel>
                 <Select
@@ -372,7 +398,6 @@ const Users: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>Delete User</DialogTitle>

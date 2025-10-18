@@ -379,7 +379,6 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
           {error}
         </Alert>
       )}
-
       {/* AI-Powered Action Suggestions */}
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -406,7 +405,11 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
           </Box>
         ) : suggestions ? (
           <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 4
+              }}>
               <ActionBanner
                 title="Call Suggestion"
                 icon={<PhoneIcon />}
@@ -415,7 +418,11 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
                 type="call"
               />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 4
+              }}>
               <ActionBanner
                 title="Email Suggestion"
                 icon={<EmailIcon />}
@@ -424,7 +431,11 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
                 type="email"
               />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid
+              size={{
+                xs: 12,
+                md: 4
+              }}>
               <ActionBanner
                 title="Visit Suggestion"
                 icon={<BusinessIcon />}
@@ -441,9 +452,7 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
           </Alert>
         )}
       </Box>
-
       <Divider sx={{ my: 4 }} />
-
       {/* Activity Log */}
       <Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -566,7 +575,6 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
           </Stack>
         )}
       </Box>
-
       {/* Log Activity Dialog */}
       <Dialog open={showDialog} onClose={() => setShowDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>

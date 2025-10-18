@@ -15,3 +15,5 @@ COMMENT ON TYPE customerstatus IS 'Customer lifecycle stages: LEAD → PROSPECT 
 
 
 
+
+

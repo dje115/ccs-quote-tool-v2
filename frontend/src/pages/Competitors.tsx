@@ -65,25 +65,32 @@ const Competitors: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Box>
-            <Typography variant="h4" gutterBottom>
-              Competitors
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Competitor analysis and tracking
-            </Typography>
-          </Box>
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
+          Competitors
+        </Typography>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          Competitor analysis and tracking
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => navigate('/customers/new')}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
           >
             Add Competitor
           </Button>
         </Box>
+      </Box>
 
         {/* Search */}
         <Box sx={{ mb: 3 }}>
@@ -202,7 +209,6 @@ const Competitors: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
-      </Box>
     </Container>
   );
 };

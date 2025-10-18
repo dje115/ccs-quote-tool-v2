@@ -229,7 +229,12 @@ const CampaignsList: React.FC = () => {
 
         {/* Stats */}
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 3
+            }}>
             <Card variant="outlined">
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="primary">
@@ -241,7 +246,12 @@ const CampaignsList: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 3
+            }}>
             <Card variant="outlined">
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="success.main">
@@ -253,7 +263,12 @@ const CampaignsList: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 3
+            }}>
             <Card variant="outlined">
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="warning.main">
@@ -265,7 +280,12 @@ const CampaignsList: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid
+            size={{
+              xs: 12,
+              sm: 6,
+              md: 3
+            }}>
             <Card variant="outlined">
               <CardContent sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="info.main">
@@ -279,14 +299,12 @@ const CampaignsList: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
-
       {/* Error Message */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
-
       {/* Campaigns Table */}
       <Paper elevation={2}>
         <TableContainer>
@@ -492,7 +510,6 @@ const CampaignsList: React.FC = () => {
           </Table>
         </TableContainer>
       </Paper>
-
       {/* Floating Action Button */}
       <Fab
         color="primary"
@@ -502,7 +519,6 @@ const CampaignsList: React.FC = () => {
       >
         <AddIcon />
       </Fab>
-
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>

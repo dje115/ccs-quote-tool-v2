@@ -155,7 +155,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
           )}
 
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 required
@@ -166,7 +170,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                 variant="outlined"
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 required
@@ -178,7 +186,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Job Title"
@@ -190,7 +202,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 select
@@ -208,7 +224,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               </TextField>
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Email"
@@ -221,7 +241,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <TextField
                 fullWidth
                 label="Phone"
@@ -233,7 +257,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6
+              }}>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -248,7 +276,7 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
             </Grid>
 
             {/* Additional Emails Section */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Divider sx={{ my: 2 }} />
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                 <Typography variant="subtitle1" fontWeight="bold">
@@ -266,7 +294,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               
               {additionalEmails.map((emailItem, index) => (
                 <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
-                  <Grid item xs={12} sm={5}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 5
+                    }}>
                     <TextField
                       fullWidth
                       size="small"
@@ -277,7 +309,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                       variant="outlined"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={3}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 3
+                    }}>
                     <TextField
                       fullWidth
                       size="small"
@@ -292,7 +328,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                       <MenuItem value="other">Other</MenuItem>
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} sm={3}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 3
+                    }}>
                     <FormControlLabel
                       control={
                         <Checkbox
@@ -303,7 +343,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                       label="Primary"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={1}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 1
+                    }}>
                     <IconButton
                       color="error"
                       onClick={() => removeEmail(index)}
@@ -317,7 +361,7 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
             </Grid>
 
             {/* Additional Phones Section */}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Divider sx={{ my: 2 }} />
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                 <Typography variant="subtitle1" fontWeight="bold">
@@ -335,7 +379,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               
               {additionalPhones.map((phoneItem, index) => (
                 <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
-                  <Grid item xs={12} sm={5}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 5
+                    }}>
                     <TextField
                       fullWidth
                       size="small"
@@ -345,7 +393,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                       variant="outlined"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={3}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 3
+                    }}>
                     <TextField
                       fullWidth
                       size="small"
@@ -361,7 +413,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                       <MenuItem value="other">Other</MenuItem>
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} sm={3}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 3
+                    }}>
                     <FormControlLabel
                       control={
                         <Checkbox
@@ -372,7 +428,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
                       label="Primary"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={1}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 1
+                    }}>
                     <IconButton
                       color="error"
                       onClick={() => removePhone(index)}
@@ -385,11 +445,11 @@ const ContactDialog: React.FC<ContactDialogProps> = ({
               ))}
             </Grid>
 
-            <Grid item xs={12}>
+            <Grid size={12}>
               <Divider sx={{ my: 2 }} />
             </Grid>
 
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 fullWidth
                 multiline

@@ -213,9 +213,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
-          mt: 8
+          mt: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 'calc(100vh - 64px)'
         }}
       >
         {children}

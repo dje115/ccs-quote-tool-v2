@@ -63,6 +63,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI } from '../services/api';
+import api from '../services/api';
 import CustomerOverviewTab from '../components/CustomerOverviewTab';
 import ActivityCenter from '../components/ActivityCenter';
 import ContactDialog from '../components/ContactDialog';
@@ -325,7 +326,7 @@ const CustomerDetail: React.FC = () => {
         include_existing_customers: false
       };
 
-      const response = await campaignAPI.create(campaignData);
+      const response = await api.post('/campaigns/', campaignData);
       
       if (response.data) {
         // Campaign created as DRAFT - user can review and start it manually
@@ -449,7 +450,6 @@ const CustomerDetail: React.FC = () => {
           Edit
         </Button>
       </Box>
-
       {/* AI Analysis Alerts */}
       {aiAnalysisError && (
         <Alert severity="error" onClose={() => setAiAnalysisError(null)} sx={{ mb: 2 }}>
@@ -461,7 +461,6 @@ const CustomerDetail: React.FC = () => {
           {aiAnalysisSuccess}
         </Alert>
       )}
-
       {/* Modern Tabbed Interface */}
       <Paper sx={{ mb: 3 }}>
         {/* First Row of Tabs - Intelligence & Data */}
@@ -526,7 +525,6 @@ const CustomerDetail: React.FC = () => {
           <Tab icon={<DescriptionIcon />} iconPosition="start" label="Quotes" />
         </Tabs>
       </Paper>
-
       {/* Tab Panel 0: Overview - World-Class AI-Powered CRM */}
       {currentTab === 0 && customer && (
         <CustomerOverviewTab
@@ -538,7 +536,6 @@ const CustomerDetail: React.FC = () => {
           onStatusChange={handleStatusChange}
         />
       )}
-
       {/* Tab Panel 1: Discovery Intelligence - Data from Campaign Phase */}
       {currentTab === 1 && customer && (
         <Box>
@@ -605,43 +602,71 @@ const CustomerDetail: React.FC = () => {
               {/* Key Metrics Grid */}
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 {customer.ai_analysis_raw.business_sector && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Business Sector</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.business_sector}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.business_size_category && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Company Size</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.business_size_category}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.estimated_employees && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Estimated Employees</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.estimated_employees}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.estimated_revenue && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Estimated Revenue</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.estimated_revenue}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.technology_maturity && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Technology Maturity</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.technology_maturity}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.it_budget_estimate && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Budget Estimate</Typography>
                     <Typography variant="body2">{customer.ai_analysis_raw.it_budget_estimate}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.growth_potential && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      sm: 6
+                    }}>
                     <Typography variant="caption" color="text.secondary">Growth Potential</Typography>
                     <Chip 
                       label={customer.ai_analysis_raw.growth_potential} 
@@ -742,7 +767,6 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
-
       {/* Tab Panel 2: AI Analysis */}
       {currentTab === 2 && (
         <Box>
@@ -810,7 +834,11 @@ const CustomerDetail: React.FC = () => {
               <Divider sx={{ mb: 3 }} />
               
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   {customer.ai_analysis_raw.business_sector && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Business Sector</Typography>
@@ -831,7 +859,11 @@ const CustomerDetail: React.FC = () => {
                     </Box>
                   )}
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   {customer.ai_analysis_raw.it_budget_estimate && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>IT Budget Estimate</Typography>
@@ -889,7 +921,6 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
-
       {/* Tab Panel 3: Financial Data */}
       {currentTab === 3 && (
         <Box>
@@ -904,7 +935,11 @@ const CustomerDetail: React.FC = () => {
               
               <Grid container spacing={3}>
                 {/* Current Financial Position */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card sx={{ p: 2, bgcolor: '#e3f2fd' }}>
                     <Typography variant="h6" color="primary" gutterBottom>
                       💰 Current Financial Position
@@ -937,7 +972,11 @@ const CustomerDetail: React.FC = () => {
                 </Grid>
                 
                 {/* Financial Trends */}
-                <Grid item xs={12} md={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
                   <Card sx={{ p: 2, bgcolor: '#f3e5f5' }}>
                     <Typography variant="h6" color="secondary" gutterBottom>
                       📈 Financial Trends
@@ -1141,7 +1180,6 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
-
       {/* Tab Panel 4: Addresses */}
       {currentTab === 4 && (
         <Box>
@@ -1345,7 +1383,6 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
-
       {/* Tab Panel 5: Directors */}
       {currentTab === 5 && (
         <Box>
@@ -1359,7 +1396,13 @@ const CustomerDetail: React.FC = () => {
               
               <Grid container spacing={3}>
                 {customer.companies_house_data.accounts_detail.active_directors.map((director: any, index: number) => (
-                  <Grid item xs={12} sm={6} md={4} key={index}>
+                  <Grid
+                    key={index}
+                    size={{
+                      xs: 12,
+                      sm: 6,
+                      md: 4
+                    }}>
                     <Card variant="outlined" sx={{ height: '100%', '&:hover': { boxShadow: 3 }, transition: 'box-shadow 0.3s' }}>
                       <CardContent>
                         <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#1976d2' }}>
@@ -1421,7 +1464,6 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
-
       {/* Tab Panel 6: Business Intelligence - Opportunities, Competitors, Risks */}
       {currentTab === 6 && (
         <Box>
@@ -1436,7 +1478,7 @@ const CustomerDetail: React.FC = () => {
               <Grid container spacing={2}>
                 {/* Website Title & Description */}
                 {customer.website_data.website_title && (
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Website Title
                     </Typography>
@@ -1447,7 +1489,7 @@ const CustomerDetail: React.FC = () => {
                 )}
                 
                 {customer.website_data.website_description && (
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Description
                     </Typography>
@@ -1459,7 +1501,7 @@ const CustomerDetail: React.FC = () => {
                 
                 {/* Keywords/Key Phrases */}
                 {customer.website_data.key_phrases && customer.website_data.key_phrases.length > 0 && (
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Key Topics & Keywords
                     </Typography>
@@ -1479,7 +1521,7 @@ const CustomerDetail: React.FC = () => {
                 
                 {/* Contact Information from Website */}
                 {customer.website_data.contact_info && customer.website_data.contact_info.length > 0 && (
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Contact Information Found
                     </Typography>
@@ -1499,7 +1541,7 @@ const CustomerDetail: React.FC = () => {
                 
                 {/* Locations Mentioned */}
                 {customer.website_data.locations && customer.website_data.locations.length > 0 && (
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                       Locations Mentioned
                     </Typography>
@@ -1611,14 +1653,12 @@ const CustomerDetail: React.FC = () => {
           )}
         </Box>
       )}
-
       {/* Tab Panel 7: Activity - AI-Powered Activity Center */}
       {currentTab === 7 && customer && (
         <Paper sx={{ p: 0 }}>
           <ActivityCenter customerId={customer.id} />
         </Paper>
       )}
-
       {/* Tab Panel 8: Quotes */}
       {currentTab === 8 && (
         <Paper sx={{ p: 3 }}>
@@ -1650,7 +1690,6 @@ const CustomerDetail: React.FC = () => {
           </Button>
         </Paper>
       )}
-
       {/* Contact Dialog */}
       <ContactDialog
         open={addContactOpen}
@@ -1659,7 +1698,6 @@ const CustomerDetail: React.FC = () => {
         contact={editingContact}
         customerId={id!}
       />
-
     </Container>
   );
 };

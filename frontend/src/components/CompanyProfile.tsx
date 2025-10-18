@@ -468,10 +468,9 @@ const CompanyProfile: React.FC = () => {
     <Box>
       {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-
       <Grid container spacing={3}>
         {/* AI Tools Section - Prominent at top */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper 
             elevation={3} 
             sx={{ 
@@ -510,7 +509,7 @@ const CompanyProfile: React.FC = () => {
 
         {/* AI Auto-Fill Results */}
         {autoFillResults && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Card sx={{ bgcolor: '#e8f5e9', borderLeft: 4, borderColor: 'success.main' }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -525,7 +524,11 @@ const CompanyProfile: React.FC = () => {
                 <Divider sx={{ my: 2 }} />
                 
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid
+                    size={{
+                      xs: 12,
+                      md: 6
+                    }}>
                     <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
                       Data Sources Used:
                     </Typography>
@@ -543,7 +546,7 @@ const CompanyProfile: React.FC = () => {
                     </Stack>
                   </Grid>
                   
-                  <Grid item xs={12}>
+                  <Grid size={12}>
                     <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
                       Social Media & Other Sources:
                     </Typography>
@@ -584,7 +587,7 @@ const CompanyProfile: React.FC = () => {
                   </Grid>
                   
                   {autoFillResults.keywords && Array.isArray(autoFillResults.keywords) && autoFillResults.keywords.length > 0 && (
-                    <Grid item xs={12}>
+                    <Grid size={12}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
                         Extracted SEO/Marketing Keywords ({autoFillResults.keywords.length}):
                       </Typography>
@@ -646,7 +649,11 @@ const CompanyProfile: React.FC = () => {
                           📝 Company Description
                         </Typography>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="text.secondary" fontWeight="bold">
                               CURRENT:
                             </Typography>
@@ -656,7 +663,11 @@ const CompanyProfile: React.FC = () => {
                               </Typography>
                             </Box>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="primary" fontWeight="bold">
                               AI SUGGESTED:
                             </Typography>
@@ -685,7 +696,11 @@ const CompanyProfile: React.FC = () => {
                           📦 Products & Services
                         </Typography>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="text.secondary" fontWeight="bold">
                               CURRENT ({profile.products_services.length}):
                             </Typography>
@@ -701,7 +716,11 @@ const CompanyProfile: React.FC = () => {
                               )}
                             </Box>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="primary" fontWeight="bold">
                               AI SUGGESTED ({autoFillResults.ai_data.products_services.length}):
                             </Typography>
@@ -735,7 +754,11 @@ const CompanyProfile: React.FC = () => {
                           ⭐ Unique Selling Points
                         </Typography>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="text.secondary" fontWeight="bold">
                               CURRENT ({profile.unique_selling_points.length}):
                             </Typography>
@@ -751,7 +774,11 @@ const CompanyProfile: React.FC = () => {
                               )}
                             </Box>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="primary" fontWeight="bold">
                               AI SUGGESTED ({autoFillResults.ai_data.unique_selling_points.length}):
                             </Typography>
@@ -785,7 +812,11 @@ const CompanyProfile: React.FC = () => {
                           🎯 Target Markets
                         </Typography>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="text.secondary" fontWeight="bold">
                               CURRENT ({profile.target_markets.length}):
                             </Typography>
@@ -801,7 +832,11 @@ const CompanyProfile: React.FC = () => {
                               )}
                             </Box>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="primary" fontWeight="bold">
                               AI SUGGESTED ({autoFillResults.ai_data.target_markets.length}):
                             </Typography>
@@ -835,7 +870,11 @@ const CompanyProfile: React.FC = () => {
                           💼 Elevator Pitch
                         </Typography>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="text.secondary" fontWeight="bold">
                               CURRENT:
                             </Typography>
@@ -845,7 +884,11 @@ const CompanyProfile: React.FC = () => {
                               </Typography>
                             </Box>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="primary" fontWeight="bold">
                               AI SUGGESTED:
                             </Typography>
@@ -874,7 +917,11 @@ const CompanyProfile: React.FC = () => {
                           🤝 B2B Partnership Opportunities
                         </Typography>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="text.secondary" fontWeight="bold">
                               CURRENT:
                             </Typography>
@@ -884,7 +931,11 @@ const CompanyProfile: React.FC = () => {
                               </Typography>
                             </Box>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid
+                            size={{
+                              xs: 12,
+                              md: 6
+                            }}>
                             <Typography variant="caption" color="primary" fontWeight="bold">
                               AI SUGGESTED:
                             </Typography>
@@ -914,7 +965,7 @@ const CompanyProfile: React.FC = () => {
 
         {/* AI Analysis Results */}
         {analysis && typeof analysis === 'object' && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Accordion defaultExpanded>
               <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#e8f5e9' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -933,7 +984,11 @@ const CompanyProfile: React.FC = () => {
               <AccordionDetails>
       <Grid container spacing={3}>
                   {analysis.business_model && typeof analysis.business_model === 'string' && (
-                    <Grid item xs={12} md={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
                       <Paper elevation={1} sx={{ p: 2, height: '100%', bgcolor: '#fafafa' }}>
                         <Typography variant="subtitle1" fontWeight="bold" color="primary" gutterBottom>
                           Business Model
@@ -945,7 +1000,11 @@ const CompanyProfile: React.FC = () => {
                     </Grid>
                   )}
                   {analysis.competitive_position && typeof analysis.competitive_position === 'string' && (
-                    <Grid item xs={12} md={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
                       <Paper elevation={1} sx={{ p: 2, height: '100%', bgcolor: '#fafafa' }}>
                         <Typography variant="subtitle1" fontWeight="bold" color="primary" gutterBottom>
                           Competitive Position
@@ -957,7 +1016,11 @@ const CompanyProfile: React.FC = () => {
                     </Grid>
                   )}
                   {analysis.ideal_customer_profile && typeof analysis.ideal_customer_profile === 'string' && (
-                    <Grid item xs={12} md={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
                       <Paper elevation={1} sx={{ p: 2, height: '100%', bgcolor: '#fafafa' }}>
                         <Typography variant="subtitle1" fontWeight="bold" color="primary" gutterBottom>
                           Ideal Customer Profile
@@ -969,7 +1032,11 @@ const CompanyProfile: React.FC = () => {
                     </Grid>
                   )}
                   {analysis.sales_approach && typeof analysis.sales_approach === 'string' && (
-                    <Grid item xs={12} md={6}>
+                    <Grid
+                      size={{
+                        xs: 12,
+                        md: 6
+                      }}>
                       <Paper elevation={1} sx={{ p: 2, height: '100%', bgcolor: '#fafafa' }}>
                         <Typography variant="subtitle1" fontWeight="bold" color="primary" gutterBottom>
                           Recommended Sales Approach
@@ -987,7 +1054,7 @@ const CompanyProfile: React.FC = () => {
         )}
 
         {/* Company Overview Section */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
                 <BusinessIcon color="primary" />
             Company Overview
@@ -996,7 +1063,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
               
         {/* Company Description */}
-                <Grid item xs={12}>
+                <Grid size={12}>
           <Card elevation={2}>
             <CardContent>
               <Typography variant="h6" gutterBottom color="primary">
@@ -1017,7 +1084,7 @@ const CompanyProfile: React.FC = () => {
                 </Grid>
                 
         {/* Contact Information Section */}
-                <Grid item xs={12}>
+                <Grid size={12}>
           <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
             <WebsiteIcon color="primary" />
             Contact Information
@@ -1025,7 +1092,11 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Company Websites */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <Card elevation={2}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -1088,7 +1159,11 @@ const CompanyProfile: React.FC = () => {
                 </Grid>
                 
         {/* Phone Numbers */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <Card elevation={2}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -1133,7 +1208,7 @@ const CompanyProfile: React.FC = () => {
                 </Grid>
                 
         {/* Company Address */}
-                <Grid item xs={12}>
+                <Grid size={12}>
           <Card elevation={2}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
@@ -1153,7 +1228,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Business Intelligence Section */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
             <TrendingIcon color="primary" />
             Business Intelligence
@@ -1161,7 +1236,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Products & Services */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Card elevation={2}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -1204,7 +1279,11 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Unique Selling Points */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <Card elevation={2}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -1247,7 +1326,11 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Target Markets */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <Card elevation={2}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -1290,7 +1373,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Sales Strategy Section */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
             <CampaignIcon color="primary" />
             Sales Strategy
@@ -1298,7 +1381,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Sales Methodology */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Card elevation={2}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom color="primary">
@@ -1322,7 +1405,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Elevator Pitch */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Card elevation={2}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom color="primary">
@@ -1346,7 +1429,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Partnership Opportunities (B2B Collaboration) */}
-          <Grid item xs={12}>
+          <Grid size={12}>
           <Card elevation={2} sx={{ border: '2px solid #4caf50' }}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ color: '#4caf50' }}>
@@ -1378,7 +1461,7 @@ const CompanyProfile: React.FC = () => {
         </Grid>
 
         {/* Save Button - Sticky at bottom */}
-          <Grid item xs={12}>
+          <Grid size={12}>
           <Paper 
             elevation={4} 
             sx={{ 

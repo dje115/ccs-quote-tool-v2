@@ -117,7 +117,11 @@ const CustomerAnalysis: React.FC = () => {
     return (
       <Grid container spacing={3}>
         {/* Lead Score Overview */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Lead Score"
             icon={<AssessmentIcon color="primary" />}
@@ -152,9 +156,12 @@ const CustomerAnalysis: React.FC = () => {
             </Box>
           </AnalysisCard>
         </Grid>
-
         {/* Company Overview */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Company Overview"
             icon={<BusinessIcon color="primary" />}
@@ -188,9 +195,8 @@ const CustomerAnalysis: React.FC = () => {
             </Box>
           </AnalysisCard>
         </Grid>
-
         {/* IT Infrastructure Needs */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <AnalysisCard
             title="IT Infrastructure Assessment"
             icon={<TrendingUpIcon color="primary" />}
@@ -200,9 +206,12 @@ const CustomerAnalysis: React.FC = () => {
             </Typography>
           </AnalysisCard>
         </Grid>
-
         {/* Opportunities and Risks */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Opportunities"
             icon={<CheckCircleIcon color="success" />}
@@ -225,8 +234,11 @@ const CustomerAnalysis: React.FC = () => {
             )}
           </AnalysisCard>
         </Grid>
-
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Risk Factors"
             icon={<WarningIcon color="warning" />}
@@ -249,10 +261,9 @@ const CustomerAnalysis: React.FC = () => {
             )}
           </AnalysisCard>
         </Grid>
-
         {/* Recommended Approach */}
         {analysis.recommended_approach && (
-          <Grid item xs={12}>
+          <Grid size={12}>
             <AnalysisCard
               title="Recommended Approach"
               icon={<AssessmentIcon color="primary" />}
@@ -263,10 +274,13 @@ const CustomerAnalysis: React.FC = () => {
             </AnalysisCard>
           </Grid>
         )}
-
         {/* Decision Makers */}
         {analysis.decision_makers && analysis.decision_makers.length > 0 && (
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <AnalysisCard
               title="Key Decision Makers"
               icon={<BusinessIcon color="primary" />}
@@ -281,10 +295,13 @@ const CustomerAnalysis: React.FC = () => {
             </AnalysisCard>
           </Grid>
         )}
-
         {/* Next Steps */}
         {analysis.next_steps && analysis.next_steps.length > 0 && (
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <AnalysisCard
               title="Next Steps"
               icon={<TrendingUpIcon color="primary" />}
@@ -362,18 +379,25 @@ const CustomerAnalysis: React.FC = () => {
           </Tooltip>
         </Box>
       </Box>
-
       {/* Customer Info Card */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <Typography variant="h6" gutterBottom>Customer Information</Typography>
             <Typography variant="body2"><strong>Company:</strong> {customer.company_name}</Typography>
             <Typography variant="body2"><strong>Contact:</strong> {customer.name}</Typography>
             <Typography variant="body2"><strong>Email:</strong> {customer.email}</Typography>
             <Typography variant="body2"><strong>Phone:</strong> {customer.phone || 'Not provided'}</Typography>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid
+            size={{
+              xs: 12,
+              md: 6
+            }}>
             <Typography variant="h6" gutterBottom>Company Details</Typography>
             <Typography variant="body2"><strong>Industry:</strong> {customer.industry || 'Not specified'}</Typography>
             <Typography variant="body2"><strong>Website:</strong> {customer.website || 'Not provided'}</Typography>
@@ -384,9 +408,7 @@ const CustomerAnalysis: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
-
       <Divider sx={{ mb: 3 }} />
-
       {/* Analysis Content */}
       {customer.ai_analysis ? (
         renderExistingAnalysis()

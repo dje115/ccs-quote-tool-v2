@@ -180,7 +180,11 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
     
     return (
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Lead Score"
             icon={<AssessmentIcon color="primary" />}
@@ -205,8 +209,11 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
             </Box>
           </AnalysisCard>
         </Grid>
-
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Business Overview"
             icon={<BusinessIcon color="primary" />}
@@ -234,8 +241,7 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
             </Box>
           </AnalysisCard>
         </Grid>
-
-        <Grid item xs={12}>
+        <Grid size={12}>
           <AnalysisCard
             title="IT Infrastructure Needs"
             icon={<TrendingUpIcon color="primary" />}
@@ -245,8 +251,11 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
             </Typography>
           </AnalysisCard>
         </Grid>
-
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Opportunities"
             icon={<CheckCircleIcon color="success" />}
@@ -269,8 +278,11 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
             )}
           </AnalysisCard>
         </Grid>
-
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <AnalysisCard
             title="Risk Factors"
             icon={<WarningIcon color="warning" />}
@@ -304,7 +316,7 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
 
     return (
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h5" gutterBottom>
               Detailed Analysis Report
@@ -314,7 +326,11 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
             </Typography>
 
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  md: 6
+                }}>
                 <Typography variant="h6" gutterBottom>
                   Company Information
                 </Typography>
@@ -340,7 +356,11 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
                 </Box>
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  md: 6
+                }}>
                 <Typography variant="h6" gutterBottom>
                   Engagement Strategy
                 </Typography>
@@ -365,7 +385,7 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
               </Grid>
 
               {analysis.decision_makers && analysis.decision_makers.length > 0 && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Typography variant="h6" gutterBottom>
                     Key Decision Makers
                   </Typography>
@@ -380,7 +400,7 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
               )}
 
               {analysis.competitive_advantages && analysis.competitive_advantages.length > 0 && (
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Typography variant="h6" gutterBottom>
                     Competitive Advantages
                   </Typography>
@@ -484,6 +504,8 @@ const AIAnalysisDashboard: React.FC<AIAnalysisDashboardProps> = ({
 };
 
 export default AIAnalysisDashboard;
+
+
 
 
 

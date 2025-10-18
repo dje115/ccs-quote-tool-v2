@@ -289,23 +289,26 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg">
-      <Typography variant="h4" component="h1" gutterBottom>
-        Settings
-      </Typography>
-
+    <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
+      {/* Clean Centered Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h3" fontWeight="700" color="primary" gutterBottom>
+          Settings
+        </Typography>
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+          System Configuration & Preferences
+        </Typography>
+      </Box>
       {success && (
         <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
           {success}
         </Alert>
       )}
-
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
-
       {/* Tabs */}
       <Paper sx={{ mb: 3 }}>
         <Tabs 
@@ -331,12 +334,11 @@ const Settings: React.FC = () => {
           <Tab icon={<NotificationsIcon />} iconPosition="start" label="Notifications" />
         </Tabs>
       </Paper>
-
       {/* Tab 0: Profile Settings */}
       {currentTab === 0 && (
       <Grid container spacing={3}>
         {/* Company Settings */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -345,7 +347,7 @@ const Settings: React.FC = () => {
               </Box>
 
               <Grid container spacing={2}>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="Company Name"
@@ -354,7 +356,7 @@ const Settings: React.FC = () => {
                     helperText="Your legal company name - used throughout the system and in AI analysis"
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Button
                     variant="contained"
                     startIcon={<SaveIcon />}
@@ -370,7 +372,11 @@ const Settings: React.FC = () => {
         </Grid>
         
         {/* Profile Settings */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -379,7 +385,11 @@ const Settings: React.FC = () => {
               </Box>
 
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <TextField
                     fullWidth
                     label="First Name"
@@ -388,7 +398,11 @@ const Settings: React.FC = () => {
                     disabled
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <TextField
                     fullWidth
                     label="Last Name"
@@ -397,7 +411,7 @@ const Settings: React.FC = () => {
                     disabled
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="Email"
@@ -407,7 +421,7 @@ const Settings: React.FC = () => {
                     disabled
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="Phone"
@@ -416,7 +430,7 @@ const Settings: React.FC = () => {
                     disabled
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Alert severity="info">
                     User profile fields are managed by your administrator. Please contact support to update these fields.
                   </Alert>
@@ -428,12 +442,11 @@ const Settings: React.FC = () => {
 
       </Grid>
       )}
-
       {/* Tab 1: API Keys */}
       {currentTab === 1 && (
       <Grid container spacing={3}>
         {/* API Keys will go here */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -509,7 +522,7 @@ const Settings: React.FC = () => {
         </Grid>
 
         {/* API Settings */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -523,7 +536,11 @@ const Settings: React.FC = () => {
               </Alert>
 
               <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 4
+                  }}>
                   <TextField
                     fullWidth
                     label="OpenAI API Key"
@@ -533,7 +550,11 @@ const Settings: React.FC = () => {
                     helperText="For AI-powered lead generation"
                   />
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 4
+                  }}>
                   <TextField
                     fullWidth
                     label="Companies House API Key"
@@ -543,7 +564,11 @@ const Settings: React.FC = () => {
                     helperText="For UK company data"
                   />
                 </Grid>
-                <Grid item xs={12} md={4}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 4
+                  }}>
                   <TextField
                     fullWidth
                     label="Google Maps API Key"
@@ -553,7 +578,7 @@ const Settings: React.FC = () => {
                     helperText="For location services"
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Button
                     variant="contained"
                     startIcon={<SaveIcon />}
@@ -569,7 +594,7 @@ const Settings: React.FC = () => {
         </Grid>
 
         {/* API Status */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -578,7 +603,11 @@ const Settings: React.FC = () => {
               </Box>
 
               <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 4
+                  }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="body1">OpenAI API</Typography>
                     <Chip
@@ -603,7 +632,11 @@ const Settings: React.FC = () => {
                   </Button>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 4
+                  }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="body1">Google Maps API</Typography>
                     <Chip
@@ -628,7 +661,11 @@ const Settings: React.FC = () => {
                   </Button>
                 </Grid>
 
-                <Grid item xs={12} md={4}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 4
+                  }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="body1">Companies House API</Typography>
                     <Chip
@@ -658,7 +695,11 @@ const Settings: React.FC = () => {
         </Grid>
 
         {/* Password Change */}
-        <Grid item xs={12} md={6}>
+        <Grid
+          size={{
+            xs: 12,
+            md: 6
+          }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -667,16 +708,16 @@ const Settings: React.FC = () => {
               <Divider sx={{ mb: 3 }} />
 
               <Grid container spacing={2}>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField fullWidth label="Current Password" type="password" />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField fullWidth label="New Password" type="password" />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <TextField fullWidth label="Confirm New Password" type="password" />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Button variant="contained" disabled={saving}>
                     Update Password
                   </Button>
@@ -688,21 +729,18 @@ const Settings: React.FC = () => {
 
       </Grid>
       )}
-
       {/* Tab 2: Company Profile */}
       {currentTab === 2 && (
         <CompanyProfile />
       )}
-
       {/* Tab 3: AI Business Intelligence */}
       {currentTab === 3 && (
         <AIBusinessIntelligence />
       )}
-
       {/* Tab 4: Notifications */}
       {currentTab === 4 && (
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
@@ -763,7 +801,6 @@ const Settings: React.FC = () => {
         </Grid>
       </Grid>
       )}
-
       {/* Test Results Modal */}
       <Dialog open={testModalOpen} onClose={closeTestModal} maxWidth="sm" fullWidth>
         <DialogTitle>API Test Results</DialogTitle>

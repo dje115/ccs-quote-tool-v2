@@ -50,16 +50,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-          v7_fetcherPersist: true,
-          v7_normalizeFormMethod: true,
-          v7_partialHydration: true,
-          v7_skipActionErrorRevalidation: true
-        }}
-      >
+        <BrowserRouter>
         <GlobalAIMonitor />
         <Routes>
           <Route path="/login" element={<Login />} />

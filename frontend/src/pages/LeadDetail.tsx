@@ -166,18 +166,15 @@ const LeadDetail: React.FC = () => {
           </Button>
         )}
       </Box>
-
       {lead.status === 'converted' && (
         <Alert severity="success" sx={{ mb: 3 }}>
           This discovery has been converted to a CRM lead
         </Alert>
       )}
-
       <Grid container spacing={3}>
-        {/* Lead Information */}
-        <Grid item xs={12} md={8}>
-          {/* Quick Telesales Summary */}
-          {lead.qualification_reason && (
+        {/* Quick Telesales Summary */}
+        {lead.qualification_reason && (
+          <Grid item size={12}>
             <Paper sx={{ p: 3, mb: 3, bgcolor: 'success.light', border: '2px solid', borderColor: 'success.main' }}>
               <Typography variant="h6" gutterBottom sx={{ color: 'success.dark', fontWeight: 'bold' }}>
                 📞 Quick Telesales Summary
@@ -194,40 +191,157 @@ const LeadDetail: React.FC = () => {
                 }}
               />
             </Paper>
-          )}
+          </Grid>
+        )}
 
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+        {/* Left Sidebar - Status/Lead Score and Quick Actions */}
+        <Grid
+          item
+          size={{
+            xs: 12,
+            md: 4
+          }}>
+          {/* Status and Lead Score - Above Quick Actions */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent sx={{ p: 2 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                Status
+              </Typography>
+              <Chip
+                label={lead.status}
+                color={getStatusColor(lead.status)}
+                size="small"
+                sx={{ mb: 2 }}
+              />
+
+              <Typography variant="subtitle1" gutterBottom>
+                Lead Score
+              </Typography>
+              <Chip
+                label={lead.lead_score || 0}
+                color={lead.lead_score >= 70 ? 'success' : lead.lead_score >= 40 ? 'warning' : 'default'}
+                size="medium"
+                sx={{ mb: 2 }}
+              />
+
+              <Typography variant="caption" display="block" sx={{ mt: 1 }} color="text.secondary">
+                Created: {new Date(lead.created_at).toLocaleDateString()}
+              </Typography>
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent sx={{ p: 2 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ mb: 1 }}>
+                Quick Actions
+              </Typography>
+              {lead.status !== 'converted' && (
+                <>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="success"
+                    sx={{ mb: 1 }}
+                    startIcon={<ConvertIcon />}
+                    onClick={handleConvertToLead}
+                    disabled={converting}
+                  >
+                    {converting ? 'Converting...' : 'Convert to CRM Lead'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="primary"
+                    sx={{ mb: 1 }}
+                    onClick={handleRunAIAnalysis}
+                    disabled={analyzing}
+                  >
+                    {analyzing ? 'Analyzing...' : 'Run AI Analysis'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    color="error"
+                    onClick={() => leadAPI.update(id!, { status: 'disqualified' })}
+                  >
+                    Disqualify
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Company Information - Right side */}
+        <Grid
+          item
+          size={{
+            xs: 12,
+            md: 8
+          }}>
+          <Paper 
+            elevation={2}
+            sx={{ 
+              p: 3, 
+              mb: 3, 
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'primary.main',
+              backgroundColor: 'background.paper'
+            }}
+          >
+            <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', fontWeight: 600 }}>
               Company Information
             </Typography>
-            <Divider sx={{ mb: 2 }} />
+            <Divider sx={{ mb: 2, borderColor: 'primary.main' }} />
 
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <BusinessIcon color="action" />
                   <Box>
                     <Typography variant="caption" color="text.secondary">
                       Business Sector
                     </Typography>
-                    <Typography>{lead.business_sector || 'N/A'}</Typography>
+                    <Typography>
+                      {lead.business_sector || 
+                       (lead.ai_analysis && typeof lead.ai_analysis === 'object' ? lead.ai_analysis.business_sector : null) || 
+                       'N/A'}
+                    </Typography>
                   </Box>
                 </Box>
               </Grid>
 
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <BusinessIcon color="action" />
                   <Box>
                     <Typography variant="caption" color="text.secondary">
                       Company Size
                     </Typography>
-                    <Typography>{lead.company_size || 'N/A'}</Typography>
+                    <Typography>
+                      {lead.company_size || 
+                       (lead.ai_analysis && typeof lead.ai_analysis === 'object' ? lead.ai_analysis.business_size_category : null) || 
+                       'N/A'}
+                    </Typography>
                   </Box>
                 </Box>
               </Grid>
 
-              <Grid item xs={12} sm={6}>
+              <Grid
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <BusinessIcon color="action" />
                   <Box>
@@ -240,7 +354,7 @@ const LeadDetail: React.FC = () => {
               </Grid>
 
               {lead.address && (
-                <Grid item xs={12}>
+                <Grid item size={{ xs: 12 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <BusinessIcon color="action" />
                     <Box>
@@ -253,7 +367,12 @@ const LeadDetail: React.FC = () => {
                 </Grid>
               )}
 
-              <Grid item xs={12} sm={6}>
+              <Grid
+                item
+                size={{
+                  xs: 12,
+                  sm: 6
+                }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <BusinessIcon color="action" />
                   <Box>
@@ -266,7 +385,12 @@ const LeadDetail: React.FC = () => {
               </Grid>
 
               {lead.campaign_name && (
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  item
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <BusinessIcon color="action" />
                     <Box>
@@ -280,7 +404,7 @@ const LeadDetail: React.FC = () => {
               )}
 
               {lead.website && (
-                <Grid item xs={12}>
+                <Grid item size={{ xs: 12 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <WebsiteIcon color="action" />
                     <Box>
@@ -298,7 +422,11 @@ const LeadDetail: React.FC = () => {
               )}
 
               {lead.contact_email && (
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <EmailIcon color="action" />
                     <Box>
@@ -312,7 +440,11 @@ const LeadDetail: React.FC = () => {
               )}
 
               {lead.contact_phone && (
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <PhoneIcon color="action" />
                     <Box>
@@ -326,7 +458,11 @@ const LeadDetail: React.FC = () => {
               )}
 
               {lead.employee_count_estimate && (
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <Typography variant="caption" color="text.secondary">
                     Employees (Estimate)
                   </Typography>
@@ -335,7 +471,11 @@ const LeadDetail: React.FC = () => {
               )}
 
               {lead.annual_revenue_estimate && (
-                <Grid item xs={12} sm={6}>
+                <Grid
+                  size={{
+                    xs: 12,
+                    sm: 6
+                  }}>
                   <Typography variant="caption" color="text.secondary">
                     Annual Revenue (Estimate)
                   </Typography>
@@ -343,7 +483,6 @@ const LeadDetail: React.FC = () => {
                 </Grid>
               )}
             </Grid>
-
 
             {lead.project_value && (
               <Box sx={{ mt: 2 }}>
@@ -364,7 +503,7 @@ const LeadDetail: React.FC = () => {
             )}
           </Paper>
 
-          {/* AI Analysis */}
+          {/* AI Analysis - Right side, below Company Information */}
           {lead.ai_analysis && (
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -387,43 +526,71 @@ const LeadDetail: React.FC = () => {
                   
                   <Grid container spacing={2} sx={{ mb: 3 }}>
                     {lead.ai_analysis.business_sector && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">Business Sector</Typography>
                         <Typography variant="body2">{lead.ai_analysis.business_sector}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.business_size_category && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">Company Size</Typography>
                         <Typography variant="body2">{lead.ai_analysis.business_size_category}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.estimated_employees && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">Estimated Employees</Typography>
                         <Typography variant="body2">{lead.ai_analysis.estimated_employees}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.estimated_revenue && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">Estimated Revenue</Typography>
                         <Typography variant="body2">{lead.ai_analysis.estimated_revenue}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.technology_maturity && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">Technology Maturity</Typography>
                         <Typography variant="body2">{lead.ai_analysis.technology_maturity}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.it_budget_estimate && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">IT Budget Estimate</Typography>
                         <Typography variant="body2">{lead.ai_analysis.it_budget_estimate}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.growth_potential && (
-                      <Grid item xs={12} sm={6}>
+                      <Grid
+                        size={{
+                          xs: 12,
+                          sm: 6
+                        }}>
                         <Typography variant="caption" color="text.secondary">Growth Potential</Typography>
                         <Chip 
                           label={lead.ai_analysis.growth_potential} 
@@ -499,7 +666,7 @@ const LeadDetail: React.FC = () => {
             </Paper>
           )}
 
-          {/* External Data */}
+          {/* External Data - Right side, below AI Analysis */}
           {(lead.google_maps_data || lead.companies_house_data || lead.linkedin_data || lead.website_data) && (
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -545,76 +712,6 @@ const LeadDetail: React.FC = () => {
               )}
             </Paper>
           )}
-        </Grid>
-
-        {/* Sidebar */}
-        <Grid item xs={12} md={4}>
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Status
-              </Typography>
-              <Chip
-                label={lead.status}
-                color={getStatusColor(lead.status)}
-                sx={{ mb: 2 }}
-              />
-
-              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                Lead Score
-              </Typography>
-              <Chip
-                label={lead.lead_score || 0}
-                color={lead.lead_score >= 70 ? 'success' : lead.lead_score >= 40 ? 'warning' : 'default'}
-                sx={{ fontSize: '1.2rem', padding: '20px 12px' }}
-              />
-
-              <Typography variant="caption" display="block" sx={{ mt: 2 }} color="text.secondary">
-                Created: {new Date(lead.created_at).toLocaleDateString()}
-              </Typography>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Quick Actions
-              </Typography>
-              {lead.status !== 'converted' && (
-                <>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="success"
-                    sx={{ mb: 1 }}
-                    startIcon={<ConvertIcon />}
-                    onClick={handleConvertToLead}
-                    disabled={converting}
-                  >
-                    {converting ? 'Converting...' : 'Convert to CRM Lead'}
-                  </Button>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    sx={{ mb: 1 }}
-                    onClick={handleRunAIAnalysis}
-                    disabled={analyzing}
-                  >
-                    {analyzing ? 'Analyzing...' : 'Run AI Analysis'}
-                  </Button>
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    color="error"
-                    onClick={() => leadAPI.update(id!, { status: 'disqualified' })}
-                  >
-                    Disqualify
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
         </Grid>
       </Grid>
     </Container>
