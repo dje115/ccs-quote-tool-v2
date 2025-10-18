@@ -245,7 +245,7 @@ const Campaigns: React.FC = () => {
             variant="contained"
             size="large"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/campaigns/new')}
+            onClick={() => navigate('/campaigns/create')}
             sx={{
               borderRadius: 2,
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -551,7 +551,7 @@ const Campaigns: React.FC = () => {
                       <Button
                         variant="contained"
                         startIcon={<AddIcon />}
-                        onClick={() => navigate('/campaigns/new')}
+                        onClick={() => navigate('/campaigns/create')}
                         sx={{
                           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                           borderRadius: 2

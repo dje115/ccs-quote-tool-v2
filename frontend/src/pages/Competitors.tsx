@@ -15,12 +15,14 @@ import {
   InputAdornment,
   Chip,
   IconButton,
-  Tooltip
+  Tooltip,
+  Checkbox
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Visibility as ViewIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { customerAPI } from '../services/api';
@@ -30,6 +32,7 @@ const Competitors: React.FC = () => {
   const [competitors, setCompetitors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedCompetitors, setSelectedCompetitors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadCompetitors();
@@ -62,6 +65,40 @@ const Competitors: React.FC = () => {
       'LOST': 'error'
     };
     return colors[status] || 'default';
+  };
+
+  const handleSelectCompetitor = (competitorId: string) => {
+    const newSelected = new Set(selectedCompetitors);
+    if (newSelected.has(competitorId)) {
+      newSelected.delete(competitorId);
+    } else {
+      newSelected.add(competitorId);
+    }
+    setSelectedCompetitors(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedCompetitors.size === filteredCompetitors.length) {
+      setSelectedCompetitors(new Set());
+    } else {
+      setSelectedCompetitors(new Set(filteredCompetitors.map(c => c.id)));
+    }
+  };
+
+  const handleAddAllToLeadCampaign = async () => {
+    if (selectedCompetitors.size === 0) {
+      alert('Please select at least one competitor');
+      return;
+    }
+
+    // Navigate to company list import campaign creation
+    const selectedCompanyIds = Array.from(selectedCompetitors);
+    navigate('/campaigns/create', {
+      state: {
+        type: 'company_list_import',
+        companies: selectedCompanyIds
+      }
+    });
   };
 
   return (
@@ -109,21 +146,52 @@ const Competitors: React.FC = () => {
           />
         </Box>
 
-        {/* Stats */}
-        <Paper sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" color="primary">
-            Total Competitors: {filteredCompetitors.length}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Companies marked as competitors for competitive analysis
-          </Typography>
-        </Paper>
+        {/* Stats and Actions */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, gap: 2 }}>
+          <Paper sx={{ p: 2, flex: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box>
+                <Typography variant="h6" color="primary">
+                  Total Competitors: {filteredCompetitors.length}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {selectedCompetitors.size > 0 ? `${selectedCompetitors.size} selected` : 'Companies marked as competitors'}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+
+          {/* Add to Campaign Button */}
+          {selectedCompetitors.size > 0 && (
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<UploadIcon />}
+              onClick={handleAddAllToLeadCampaign}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1.5
+              }}
+            >
+              Add {selectedCompetitors.size} to Campaign
+            </Button>
+          )}
+        </Box>
 
         {/* Competitors Table */}
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
               <TableRow sx={{ bgcolor: 'primary.light' }}>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    indeterminate={selectedCompetitors.size > 0 && selectedCompetitors.size < filteredCompetitors.length}
+                    checked={selectedCompetitors.size === filteredCompetitors.length && filteredCompetitors.length > 0}
+                    onChange={handleSelectAll}
+                  />
+                </TableCell>
                 <TableCell><strong>Company Name</strong></TableCell>
                 <TableCell><strong>Status</strong></TableCell>
                 <TableCell><strong>Sector</strong></TableCell>
@@ -135,13 +203,13 @@ const Competitors: React.FC = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={7} align="center">
                     Loading competitors...
                   </TableCell>
                 </TableRow>
               ) : filteredCompetitors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={7} align="center">
                     <Typography color="text.secondary">
                       No competitors found. Mark customers as competitors in the CRM to track them here.
                     </Typography>
@@ -153,35 +221,40 @@ const Competitors: React.FC = () => {
                     key={competitor.id}
                     hover
                     sx={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/customers/${competitor.id}`)}
                   >
-                    <TableCell>
+                    <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedCompetitors.has(competitor.id)}
+                        onChange={() => handleSelectCompetitor(competitor.id)}
+                      />
+                    </TableCell>
+                    <TableCell onClick={() => navigate(`/customers/${competitor.id}`)}>
                       <Typography variant="body2" fontWeight="medium">
                         {competitor.company_name}
                       </Typography>
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={() => navigate(`/customers/${competitor.id}`)}>
                       <Chip
                         label={competitor.status}
                         color={getStatusColor(competitor.status)}
                         size="small"
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={() => navigate(`/customers/${competitor.id}`)}>
                       {competitor.business_sector ? (
                         <Chip label={competitor.business_sector} size="small" variant="outlined" />
                       ) : (
                         <Typography variant="body2" color="text.secondary">-</Typography>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={() => navigate(`/customers/${competitor.id}`)}>
                       {competitor.business_size ? (
                         <Typography variant="body2">{competitor.business_size}</Typography>
                       ) : (
                         <Typography variant="body2" color="text.secondary">-</Typography>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={() => navigate(`/customers/${competitor.id}`)}>
                       {competitor.website ? (
                         <a href={competitor.website} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
                           <Typography variant="body2" color="primary">Visit</Typography>
@@ -190,7 +263,7 @@ const Competitors: React.FC = () => {
                         <Typography variant="body2" color="text.secondary">-</Typography>
                       )}
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                       <Tooltip title="View Details">
                         <IconButton
                           size="small"

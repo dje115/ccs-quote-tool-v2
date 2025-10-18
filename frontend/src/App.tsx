@@ -144,6 +144,14 @@ function App() {
             }
           />
           <Route
+            path="/campaigns/create"
+            element={
+              <ProtectedRoute>
+                <CampaignCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/campaigns/:campaignId"
             element={
               <ProtectedRoute>
