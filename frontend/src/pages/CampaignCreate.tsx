@@ -151,43 +151,51 @@ const CampaignCreate: React.FC = () => {
 
       {/* Quick Info Section */}
       <Paper sx={{ p: 3, backgroundColor: '#f5f5f5', borderRadius: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>
           💡 Campaign Tips
         </Typography>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 1, sm: 2 }, gap: 2 }}>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              🎯 Be Specific
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Define clear target criteria for better lead quality
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              📍 Location Matters
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Use postcodes and distance for targeted local searches
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              ⏱️ Start Small
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Begin with 50-100 leads to test your approach
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              ✅ Track Results
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Monitor success rates to refine future campaigns
-            </Typography>
-          </Box>
-        </Box>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#667eea' }}>
+                🎯 Be Specific
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                Define clear target criteria for better lead quality
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#667eea' }}>
+                📍 Location Matters
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                Use postcodes and distance for targeted local searches
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#667eea' }}>
+                ⏱️ Start Small
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                Begin with 50-100 leads to test your approach
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#667eea' }}>
+                ✅ Track Results
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                Monitor success rates to refine future campaigns
+              </Typography>
+            </Box>
+          </Grid>
+        </Grid>
       </Paper>
     </Container>
   );
