@@ -286,68 +286,13 @@ const CustomerDetail: React.FC = () => {
       return;
     }
 
-    // Generate campaign name with date/time
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric' 
-    });
-    const timeStr = now.toLocaleTimeString('en-GB', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-    
-    const campaignName = competitor ? 
-      `Competitor: ${competitor} ${dateStr} ${timeStr}` : 
-      `Competitors of ${customer?.company_name} ${dateStr} ${timeStr}`;
-
-    const confirmed = window.confirm(
-      competitor ? 
-      `Create DRAFT campaign for "${competitor}"?\n\nThis will create a draft campaign that you can review and start when ready.` :
-      `Create DRAFT campaign to analyze all ${competitorsToAdd.length} competitors?\n\nThis will create a draft campaign that you can review and start when ready.`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setAiAnalysisLoading(true);
-      
-      // Create a company list campaign
-      const campaignData = {
-        name: campaignName,
-        description: competitor ? 
-          `Competitor analysis of ${competitor} (from ${customer?.company_name})` :
-          `Competitor analysis from ${customer?.company_name}`,
-        prompt_type: 'company_list',
-        company_names: competitorsToAdd,
-        source_customer_id: customer?.id,
-        exclude_duplicates: true,
-        include_existing_customers: false
-      };
-
-      const response = await api.post('/campaigns/', campaignData);
-      
-      if (response.data) {
-        // Campaign created as DRAFT - user can review and start it manually
-        setAiAnalysisSuccess(
-          `✅ Campaign "${campaignName}" created as DRAFT! ` +
-          `It will analyze ${competitorsToAdd.length} ${competitorsToAdd.length === 1 ? 'company' : 'companies'}. ` +
-          `Go to Campaigns to review and start it.`
-        );
-        setTimeout(() => {
-          setAiAnalysisSuccess(null);
-          // Optionally navigate to campaigns page
-          // navigate('/campaigns');
-        }, 5000);
+    // Navigate to Company List Import page with competitors pre-filled
+    navigate('/campaigns/import', {
+      state: {
+        companies: competitorsToAdd,
+        source: `Competitors of ${customer?.company_name}`
       }
-    } catch (error: any) {
-      console.error('Error creating competitor campaign:', error);
-      setAiAnalysisError(error.response?.data?.detail || 'Failed to create competitor campaign');
-      setTimeout(() => setAiAnalysisError(null), 3000);
-    } finally {
-      setAiAnalysisLoading(false);
-    }
+    });
   };
 
   const handleStatusChange = async (newStatus: string) => {
