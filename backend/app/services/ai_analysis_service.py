@@ -520,24 +520,34 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 Use the financial data, locations, and business description PROVIDED ABOVE to identify realistic competitors.
 
                 **SIZING RULES:**
-                - Match TURNOVER: Find companies with turnover within 50% of THIS COMPANY
+                - Match TURNOVER or EMPLOYEE COUNT within ±50% if available
                 - Example: If company has £10M turnover, search for companies £5M-£15M
+                - If turnover/employee data is unavailable, infer size based on:
+                  * Website scale and sophistication
+                  * Client type and portfolio
+                  * Number of offices and geographic presence
+                  * Industry position and market presence
 
-                **LOCATION RULES:**
+                **LOCATION RULES (PRIORITY):**
                 - Look at THIS COMPANY's primary location and all office locations listed above
-                - Find competitors operating in THE SAME REGIONS
+                - PRIORITIZE firms operating in the SAME REGIONS or POSTCODE AREAS
                 - Include companies with offices in those same cities/postcodes
                 - Regional competitors are preferred over national ones
+                - Only expand to national competitors if insufficient regional matches found
 
-                **SERVICE RULES:**
+                **SERVICE RULES (CRITICAL):**
+                - Match SPECIFIC SERVICES, not just broad sectors
                 - Look at THIS COMPANY's business description and activities ABOVE
                 - Find companies offering THE SAME SPECIFIC SERVICES
-                - Match industry type (not just generic category)
                 - Example: If company does "commercial cabling services", find other cabling/infrastructure companies, NOT generic IT services
+                - Service matching is MORE IMPORTANT than size matching
 
-                **VERIFICATION - ESSENTIAL:**
-                - Use Companies House (gov.uk) to verify company exists and is active
-                - Check company website for current services and locations
+                **VERIFICATION - NON-NEGOTIABLE:**
+                - Verify each company's existence via TRUSTED PUBLIC SOURCES:
+                  * Companies House (gov.uk) - primary source
+                  * Endole.com - comprehensive UK business directory
+                  * Crunchbase.com - business intelligence
+                  * Company website - current services and operations
                 - Verify the company is NOT:
                   * A shell company or dormant
                   * In a completely different sector
@@ -546,17 +556,19 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 - Only include if you can verify they are REAL and ACTIVE
 
                 **FOR EACH COMPETITOR - MUST PROVIDE:**
-                1. Company name (verified via Companies House)
-                2. Verified turnover or employee count
-                3. Operating locations/regions
+                1. Company name (verified via public source)
+                2. Verified size metric (turnover OR employee count, inferred if unavailable)
+                3. Primary operating regions/cities
                 4. Specific services that overlap with THIS COMPANY
-                5. Why they directly compete (service/market overlap)
+                5. Why they directly compete (service/market/customer overlap)
+                6. Verification source used
 
                 **QUALITY OVER QUANTITY:**
                 - Return ONLY REAL competitors you can verify
                 - Return 3-5 verified competitors instead of 10 questionable names
                 - If you can only find 2 real competitors, return those 2
                 - Better to return fewer VERIFIED competitors than any made-up names
+                - Exclude shell companies, dormant firms, or irrelevant businesses
 
                 Include their company names only (one per line) in the JSON response.
 
