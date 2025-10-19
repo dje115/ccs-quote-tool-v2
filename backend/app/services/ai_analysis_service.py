@@ -514,44 +514,46 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 real UK competitors through research.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 real UK competitors - REGIONAL PRIORITY.
 
-                **RESEARCH APPROACH:**
-                Based on THIS COMPANY's business description, locations, and activities, research and identify likely competitors through:
-                - Companies House business registry searches
-                - Public business directories (Endole, Crunchbase, Google Business)
-                - Industry and sector searches
-                - Regional business presence
+                **CRITICAL: REGION-FIRST APPROACH**
+                THIS COMPANY operates in specific regions: Chesterfield (S41), Leicester (LE17), Ferndown/Wimborne (BH21) in Dorset.
+                MUST search FIRST for competitors in these specific regions and postcodes.
+                Only if fewer than 3-4 real regional competitors can be found, then expand to nearby regions.
+                AVOID national chains and large multinational firms unless they have local offices in THIS COMPANY's regions.
+
+                **RESEARCH METHOD:**
+                - Search Companies House for businesses matching THIS COMPANY's business type in postcodes: S41 (Chesterfield), LE17 (Leicester), BH21 (Ferndown)
+                - Check Endole and Crunchbase for regional matches
+                - Search "technology solutions" + "Chesterfield", "technology solutions" + "Leicester", etc.
+                - Look for SME/medium-sized local competitors with regional presence
 
                 **SIZING CRITERIA:**
-                - Similar business model and operations
-                - Approximate size: turnover within ±50% if known, OR similar employee count, OR similar market position
-                - If exact data unavailable, estimate from website, client base, or office presence
+                - Target companies similar in size: turnover £8M-£15M, or 50-150 employees
+                - Similar business model: regional technology/IT services, managed services, infrastructure, or similar B2B services
+                - If data unavailable, estimate from website sophistication and office count
 
-                **LOCATION MATCHING (PRIMARY FILTER):**
-                - Prioritize companies operating in THIS COMPANY's same regions/postcodes
-                - Include those with offices in the same cities (Chesterfield, Leicester, Ferndown, etc.)
-                - Regional/local competitors are preferred over large national firms
-                - If few regional competitors found, include nearby regional competitors
+                **LOCATION ENFORCEMENT (MANDATORY):**
+                - Primary offices MUST be in: Chesterfield (S41), Leicester (LE17), Ferndown/Wimborne (BH21), or within 30 miles
+                - Companies with ONLY London/national head offices do NOT qualify as competitors for THIS COMPANY's regional market
+                - Strongly prefer companies with multiple regional offices like THIS COMPANY
+                - If searching expands beyond these regions, only include companies with proven local operations/offices
 
-                **SERVICE MATCHING (CRITICAL):**
-                - Find companies offering the SAME SPECIFIC SERVICES or business model
-                - Match the industry type and customer base
-                - Example: If company does "technology solutions and IT services", find other tech services firms, NOT unrelated industries
-
-                **QUALITY REQUIREMENTS:**
-                - Each competitor must be a real, active company (not shell/dormant)
-                - Each company should have a legitimate business presence (website, office, registrations)
-                - Prioritize companies you have found evidence for through at least one public source
-                - Return probable competitors even if data is partial - better 5 real-but-researched competitors than zero
+                **SERVICE MATCHING:**
+                - Same business model: technology solutions, IT services, managed services, infrastructure, technical services
+                - Companies offering similar regional B2B services
+                - NOT large national consultancies, NOT one-person operations, NOT shell companies
 
                 **FOR EACH COMPETITOR:**
                 1. Company name
-                2. Approximate business type/services
-                3. Operating region(s)
-                4. Estimated size (turnover estimate if found, OR employee estimate, OR market position)
-                5. Why they compete with THIS COMPANY (service/market overlap)
+                2. Primary postcode/region (MUST be S41, LE17, BH21 or within 30 miles)
+                3. Business type (must match THIS COMPANY's type)
+                4. Estimated size
+                5. Why they compete with THIS COMPANY
 
+                **RETURN FORMAT:**
+                Return ONLY companies where primary/head office is in the specified regions (S41, LE17, BH21).
+                If you cannot find 5-6 regional competitors, return the 2-3 you find, rather than returning national firms.
                 Include their company names only (one per line) in the JSON response.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
