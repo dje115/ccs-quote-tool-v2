@@ -307,10 +307,21 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             employees = None
             if ch and ch.get('accounts_detail'):
                 accounts = ch['accounts_detail']
-                if accounts.get('turnover'):
-                    turnover = accounts['turnover']
-                if accounts.get('employees'):
-                    employees = accounts['employees']
+                turnover_raw = accounts.get('turnover')
+                employees_raw = accounts.get('employees')
+                
+                # Convert to number if string
+                if turnover_raw:
+                    try:
+                        turnover = float(turnover_raw) if isinstance(turnover_raw, str) else turnover_raw
+                    except (ValueError, TypeError):
+                        turnover = None
+                
+                if employees_raw:
+                    try:
+                        employees = int(employees_raw) if isinstance(employees_raw, str) else employees_raw
+                    except (ValueError, TypeError):
+                        employees = None
             
             locations_text = ', '.join(locations[:3]) if locations else 'Multiple UK locations'
             postcode_text = ', '.join(set(postcodes)) if postcodes else 'UK-wide'
