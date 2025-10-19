@@ -514,47 +514,51 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 REAL, VERIFIED, ACTIVE UK competitors.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 REAL, VERIFIED UK competitors.
 
-                **VERIFICATION REQUIREMENTS (NON-NEGOTIABLE):**
-                - ONLY include companies you can verify are REAL and ACTIVE (via website, Companies House, or business directories)
-                - Each company MUST have verifiable business details (website, phone, registered address)
-                - Do NOT include companies without evidence they are currently trading
-                - Do NOT make up or guess company names
+                **CRITICAL APPROACH - USE ACTUAL COMPANY DATA:**
+                Use the financial data, employee count, locations, and business description PROVIDED ABOVE to identify realistic competitors.
 
-                **SIZING & MATCHING CRITERIA:**
-                - Match on TURNOVER: Find companies with turnover within 50% of THIS COMPANY's turnover
-                - If turnover unknown, match on EMPLOYEE COUNT: Find companies within 50% of employee count
-                - Alternative: Match on CUSTOMER TYPE: Find companies serving the same customer segment (e.g., SME services, enterprise solutions, etc.)
+                **SIZING RULES:**
+                - Match TURNOVER: Find companies with turnover within 50% of THIS COMPANY
+                - Match EMPLOYEES: Find companies within 50% of THIS COMPANY's employee count
+                - If both available, use whichever gives better matches
+                - Example: If company has £10M turnover, search for companies £5M-£15M
 
-                **GEOGRAPHIC PREFERENCE:**
-                - Prefer companies with regional overlap in THIS COMPANY's operating area
-                - If operating area is known from the company data above, prioritize competitors in that region
-                - If no regional competitors found, expand to UK-wide but note the geographic difference
+                **LOCATION RULES:**
+                - Look at THIS COMPANY's primary location and all office locations listed above
+                - Find competitors operating in THE SAME REGIONS
+                - Include companies with offices in those same cities/postcodes
+                - Regional competitors are preferred over national ones
 
-                **SERVICE/SECTOR MATCHING:**
-                - Find companies offering SIMILAR SERVICES or serving SIMILAR MARKETS
-                - Include both direct competitors (identical services) and adjacent competitors (complementary services)
-                - Do NOT include companies in completely different sectors
+                **SERVICE RULES:**
+                - Look at THIS COMPANY's business description and activities ABOVE
+                - Find companies offering THE SAME SPECIFIC SERVICES
+                - Match industry type (not just generic category)
+                - Example: If company does "commercial cabling services", find other cabling/infrastructure companies, NOT generic IT services
 
-                **FOR EACH COMPETITOR, YOU MUST PROVIDE:**
-                1. Company name (verified)
-                2. Approximate turnover or employee count (for size comparison)
-                3. Primary operating region
-                4. Why they compete with THIS business (specific service/market overlap)
-                5. Verification source (website, Companies House, business directory)
+                **VERIFICATION - ESSENTIAL:**
+                - Use Companies House (gov.uk) to verify company exists and is active
+                - Check company website for current services and locations
+                - Verify the company is NOT:
+                  * A shell company or dormant
+                  * In a completely different sector
+                  * 10x+ larger than THIS COMPANY
+                  * A sole trader or very small personal business
+                - Only include if you can verify they are REAL and ACTIVE
 
-                **VERIFICATION SOURCES TO USE:**
-                - Companies House (gov.uk) - official business registry
-                - Company websites - for current business details
-                - Business directories (Dun & Bradstreet, Dunn Humby, etc.)
-                - Google Business profiles
-                - LinkedIn company pages
+                **FOR EACH COMPETITOR - MUST PROVIDE:**
+                1. Company name (verified via Companies House)
+                2. Verified turnover or employee count
+                3. Operating locations/regions
+                4. Specific services that overlap with THIS COMPANY
+                5. Why they directly compete (service/market overlap)
 
                 **QUALITY OVER QUANTITY:**
-                - Better to return 3-5 VERIFIED, REAL competitors than 10 questionable ones
-                - If fewer than 5 real competitors can be found, return only the verified ones
-                - Each competitor must be explainable and verifiable
+                - Return ONLY REAL competitors you can verify
+                - Return 3-5 verified competitors instead of 10 questionable names
+                - If you can only find 2 real competitors, return those 2
+                - Better to return fewer VERIFIED competitors than any made-up names
 
                 Include their company names only (one per line) in the JSON response.
 
