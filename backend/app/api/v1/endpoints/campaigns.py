@@ -33,6 +33,7 @@ async def create_campaign(
             max_results=campaign_data.max_results,
             prompt_type=campaign_data.prompt_type,
             custom_prompt=campaign_data.custom_prompt,
+            company_size_category=campaign_data.company_size_category,
             status=LeadGenerationStatus.DRAFT,
             tenant_id=current_user.tenant_id,
             created_by=current_user.id
@@ -145,7 +146,8 @@ def start_campaign(
                 "distance_miles": campaign.distance_miles,
                 "max_results": campaign.max_results,
                 "prompt_type": campaign.prompt_type,
-                "custom_prompt": campaign.custom_prompt
+                "custom_prompt": campaign.custom_prompt,
+                "company_size_category": campaign.company_size_category
             },
             current_user.tenant_id
         )

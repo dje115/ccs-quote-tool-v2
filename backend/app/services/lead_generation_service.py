@@ -216,6 +216,7 @@ Sector Focus: {sector_data['sector_description']}
 Search Area: {campaign_data.get('postcode', 'UK')} (within {campaign_data.get('distance_miles', 50)} miles)
 Campaign Type: {campaign_data.get('prompt_type', 'sector_search')}
 Maximum Results: {campaign_data.get('max_results', 20)}
+{f"Target Company Size: {campaign_data.get('company_size_category', 'Any Size')}" if campaign_data.get('company_size_category') else "Target Company Size: Any Size"}
 
 ---
 
@@ -233,6 +234,7 @@ If you cannot find businesses in the specific area, provide UK businesses from y
 2. Focus on businesses that would be located near {campaign_data.get('postcode', 'UK')} or in the surrounding area
 3. Ensure each company is a real UK business with valid contact information
 4. Use the keywords below to understand the sector focus
+{f"5. Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({self._get_company_size_description(campaign_data.get('company_size_category'))})" if campaign_data.get('company_size_category') else ""}
 
 ## KEYWORDS TO CONSIDER:
 {sector_data.get('example_keywords', 'Industry-specific keywords')}
@@ -298,6 +300,7 @@ Return only valid JSON in this structure:
 - Skip duplicates and large national chains.
 - Businesses must be **within {campaign_data.get('distance_miles', 50)} miles of {campaign_data.get('postcode', 'UK')}**.
 - If fewer than {campaign_data.get('max_results', 20)} genuine businesses are found, return only verified ones.
+{f"- Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({self._get_company_size_description(campaign_data.get('company_size_category'))})" if campaign_data.get('company_size_category') else "- Prioritize SMEs and small-to-medium enterprises over large corporations."}
 - Never include fictional examples or template data.
 """
         
@@ -322,6 +325,16 @@ Return only valid JSON in this structure:
             return f"Technology providers, MSPs, and {sector_data['sector_name']} specialists who need reliable installation partners for client projects, offering white-label services and joint project delivery capabilities."
         else:
             return f"Complementary service providers in the {sector_data['sector_name']} sector who could resell {company_name}'s {', '.join(services[:3])} solutions or collaborate on integrated service offerings."
+    
+    def _get_company_size_description(self, size_category: str) -> str:
+        """Get employee count description for company size category"""
+        size_descriptions = {
+            'Micro': '0-9 employees',
+            'Small': '10-49 employees',
+            'Medium': '50-249 employees',
+            'Large': '250+ employees'
+        }
+        return size_descriptions.get(size_category, 'Any size')
     
     async def _enhance_business_data(self, business: Dict, tenant_context: Dict) -> Dict:
         """Enhance business data with Google Maps and Companies House verification"""

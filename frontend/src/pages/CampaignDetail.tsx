@@ -396,6 +396,24 @@ const CampaignDetail: React.FC = () => {
             </Grid>
           )}
 
+          {campaign.company_size_category && (
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 4
+              }}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Company Size
+                </Typography>
+                <Typography variant="body1" fontWeight="600" sx={{ color: '#9c27b0' }}>
+                  👥 {campaign.company_size_category}
+                </Typography>
+              </Box>
+            </Grid>
+          )}
+
           <Grid
             size={{
               xs: 12,
