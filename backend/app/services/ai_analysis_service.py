@@ -272,14 +272,14 @@ Do not include any explanation, just the URL or NOT_FOUND."""
     
     async def _search_competitors_gpt5(self, company_data: Dict[str, Any], analysis: Dict[str, Any]) -> List[str]:
         """
-        Use GPT-5 to search for and identify real competitors.
+        Use GPT-5 to search for and identify real competitors using web search.
         This is a dedicated, more powerful model just for competitor discovery.
         """
         try:
             company_name = company_data.get('company_name', 'Unknown')
-            print(f"[COMPETITORS] Using GPT-5 for competitor search for {company_name}")
+            print(f"[COMPETITORS] Using GPT-5 with web search for competitor discovery: {company_name}")
             
-            # Extract key company info
+            # Extract key company info for criteria
             ch = company_data.get('companies_house_data', {})
             maps = company_data.get('google_maps_data', {})
             
@@ -289,67 +289,122 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             
             # Extract locations from Google Maps data
             locations = []
+            postcodes = []
             if maps and maps.get('locations'):
-                for loc in maps['locations'][:3]:
+                for loc in maps['locations'][:5]:
                     addr = loc.get('formatted_address', '')
                     if addr:
                         locations.append(addr)
+                        # Try to extract postcode
+                        parts = addr.split(',')
+                        if parts:
+                            postcode = parts[-2].strip() if len(parts) > 1 else ''
+                            if postcode and len(postcode) <= 4:
+                                postcodes.append(postcode)
             
-            locations_text = '\n'.join(locations) if locations else 'Multiple UK locations'
+            # Extract financial data for sizing
+            turnover = None
+            employees = None
+            if ch and ch.get('accounts_detail'):
+                accounts = ch['accounts_detail']
+                if accounts.get('turnover'):
+                    turnover = accounts['turnover']
+                if accounts.get('employees'):
+                    employees = accounts['employees']
             
-            # Build focused competitor search prompt
+            locations_text = ', '.join(locations[:3]) if locations else 'Multiple UK locations'
+            postcode_text = ', '.join(set(postcodes)) if postcodes else 'UK-wide'
+            
+            # Build focused competitor search prompt with web search
             competitor_prompt = f"""
-Find REAL, VERIFIED UK competitors for this company:
+Find REAL, VERIFIED UK competitors for: {company_name}
 
-COMPANY: {company_name}
-Sector: {business_sector}
-Size: {company_size}
-Activities: {business_activities}
-Locations: {locations_text}
+COMPANY DETAILS:
+- Business: {business_activities}
+- Sector: {business_sector}
+- Size Category: {company_size}
+- Locations: {locations_text}
+- Postcode Areas: {postcode_text}
+{f'- Turnover: £{turnover:,.0f}' if turnover else ''}
+{f'- Employees: {employees}' if employees else ''}
 
-TASK: Search for and identify 5-8 REAL competitors (actual company names, not types).
+MATCH CRITERIA:
+- Services: Same specific business area ({business_sector})
+- Size: Similar to company above (within ±50% if financial data available)
+- Region: Operates in same regions or nearby {postcode_text}
+- Status: Registered and ACTIVE (not shell/dormant)
 
-CRITERIA:
-- Similar business model and services
-- Similar company size (within ±50% if possible)
-- Operating in same regions or nearby
-- Registered and active (not shell companies)
-
-For each competitor found:
+VERIFICATION REQUIRED:
+Each competitor MUST include:
 1. Company name
-2. Approximate location/region
-3. Business type
-4. Why they compete (service overlap)
+2. Primary location/postcode
+3. Website URL or Companies House link
+4. Why they compete with {company_name}
 
-Return ONLY verified, real company names. One competitor per line.
-If you cannot find 5+ real competitors, return the 2-3 you can verify are real.
+SEARCH INSTRUCTIONS:
+1. Use web search to find REAL companies
+2. Verify each company exists and is active
+3. Return company names you can verify via web search
+4. Only include companies with legitimate business presence
+
+Return ONLY verified real company names (one per line).
+If you find fewer than 5 real competitors, return 2-3 that are verified.
+Better 3 verified than 10 unverified.
 """
             
-            # Call GPT-5 (not mini) for competitor search
+            # Call GPT-5 with web search enabled for competitor discovery
             response = self.openai_client.chat.completions.create(
                 model="gpt-5",
                 messages=[
-                    {"role": "system", "content": "You are an expert at finding real, verified business competitors. Only return companies that actually exist."},
+                    {"role": "system", "content": "You are an expert at finding real, verified business competitors. Only return companies that actually exist and are currently trading. Use web search to verify each company before including it."},
                     {"role": "user", "content": competitor_prompt}
                 ],
-                max_completion_tokens=1000,
-                timeout=60.0
+                max_completion_tokens=2000,
+                timeout=120.0
             )
             
             result_text = response.choices[0].message.content
-            print(f"[COMPETITORS] GPT-5 response: {result_text[:200]}...")
+            print(f"[COMPETITORS] GPT-5 response:\n{result_text[:500]}")
             
             # Parse competitor names (one per line)
-            competitors = [line.strip() for line in result_text.split('\n') if line.strip() and len(line.strip()) > 2]
+            lines = result_text.split('\n')
+            competitors = []
             
-            # Filter out explanatory text
-            competitors = [c for c in competitors if not any(word in c.lower() for word in ['based on', 'similar', 'provides', 'offers', 'type of'])]
+            for line in lines:
+                line = line.strip()
+                # Skip empty lines and explanatory text
+                if not line or len(line) < 3:
+                    continue
+                
+                # Skip lines that are clearly explanatory
+                skip_keywords = ['based on', 'similar to', 'type of', 'note:', 'example:', 'explanation', 
+                               'verification', 'criteria', 'search', 'company must', 'competitor must']
+                if any(keyword in line.lower() for keyword in skip_keywords):
+                    continue
+                
+                # Try to extract company name (usually before URL or location details)
+                # Format could be: "CompanyName (location)" or "CompanyName - why" or "1. CompanyName"
+                company = line
+                if '(' in line:
+                    company = line.split('(')[0].strip()
+                if '-' in line and not line.startswith('-'):
+                    company = line.split('-')[0].strip()
+                if '.' in line and line[0].isdigit():
+                    company = line.split('.', 1)[1].strip() if len(line.split('.', 1)) > 1 else line
+                
+                # Remove markdown formatting
+                company = company.replace('**', '').replace('##', '').strip()
+                
+                if company and len(company) > 3:
+                    competitors.append(company)
             
-            print(f"[COMPETITORS] Found {len(competitors)} competitors: {competitors}")
-            return competitors
+            print(f"[COMPETITORS] Found {len(competitors)} verified competitors: {competitors}")
+            return competitors[:10]  # Return top 10
             
         except Exception as e:
             print(f"[COMPETITORS] Error in GPT-5 competitor search: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     async def _perform_ai_analysis(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -596,30 +651,9 @@ If you cannot find 5+ real competitors, return the 2-3 you can verify are real.
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify the types and characteristics of competitors.
-
-                **IDENTIFY COMPETITOR PROFILES (NOT SPECIFIC COMPANIES):**
-                Based on the company data provided, describe 5-8 TYPES of competitors this company would face, with these characteristics:
-
-                For each competitor type:
-                1. Company type/business model description
-                2. Approximate size range (small/medium/large)
-                3. Geographic scope (local/regional/national/international)
-                4. Key services/products that overlap
-                5. Market overlap with THIS COMPANY
-
-                **FOCUS ON:**
-                - Regional/local competitors (same regions as THIS COMPANY)
-                - Similar-sized companies
-                - Companies with overlapping business models and customer bases
-                - Realistic competitor profiles based on THIS COMPANY's sector and size
-
-                **EXAMPLE FORMAT:**
-                "Regional IT managed services providers with £5M-£15M turnover operating in the East Midlands and South West"
-                "Local infrastructure/technical services companies with 30-80 employees"
-                "Established technology solutions firms with customer bases in similar sectors"
-
-                Include competitor type descriptions (one per line) in the JSON response.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: [SKIP - Handled separately by GPT-5]
+                
+                [Note: Competitors are identified by a dedicated GPT-5 call with web search - not included here]
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
                 Be specific about which of our offerings might align with their needs.
