@@ -514,7 +514,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: CRITICAL - Identify 5-10 REAL, VERIFIED, LOCAL/REGIONAL UK competitor companies that directly compete with THIS ANALYZED COMPANY.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: CRITICAL - Identify 5-10 REAL, VERIFIED, LOCAL/REGIONAL UK competitor companies that directly compete with THIS ANALYZED COMPANY. This company MUST have competitors - find them by researching their sector and local area.
 
                 ** CRITICAL CLARIFICATION:**
                 - You are analyzing a PROSPECT/CUSTOMER company to understand their competitive landscape
@@ -535,8 +535,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 - Do NOT return companies unless you find evidence they operate in the specified region
                 - Do NOT fabricate company details or services
                 - If you cannot verify a company exists, do NOT include it
-                - If fewer than 5 real companies can be found, return only the verified ones (not 10 made-up names)
-                - Prefer returning 3-5 REAL competitors over 10 fabricated ones
+                - If fewer than 3-5 real competitors can be found in the local area, use your knowledge to find additional regional companies in the same sector\n                - IMPORTANT: It is better to return 5-10 real UK competitors that you can verify than 0 competitors\n                - Use web search to verify company existence before including\n                - For each competitor, you must be able to explain why they compete with this business
 
                 **FOR EACH COMPETITOR, YOU MUST PROVIDE:**
                 1. Company name
