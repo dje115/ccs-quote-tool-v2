@@ -529,7 +529,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
 
                 **GEOGRAPHIC PREFERENCE:**
                 - Prefer companies with regional overlap in THIS COMPANY's operating area
-                - If operating area is {primary_region}, prioritize competitors in that region
+                - If operating area is known from the company data above, prioritize competitors in that region
                 - If no regional competitors found, expand to UK-wide but note the geographic difference
 
                 **SERVICE/SECTOR MATCHING:**
