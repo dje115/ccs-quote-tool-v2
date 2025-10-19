@@ -517,43 +517,48 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 real UK competitors - REGIONAL PRIORITY.
 
                 **CRITICAL: REGION-FIRST APPROACH**
-                THIS COMPANY operates in specific regions: Chesterfield (S41), Leicester (LE17), Ferndown/Wimborne (BH21) in Dorset.
-                MUST search FIRST for competitors in these specific regions and postcodes.
-                Only if fewer than 3-4 real regional competitors can be found, then expand to nearby regions.
-                AVOID national chains and large multinational firms unless they have local offices in THIS COMPANY's regions.
+                Based on the location data provided above (Google Maps locations, addresses, offices listed):
+                - IDENTIFY the primary regions/postcodes where THIS COMPANY operates
+                - MUST search FIRST for competitors in these EXACT regions and postcodes
+                - EXTRACT postcodes from the addresses provided (e.g., S41 for Chesterfield, LE17 for Leicester, BH21 for Dorset)
+                - Only if fewer than 3-4 real regional competitors can be found, then expand to nearby regions
+                - AVOID national chains and large multinational firms unless they have local offices in THIS COMPANY's regions
 
                 **RESEARCH METHOD:**
-                - Search Companies House for businesses matching THIS COMPANY's business type in postcodes: S41 (Chesterfield), LE17 (Leicester), BH21 (Ferndown)
-                - Check Endole and Crunchbase for regional matches
-                - Search "technology solutions" + "Chesterfield", "technology solutions" + "Leicester", etc.
-                - Look for SME/medium-sized local competitors with regional presence
+                1. First, extract THIS COMPANY's operating postcodes/regions from the data provided
+                2. Search Companies House for businesses matching THIS COMPANY's business type in those same postcodes
+                3. Check Endole and Crunchbase for regional matches in those areas
+                4. Search for "[THIS COMPANY's business type]" + "[city name]" (e.g., "IT services" + "Chesterfield")
+                5. Look for SME/medium-sized local competitors with regional presence
 
                 **SIZING CRITERIA:**
-                - Target companies similar in size: turnover £8M-£15M, or 50-150 employees
-                - Similar business model: regional technology/IT services, managed services, infrastructure, or similar B2B services
+                - Similar business model and operations to THIS COMPANY
+                - Approximate size based on THIS COMPANY's financials: if they have £8M-£12M turnover, search for competitors with similar turnover
+                - Similar employee count or market position
                 - If data unavailable, estimate from website sophistication and office count
 
                 **LOCATION ENFORCEMENT (MANDATORY):**
-                - Primary offices MUST be in: Chesterfield (S41), Leicester (LE17), Ferndown/Wimborne (BH21), or within 30 miles
-                - Companies with ONLY London/national head offices do NOT qualify as competitors for THIS COMPANY's regional market
+                - Primary offices MUST be in the SAME regions/postcodes as THIS COMPANY's listed locations
+                - Companies with ONLY national/London head offices do NOT qualify as regional competitors
                 - Strongly prefer companies with multiple regional offices like THIS COMPANY
-                - If searching expands beyond these regions, only include companies with proven local operations/offices
+                - Regional and local competitors are ALWAYS preferred over national chains
 
                 **SERVICE MATCHING:**
-                - Same business model: technology solutions, IT services, managed services, infrastructure, technical services
-                - Companies offering similar regional B2B services
-                - NOT large national consultancies, NOT one-person operations, NOT shell companies
+                - Find companies offering the SAME business model and services as THIS COMPANY
+                - Match the industry type and target customer base
+                - Not large national consultancies, not one-person operations, not shell companies
 
                 **FOR EACH COMPETITOR:**
                 1. Company name
-                2. Primary postcode/region (MUST be S41, LE17, BH21 or within 30 miles)
-                3. Business type (must match THIS COMPANY's type)
-                4. Estimated size
+                2. Primary postcode/region (MUST be same regions as THIS COMPANY or within 30 miles)
+                3. Business type/services (must match THIS COMPANY)
+                4. Estimated size (based on comparable financials to THIS COMPANY)
                 5. Why they compete with THIS COMPANY
 
                 **RETURN FORMAT:**
-                Return ONLY companies where primary/head office is in the specified regions (S41, LE17, BH21).
-                If you cannot find 5-6 regional competitors, return the 2-3 you find, rather than returning national firms.
+                Return ONLY companies operating in the same regions/postcodes as THIS COMPANY.
+                If you cannot find 5+ real regional competitors, return the 2-3 you find rather than returning national firms.
+                Better to return 2-3 verified regional competitors than 10 national companies.
                 Include their company names only (one per line) in the JSON response.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
