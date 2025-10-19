@@ -359,8 +359,8 @@ Better 3 verified than 10 unverified.
                     {"role": "system", "content": "You are an expert at finding real, verified business competitors. Only return companies that actually exist and are currently trading. Use web search to verify each company before including it."},
                     {"role": "user", "content": competitor_prompt}
                 ],
-                max_completion_tokens=2000,
-                timeout=120.0
+                max_completion_tokens=4000,
+                timeout=180.0
             )
             
             result_text = response.choices[0].message.content
