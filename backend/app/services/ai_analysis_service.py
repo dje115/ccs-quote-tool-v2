@@ -615,12 +615,13 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             print(f"[AI] Making GPT-5-mini API call for customer analysis...")
             print(f"[AI] System prompt: {system_prompt[:100]}...")
             
-            response = self.openai_client.chat.completions.create(
+            response = self.openai_client.responses.create(
                 model="gpt-5-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
+                tools=[{"type": "web_search"}],  # Enable web search for company verification
                 max_completion_tokens=16000,
                 timeout=180.0
             )
