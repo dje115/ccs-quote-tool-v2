@@ -133,7 +133,7 @@ class LeadGenerationService:
                             "text": prompt
                         },
                         instructions="You are a UK business research specialist. Provide comprehensive business intelligence for UK companies. Return ONLY valid JSON matching the schema provided.",
-                        max_tokens=20000,
+                        max_completion_tokens=20000,
                         timeout=180.0
                     )
                     
@@ -263,7 +263,7 @@ Return ONLY valid JSON in this exact format:
                     "text": prompt
                 },
                 instructions="You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Return ONLY valid JSON matching the schema provided.",
-                max_tokens=20000,
+                max_completion_tokens=20000,
                 timeout=180.0
             )
             
