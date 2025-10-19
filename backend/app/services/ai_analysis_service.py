@@ -514,52 +514,30 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 real UK competitors - REGIONAL PRIORITY.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify the types and characteristics of competitors.
 
-                **CRITICAL: REGION-FIRST APPROACH**
-                Based on the location data provided above (Google Maps locations, addresses, offices listed):
-                - IDENTIFY the primary regions/postcodes where THIS COMPANY operates
-                - MUST search FIRST for competitors in these EXACT regions and postcodes
-                - EXTRACT postcodes from the addresses provided (e.g., S41 for Chesterfield, LE17 for Leicester, BH21 for Dorset)
-                - Only if fewer than 3-4 real regional competitors can be found, then expand to nearby regions
-                - AVOID national chains and large multinational firms unless they have local offices in THIS COMPANY's regions
+                **IDENTIFY COMPETITOR PROFILES (NOT SPECIFIC COMPANIES):**
+                Based on the company data provided, describe 5-8 TYPES of competitors this company would face, with these characteristics:
 
-                **RESEARCH METHOD:**
-                1. First, extract THIS COMPANY's operating postcodes/regions from the data provided
-                2. Search Companies House for businesses matching THIS COMPANY's business type in those same postcodes
-                3. Check Endole and Crunchbase for regional matches in those areas
-                4. Search for "[THIS COMPANY's business type]" + "[city name]" (e.g., "IT services" + "Chesterfield")
-                5. Look for SME/medium-sized local competitors with regional presence
+                For each competitor type:
+                1. Company type/business model description
+                2. Approximate size range (small/medium/large)
+                3. Geographic scope (local/regional/national/international)
+                4. Key services/products that overlap
+                5. Market overlap with THIS COMPANY
 
-                **SIZING CRITERIA:**
-                - Similar business model and operations to THIS COMPANY
-                - Approximate size based on THIS COMPANY's financials: if they have £8M-£12M turnover, search for competitors with similar turnover
-                - Similar employee count or market position
-                - If data unavailable, estimate from website sophistication and office count
+                **FOCUS ON:**
+                - Regional/local competitors (same regions as THIS COMPANY)
+                - Similar-sized companies
+                - Companies with overlapping business models and customer bases
+                - Realistic competitor profiles based on THIS COMPANY's sector and size
 
-                **LOCATION ENFORCEMENT (MANDATORY):**
-                - Primary offices MUST be in the SAME regions/postcodes as THIS COMPANY's listed locations
-                - Companies with ONLY national/London head offices do NOT qualify as regional competitors
-                - Strongly prefer companies with multiple regional offices like THIS COMPANY
-                - Regional and local competitors are ALWAYS preferred over national chains
+                **EXAMPLE FORMAT:**
+                "Regional IT managed services providers with £5M-£15M turnover operating in the East Midlands and South West"
+                "Local infrastructure/technical services companies with 30-80 employees"
+                "Established technology solutions firms with customer bases in similar sectors"
 
-                **SERVICE MATCHING:**
-                - Find companies offering the SAME business model and services as THIS COMPANY
-                - Match the industry type and target customer base
-                - Not large national consultancies, not one-person operations, not shell companies
-
-                **FOR EACH COMPETITOR:**
-                1. Company name
-                2. Primary postcode/region (MUST be same regions as THIS COMPANY or within 30 miles)
-                3. Business type/services (must match THIS COMPANY)
-                4. Estimated size (based on comparable financials to THIS COMPANY)
-                5. Why they compete with THIS COMPANY
-
-                **RETURN FORMAT:**
-                Return ONLY companies operating in the same regions/postcodes as THIS COMPANY.
-                If you cannot find 5+ real regional competitors, return the 2-3 you find rather than returning national firms.
-                Better to return 2-3 verified regional competitors than 10 national companies.
-                Include their company names only (one per line) in the JSON response.
+                Include competitor type descriptions (one per line) in the JSON response.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
                 Be specific about which of our offerings might align with their needs.
@@ -626,13 +604,12 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             print(f"[AI] Making GPT-5-mini API call for customer analysis...")
             print(f"[AI] System prompt: {system_prompt[:100]}...")
             
-            response = self.openai_client.responses.create(
+            response = self.openai_client.chat.completions.create(
                 model="gpt-5-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                tools=[{"type": "web_search"}],  # Enable web search for competitor lookup and company research
                 max_completion_tokens=16000,
                 timeout=180.0
             )
