@@ -514,61 +514,43 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 REAL, VERIFIED UK competitors.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 real UK competitors through research.
 
-                **CRITICAL APPROACH - USE ACTUAL COMPANY DATA:**
-                Use the financial data, locations, and business description PROVIDED ABOVE to identify realistic competitors.
+                **RESEARCH APPROACH:**
+                Based on THIS COMPANY's business description, locations, and activities, research and identify likely competitors through:
+                - Companies House business registry searches
+                - Public business directories (Endole, Crunchbase, Google Business)
+                - Industry and sector searches
+                - Regional business presence
 
-                **SIZING RULES:**
-                - Match TURNOVER or EMPLOYEE COUNT within ±50% if available
-                - Example: If company has £10M turnover, search for companies £5M-£15M
-                - If turnover/employee data is unavailable, infer size based on:
-                  * Website scale and sophistication
-                  * Client type and portfolio
-                  * Number of offices and geographic presence
-                  * Industry position and market presence
+                **SIZING CRITERIA:**
+                - Similar business model and operations
+                - Approximate size: turnover within ±50% if known, OR similar employee count, OR similar market position
+                - If exact data unavailable, estimate from website, client base, or office presence
 
-                **LOCATION RULES (PRIORITY):**
-                - Look at THIS COMPANY's primary location and all office locations listed above
-                - PRIORITIZE firms operating in the SAME REGIONS or POSTCODE AREAS
-                - Include companies with offices in those same cities/postcodes
-                - Regional competitors are preferred over national ones
-                - Only expand to national competitors if insufficient regional matches found
+                **LOCATION MATCHING (PRIMARY FILTER):**
+                - Prioritize companies operating in THIS COMPANY's same regions/postcodes
+                - Include those with offices in the same cities (Chesterfield, Leicester, Ferndown, etc.)
+                - Regional/local competitors are preferred over large national firms
+                - If few regional competitors found, include nearby regional competitors
 
-                **SERVICE RULES (CRITICAL):**
-                - Match SPECIFIC SERVICES, not just broad sectors
-                - Look at THIS COMPANY's business description and activities ABOVE
-                - Find companies offering THE SAME SPECIFIC SERVICES
-                - Example: If company does "commercial cabling services", find other cabling/infrastructure companies, NOT generic IT services
-                - Service matching is MORE IMPORTANT than size matching
+                **SERVICE MATCHING (CRITICAL):**
+                - Find companies offering the SAME SPECIFIC SERVICES or business model
+                - Match the industry type and customer base
+                - Example: If company does "technology solutions and IT services", find other tech services firms, NOT unrelated industries
 
-                **VERIFICATION - NON-NEGOTIABLE:**
-                - Verify each company's existence via TRUSTED PUBLIC SOURCES:
-                  * Companies House (gov.uk) - primary source
-                  * Endole.com - comprehensive UK business directory
-                  * Crunchbase.com - business intelligence
-                  * Company website - current services and operations
-                - Verify the company is NOT:
-                  * A shell company or dormant
-                  * In a completely different sector
-                  * 10x+ larger than THIS COMPANY
-                  * A sole trader or very small personal business
-                - Only include if you can verify they are REAL and ACTIVE
+                **QUALITY REQUIREMENTS:**
+                - Each competitor must be a real, active company (not shell/dormant)
+                - Each company should have a legitimate business presence (website, office, registrations)
+                - Prioritize companies you have found evidence for through at least one public source
+                - Return probable competitors even if data is partial - better 5 real-but-researched competitors than zero
 
-                **FOR EACH COMPETITOR - MUST PROVIDE:**
-                1. Company name (verified via public source)
-                2. Verified size metric (turnover OR employee count, inferred if unavailable)
-                3. Primary operating regions/cities
-                4. Specific services that overlap with THIS COMPANY
-                5. Why they directly compete (service/market/customer overlap)
-                6. Verification source used
-
-                **QUALITY OVER QUANTITY:**
-                - Return ONLY REAL competitors you can verify
-                - Return 3-5 verified competitors instead of 10 questionable names
-                - If you can only find 2 real competitors, return those 2
-                - Better to return fewer VERIFIED competitors than any made-up names
-                - Exclude shell companies, dormant firms, or irrelevant businesses
+                **FOR EACH COMPETITOR:**
+                1. Company name
+                2. Approximate business type/services
+                3. Operating region(s)
+                4. Estimated size (turnover estimate if found, OR employee estimate, OR market position)
+                5. Why they compete with THIS COMPANY (service/market overlap)
 
                 Include their company names only (one per line) in the JSON response.
 
