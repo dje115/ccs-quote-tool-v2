@@ -521,8 +521,6 @@ Do not include any explanation, just the URL or NOT_FOUND."""
 
                 **SIZING RULES:**
                 - Match TURNOVER: Find companies with turnover within 50% of THIS COMPANY
-                - Match EMPLOYEES: Find companies within 50% of THIS COMPANY's employee count
-                - If both available, use whichever gives better matches
                 - Example: If company has £10M turnover, search for companies £5M-£15M
 
                 **LOCATION RULES:**
