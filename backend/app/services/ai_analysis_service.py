@@ -129,7 +129,7 @@ class AIAnalysisService:
         else:
             prompt += ". Focus on practical business opportunities"
         
-        prompt += ". Always respond with valid JSON."
+        prompt += ". Always respond with valid JSON. When listing companies, people, or specific entities, ONLY include real, verified information. Do NOT make up or hallucinate company names, people names, or details. If you cannot verify something is real, do NOT include it."
         
         return prompt
     
@@ -514,7 +514,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: CRITICAL - Identify 5-10 ACTUAL, LOCAL/REGIONAL UK competitor companies that directly compete with THIS ANALYZED COMPANY.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: CRITICAL - Identify 5-10 REAL, VERIFIED, LOCAL/REGIONAL UK competitor companies that directly compete with THIS ANALYZED COMPANY.
 
                 ** CRITICAL CLARIFICATION:**
                 - You are analyzing a PROSPECT/CUSTOMER company to understand their competitive landscape
@@ -528,7 +528,16 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 - NO companies 10x+ larger than this business (size mismatch)
                 - YES to regional specialists, local branches of national companies, or similar-sized independents
                 - YES to companies offering complementary or overlapping services in the SAME GEOGRAPHIC REGION
-                
+
+                **ANTI-HALLUCINATION RULES (MUST FOLLOW EXACTLY):**
+                - ONLY include companies you can verify exist via web search
+                - Do NOT make up or guess company names
+                - Do NOT return companies unless you find evidence they operate in the specified region
+                - Do NOT fabricate company details or services
+                - If you cannot verify a company exists, do NOT include it
+                - If fewer than 5 real companies can be found, return only the verified ones (not 10 made-up names)
+                - Prefer returning 3-5 REAL competitors over 10 fabricated ones
+
                 **FOR EACH COMPETITOR, YOU MUST PROVIDE:**
                 1. Company name
                 2. Why they compete with THIS business (specific overlap in services/market)
@@ -606,12 +615,13 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             print(f"[AI] Making GPT-5-mini API call for customer analysis...")
             print(f"[AI] System prompt: {system_prompt[:100]}...")
             
-            response = self.openai_client.chat.completions.create(
+            response = self.openai_client.responses.create(
                 model="gpt-5-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
+                tools=[{"type": "web_search"}],  # Enable web search for company verification
                 max_completion_tokens=16000,
                 timeout=180.0
             )
