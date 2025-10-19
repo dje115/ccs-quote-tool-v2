@@ -270,6 +270,88 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 "company_name": company_name
             }
     
+    async def _search_competitors_gpt5(self, company_data: Dict[str, Any], analysis: Dict[str, Any]) -> List[str]:
+        """
+        Use GPT-5 to search for and identify real competitors.
+        This is a dedicated, more powerful model just for competitor discovery.
+        """
+        try:
+            company_name = company_data.get('company_name', 'Unknown')
+            print(f"[COMPETITORS] Using GPT-5 for competitor search for {company_name}")
+            
+            # Extract key company info
+            ch = company_data.get('companies_house_data', {})
+            maps = company_data.get('google_maps_data', {})
+            
+            company_size = analysis.get('business_size_category', 'Unknown')
+            business_sector = analysis.get('business_sector', 'Unknown')
+            business_activities = analysis.get('primary_business_activities', '')
+            
+            # Extract locations from Google Maps data
+            locations = []
+            if maps and maps.get('locations'):
+                for loc in maps['locations'][:3]:
+                    addr = loc.get('formatted_address', '')
+                    if addr:
+                        locations.append(addr)
+            
+            locations_text = '\n'.join(locations) if locations else 'Multiple UK locations'
+            
+            # Build focused competitor search prompt
+            competitor_prompt = f"""
+Find REAL, VERIFIED UK competitors for this company:
+
+COMPANY: {company_name}
+Sector: {business_sector}
+Size: {company_size}
+Activities: {business_activities}
+Locations: {locations_text}
+
+TASK: Search for and identify 5-8 REAL competitors (actual company names, not types).
+
+CRITERIA:
+- Similar business model and services
+- Similar company size (within ±50% if possible)
+- Operating in same regions or nearby
+- Registered and active (not shell companies)
+
+For each competitor found:
+1. Company name
+2. Approximate location/region
+3. Business type
+4. Why they compete (service overlap)
+
+Return ONLY verified, real company names. One competitor per line.
+If you cannot find 5+ real competitors, return the 2-3 you can verify are real.
+"""
+            
+            # Call GPT-5 (not mini) for competitor search
+            response = self.openai_client.chat.completions.create(
+                model="gpt-5",
+                messages=[
+                    {"role": "system", "content": "You are an expert at finding real, verified business competitors. Only return companies that actually exist."},
+                    {"role": "user", "content": competitor_prompt}
+                ],
+                max_completion_tokens=1000,
+                timeout=60.0
+            )
+            
+            result_text = response.choices[0].message.content
+            print(f"[COMPETITORS] GPT-5 response: {result_text[:200]}...")
+            
+            # Parse competitor names (one per line)
+            competitors = [line.strip() for line in result_text.split('\n') if line.strip() and len(line.strip()) > 2]
+            
+            # Filter out explanatory text
+            competitors = [c for c in competitors if not any(word in c.lower() for word in ['based on', 'similar', 'provides', 'offers', 'type of'])]
+            
+            print(f"[COMPETITORS] Found {len(competitors)} competitors: {competitors}")
+            return competitors
+            
+        except Exception as e:
+            print(f"[COMPETITORS] Error in GPT-5 competitor search: {e}")
+            return []
+    
     async def _perform_ai_analysis(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Perform AI analysis on company data"""
         if not self.openai_client:
@@ -645,6 +727,9 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             
             # Calculate lead score based on AI analysis
             analysis['lead_score'] = self._calculate_lead_score(analysis)
+            
+            # Use GPT-5 to search for and identify real competitors
+            analysis['competitors'] = await self._search_competitors_gpt5(data, analysis)
             
             return analysis
             
