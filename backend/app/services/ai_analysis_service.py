@@ -517,7 +517,7 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 REAL, VERIFIED UK competitors.
 
                 **CRITICAL APPROACH - USE ACTUAL COMPANY DATA:**
-                Use the financial data, employee count, locations, and business description PROVIDED ABOVE to identify realistic competitors.
+                Use the financial data, locations, and business description PROVIDED ABOVE to identify realistic competitors.
 
                 **SIZING RULES:**
                 - Match TURNOVER: Find companies with turnover within 50% of THIS COMPANY
