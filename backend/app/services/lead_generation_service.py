@@ -136,7 +136,28 @@ class LeadGenerationService:
                             {"role": "user", "content": prompt}
                         ],
                         max_completion_tokens=20000,
-                        timeout=180.0
+                        timeout=180.0,
+                        tools=[{
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "description": "Search the web for a specific company or term.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "query": {
+                                            "type": "string",
+                                            "description": "The search query (e.g., company name, postcode, sector)."
+                                        },
+                                        "max_results": {
+                                            "type": "integer",
+                                            "description": "Maximum number of results to return (default: 5)."
+                                        }
+                                    },
+                                    "required": ["query"]
+                                }
+                            }
+                        }]
                     )
                     
                     # Parse response
@@ -268,7 +289,28 @@ Return ONLY valid JSON in this exact format:
                     {"role": "user", "content": prompt}
                 ],
                 max_completion_tokens=20000,
-                timeout=180.0
+                timeout=180.0,
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "description": "Search the web for a specific company or term.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "The search query (e.g., company name, postcode, sector)."
+                                },
+                                "max_results": {
+                                    "type": "integer",
+                                    "description": "Maximum number of results to return (default: 5)."
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                }]
             )
             
             # Parse response
