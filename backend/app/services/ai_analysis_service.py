@@ -514,40 +514,48 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: CRITICAL - Identify 5-10 REAL, VERIFIED, LOCAL/REGIONAL UK competitor companies that directly compete with THIS ANALYZED COMPANY. This company MUST have competitors - find them by researching their sector and local area.
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: Identify 5-10 REAL, VERIFIED, ACTIVE UK competitors.
 
-                ** CRITICAL CLARIFICATION:**
-                - You are analyzing a PROSPECT/CUSTOMER company to understand their competitive landscape
-                - Find competitors OF THE COMPANY BEING ANALYZED (the prospect), NOT competitors of our company
-                - We want to know who they compete with in their market, not who competes with us
-                - Match the analyzed company's sector and services, not our sector/services
-
-                **COMPETITOR DISCOVERY RULES (BROADEN SCOPE):**
-                - Focus on companies in the SAME SECTOR as this business
-                - Focus on companies with SIMILAR SIZE (within 2x-3x employees)
-                - Search UK-wide, not just local/regional
-                - Include both direct competitors (same services) and complementary service providers
-                - YES to regional/national companies, SMEs, and independent operators
-                - If few local competitors found, search UK-wide for sector matches
-
-                **ANTI-HALLUCINATION RULES (MUST FOLLOW EXACTLY):**
-                - ONLY include companies you can verify exist via web search
+                **VERIFICATION REQUIREMENTS (NON-NEGOTIABLE):**
+                - ONLY include companies you can verify are REAL and ACTIVE (via website, Companies House, or business directories)
+                - Each company MUST have verifiable business details (website, phone, registered address)
+                - Do NOT include companies without evidence they are currently trading
                 - Do NOT make up or guess company names
-                - Do NOT return companies unless you find evidence they operate in the specified region
-                - Do NOT fabricate company details or services
-                - If you cannot verify a company exists, do NOT include it
-                - If fewer than 3-5 real competitors can be found in the local area, use your knowledge to find additional regional companies in the same sector\n                - IMPORTANT: It is better to return 5-10 real UK competitors that you can verify than 0 competitors\n                - Use web search to verify company existence before including\n                - For each competitor, you must be able to explain why they compete with this business
+
+                **SIZING & MATCHING CRITERIA:**
+                - Match on TURNOVER: Find companies with turnover within 50% of THIS COMPANY's turnover
+                - If turnover unknown, match on EMPLOYEE COUNT: Find companies within 50% of employee count
+                - Alternative: Match on CUSTOMER TYPE: Find companies serving the same customer segment (e.g., SME services, enterprise solutions, etc.)
+
+                **GEOGRAPHIC PREFERENCE:**
+                - Prefer companies with regional overlap in THIS COMPANY's operating area
+                - If operating area is {primary_region}, prioritize competitors in that region
+                - If no regional competitors found, expand to UK-wide but note the geographic difference
+
+                **SERVICE/SECTOR MATCHING:**
+                - Find companies offering SIMILAR SERVICES or serving SIMILAR MARKETS
+                - Include both direct competitors (identical services) and adjacent competitors (complementary services)
+                - Do NOT include companies in completely different sectors
 
                 **FOR EACH COMPETITOR, YOU MUST PROVIDE:**
-                1. Company name
-                2. Why they compete with THIS business (specific overlap in services/market)
-                3. Their approximate size/location relative to this business
-                
-                **EXAMPLE FORMAT (if this was a Manchester electrical contractor):**
-                ✓ Local Electrical Ltd (local competitor, Manchester area, similar size)
-                ✗ Balfour Beatty (too large, national corporation, not local rival)
-                ✗ Random IT Services Ltd (different sector, no service overlap)
-                
+                1. Company name (verified)
+                2. Approximate turnover or employee count (for size comparison)
+                3. Primary operating region
+                4. Why they compete with THIS business (specific service/market overlap)
+                5. Verification source (website, Companies House, business directory)
+
+                **VERIFICATION SOURCES TO USE:**
+                - Companies House (gov.uk) - official business registry
+                - Company websites - for current business details
+                - Business directories (Dun & Bradstreet, Dunn Humby, etc.)
+                - Google Business profiles
+                - LinkedIn company pages
+
+                **QUALITY OVER QUANTITY:**
+                - Better to return 3-5 VERIFIED, REAL competitors than 10 questionable ones
+                - If fewer than 5 real competitors can be found, return only the verified ones
+                - Each competitor must be explainable and verifiable
+
                 Include their company names only (one per line) in the JSON response.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
