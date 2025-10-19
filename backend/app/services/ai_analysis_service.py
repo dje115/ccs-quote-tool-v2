@@ -522,12 +522,13 @@ Do not include any explanation, just the URL or NOT_FOUND."""
                 - We want to know who they compete with in their market, not who competes with us
                 - Match the analyzed company's sector and services, not our sector/services
 
-                **CRITICAL FILTERING RULES (MUST FOLLOW EXACTLY):**
-                - NO national mega-corporations or publicly listed companies (plcs) UNLESS they operate locally in the same area
-                - NO generic "IT companies" - find companies with SIMILAR SPECIFIC SERVICES to this business
-                - NO companies 10x+ larger than this business (size mismatch)
-                - YES to regional specialists, local branches of national companies, or similar-sized independents
-                - YES to companies offering complementary or overlapping services in the SAME GEOGRAPHIC REGION
+                **COMPETITOR DISCOVERY RULES (BROADEN SCOPE):**
+                - Focus on companies in the SAME SECTOR as this business
+                - Focus on companies with SIMILAR SIZE (within 2x-3x employees)
+                - Search UK-wide, not just local/regional
+                - Include both direct competitors (same services) and complementary service providers
+                - YES to regional/national companies, SMEs, and independent operators
+                - If few local competitors found, search UK-wide for sector matches
 
                 **ANTI-HALLUCINATION RULES (MUST FOLLOW EXACTLY):**
                 - ONLY include companies you can verify exist via web search
