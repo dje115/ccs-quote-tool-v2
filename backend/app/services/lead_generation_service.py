@@ -75,9 +75,178 @@ class LeadGenerationService:
     async def generate_leads(self, campaign_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Main lead generation method using comprehensive AI analysis with web search
+        Supports both dynamic business search and company list import campaigns
         """
         try:
-            print(f"🚀 Starting world-class lead generation for campaign: {campaign_data.get('name', 'Unknown')}")
+            print(f"🚀 Starting lead generation for campaign: {campaign_data.get('name', 'Unknown')}")
+            
+            # Route to appropriate handler based on campaign type
+            prompt_type = campaign_data.get('prompt_type', 'sector_search')
+            
+            if prompt_type == 'company_list':
+                print(f"📋 Routing to Company List Import handler...")
+                return await self._generate_leads_from_company_list(campaign_data)
+            else:
+                print(f"🔍 Routing to Dynamic Business Search handler...")
+                return await self._generate_leads_from_sector_search(campaign_data)
+        
+        except Exception as e:
+            print(f"❌ Error in generate_leads: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    async def _generate_leads_from_company_list(self, campaign_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Analyze pre-supplied companies from a company list import
+        Uses AI to gather intelligence on each company
+        """
+        try:
+            print(f"📋 Starting Company List Import analysis...")
+            print(f"🏢 Companies to analyze: {campaign_data.get('company_names', [])}")
+            
+            # Get tenant context
+            tenant_context = self._get_tenant_context()
+            
+            # Get companies from campaign data
+            company_names = campaign_data.get('company_names', [])
+            if not company_names or len(company_names) == 0:
+                print(f"⚠️  No companies provided in campaign")
+                return []
+            
+            businesses = []
+            total_companies = len(company_names)
+            
+            # Analyze each company
+            for idx, company_name in enumerate(company_names, 1):
+                print(f"\n📊 Analyzing company {idx}/{total_companies}: {company_name}")
+                
+                try:
+                    # Build prompt for this specific company
+                    prompt = self._build_company_analysis_prompt(campaign_data, company_name, tenant_context)
+                    
+                    # Call OpenAI to analyze the company
+                    response = self.ai_service.openai_client.chat.completions.create(
+                        model="gpt-5-mini",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are a UK business research specialist. Provide comprehensive business intelligence for UK companies. Return ONLY valid JSON matching the schema provided."
+                            },
+                            {"role": "user", "content": prompt}
+                        ],
+                        max_completion_tokens=20000,
+                        timeout=300.0
+                    )
+                    
+                    # Parse response
+                    result_text = response.choices[0].message.content.strip()
+                    print(f"✅ AI analysis received for {company_name}")
+                    
+                    # Parse JSON
+                    try:
+                        company_data = json.loads(result_text)
+                        
+                        # Ensure required fields
+                        if not company_data.get('company_name'):
+                            company_data['company_name'] = company_name
+                        
+                        # Add AI intelligence
+                        company_data = await self._enhance_business_data(company_data, tenant_context)
+                        
+                        businesses.append(company_data)
+                        print(f"✅ Successfully analyzed: {company_name}")
+                        
+                    except json.JSONDecodeError as e:
+                        print(f"❌ JSON parsing error for {company_name}: {e}")
+                        # Create minimal record
+                        businesses.append({
+                            'company_name': company_name,
+                            'website': None,
+                            'description': 'Company added from import list',
+                            'contact_phone': None,
+                            'contact_email': None,
+                            'postcode': None,
+                            'sector': 'Unknown',
+                            'lead_score': 50,
+                            'fit_reason': 'Imported from company list',
+                            'source_url': None,
+                            'quick_telesales_summary': f'Company from import list: {company_name}',
+                            'ai_business_intelligence': 'Awaiting detailed analysis'
+                        })
+                    
+                except Exception as e:
+                    print(f"❌ Error analyzing {company_name}: {e}")
+                    # Add basic record so campaign doesn't fail
+                    businesses.append({
+                        'company_name': company_name,
+                        'description': 'Company added from import list',
+                        'lead_score': 40,
+                        'fit_reason': 'Imported from company list'
+                    })
+            
+            print(f"\n✅ Company list analysis complete: {len(businesses)} companies analyzed")
+            return businesses
+            
+        except Exception as e:
+            print(f"❌ Error in company list analysis: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _build_company_analysis_prompt(self, campaign_data: Dict, company_name: str, tenant_context: Dict) -> str:
+        """
+        Build AI prompt for analyzing a single company from the import list
+        """
+        prompt = f"""Analyze this UK company and provide comprehensive business intelligence:
+
+**COMPANY TO ANALYZE:** {company_name}
+
+**YOUR COMPANY:** {tenant_context['company_name']}
+- Services: {', '.join(tenant_context['services'][:5])}
+- Target Markets: {tenant_context['target_markets']}
+- USPs: {tenant_context['unique_selling_points']}
+
+Please research this company and provide:
+
+1. **Company Name**: Official name
+2. **Business Sector**: Industry classification
+3. **Estimated Employees**: Size estimate
+4. **Estimated Revenue**: Revenue range estimate
+5. **Website**: URL if you can find it
+6. **Contact Information**: Phone/email if available
+7. **Postcode**: Primary location postcode
+8. **Lead Score**: 0-100 score for sales fit with our company
+9. **Fit Reason**: Why they could be a good fit for our services
+10. **Quick Sales Summary**: 2-3 sentences for telesales
+11. **Business Intelligence**: 200+ word comprehensive analysis
+12. **Contact Phone**: Direct contact number if available
+13. **Contact Email**: Email address if available
+14. **Opportunities**: How our services could help them
+
+Return ONLY valid JSON in this exact format:
+{{
+  "company_name": "string",
+  "website": "string or null",
+  "description": "string",
+  "contact_phone": "string or null",
+  "contact_email": "string or null", 
+  "postcode": "string or null",
+  "sector": "string",
+  "lead_score": 0-100,
+  "fit_reason": "string",
+  "source_url": "string or null",
+  "quick_telesales_summary": "string",
+  "ai_business_intelligence": "string"
+}}"""
+        return prompt
+    
+    async def _generate_leads_from_sector_search(self, campaign_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Generate leads using dynamic business search by sector
+        """
+        try:
+            print(f"🔍 Executing comprehensive AI search with web search enabled...")
             
             # Get tenant context
             tenant_context = self._get_tenant_context()
@@ -87,8 +256,6 @@ class LeadGenerationService:
             
             # Build comprehensive prompt
             prompt = self._build_comprehensive_prompt(campaign_data, tenant_context, sector_data)
-            
-            print(f"🔍 Executing comprehensive AI search with web search enabled...")
             
             # Call OpenAI with web search
             response = self.ai_service.openai_client.chat.completions.create(
@@ -122,34 +289,42 @@ class LeadGenerationService:
                 
                 # Try different possible keys for the business list
                 businesses = []
-                if isinstance(search_results, list):
+                
+                if isinstance(search_results, dict):
+                    # Check for 'results' key
+                    if 'results' in search_results and isinstance(search_results['results'], list):
+                        businesses = search_results['results']
+                    # Check if the dict itself contains business-like keys
+                    elif any(key in search_results for key in ['company_name', 'businesses', 'companies']):
+                        businesses = [search_results]
+                elif isinstance(search_results, list):
                     businesses = search_results
-                elif isinstance(search_results, dict):
-                    businesses = search_results.get('results', search_results.get('businesses', search_results.get('companies', [])))
                 
                 print(f"📊 Found {len(businesses)} businesses from AI search")
                 
-                # Process each business with additional verification
-                processed_leads = []
-                for business in businesses:
+                # Enhance each business with additional data
+                enhanced_businesses = []
+                for idx, business in enumerate(businesses, 1):
                     try:
-                        enhanced_business = await self._enhance_business_data(business, tenant_context)
-                        processed_leads.append(enhanced_business)
+                        print(f"🔄 Processing business {idx}/{len(businesses)}: {business.get('company_name', 'Unknown')}")
+                        enhanced = await self._enhance_business_data(business, tenant_context)
+                        enhanced_businesses.append(enhanced)
                     except Exception as e:
-                        print(f"⚠️ Error enhancing business {business.get('company_name', 'Unknown')}: {e}")
-                        processed_leads.append(business)  # Use original data
+                        print(f"⚠️ Error enhancing business {idx}: {e}")
+                        enhanced_businesses.append(business)  # Keep the original
                 
-                print(f"✅ Lead generation completed: {len(processed_leads)} leads processed")
-                return processed_leads
+                return enhanced_businesses
                 
             except json.JSONDecodeError as e:
-                print(f"❌ Failed to parse AI response as JSON: {e}")
-                print(f"Raw response: {result_text[:500]}...")
+                print(f"❌ JSON parsing error: {e}")
+                print(f"❌ Raw response was: {result_text[:1000]}")
                 return []
-                
+        
         except Exception as e:
-            print(f"❌ Lead generation failed: {e}")
-            return []
+            print(f"❌ Error in sector search: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def _get_tenant_context(self) -> Dict[str, Any]:
         """Get comprehensive tenant context for AI prompts"""
