@@ -510,15 +510,26 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **Competitive Landscape**: Identify 5-10 actual UK competitor companies by name that operate in the same sector/market as this business.
-                Focus on companies that:
-                - Operate in the SAME LOCAL AREA or region (if location data available)
-                - Have SIMILAR COMPANY SIZE (not just any company in the sector)
-                - Offer SIMILAR SPECIFIC SERVICES OR PRODUCTS (not just the same broad sector)
-                - Have COMPARABLE BUSINESS MODELS (B2B, B2C, retail, etc.)
-                Include their company names only (one per line), so they can be researched for lead generation.
-                These should be REAL, IDENTIFIABLE UK companies that directly compete with this specific business based on their market position, size, and offerings.
-                IMPORTANT: Avoid just listing the largest national players if this is a local/regional business. Focus on actual competitors to THIS specific company.
+            9. **Competitive Landscape**: Identify 5-10 ACTUAL, LOCAL/REGIONAL UK competitor companies that directly compete with THIS SPECIFIC BUSINESS.
+                
+                **CRITICAL FILTERING RULES (MUST FOLLOW EXACTLY):**
+                - NO national mega-corporations or publicly listed companies (plcs) UNLESS they operate locally in the same area
+                - NO generic "IT companies" - find companies with SIMILAR SPECIFIC SERVICES to this business
+                - NO companies 10x+ larger than this business (size mismatch)
+                - YES to regional specialists, local branches of national companies, or similar-sized independents
+                - YES to companies offering complementary or overlapping services in the SAME GEOGRAPHIC REGION
+                
+                **FOR EACH COMPETITOR, YOU MUST PROVIDE:**
+                1. Company name
+                2. Why they compete with THIS business (specific overlap in services/market)
+                3. Their approximate size/location relative to this business
+                
+                **EXAMPLE FORMAT (if this was a Manchester electrical contractor):**
+                ✓ Local Electrical Ltd (local competitor, Manchester area, similar size)
+                ✗ Balfour Beatty (too large, national corporation, not local rival)
+                ✗ Random IT Services Ltd (different sector, no service overlap)
+                
+                Include their company names only (one per line) in the JSON response.
 
             10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
                 Be specific about which of our offerings might align with their needs.
