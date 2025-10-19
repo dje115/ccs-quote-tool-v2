@@ -126,7 +126,7 @@ class LeadGenerationService:
                     prompt = self._build_company_analysis_prompt(campaign_data, company_name, tenant_context)
                     
                     # Call OpenAI to analyze the company
-                    response = self.ai_service.openai_client.chat.completions.create(
+                    response = self.ai_service.openai_client.responses.create(
                         model="gpt-5-mini",
                         messages=[
                             {
@@ -136,8 +136,9 @@ class LeadGenerationService:
                             {"role": "user", "content": prompt}
                         ],
                         max_completion_tokens=20000,
-                        timeout=300.0
-                    )
+                tools=[{"type": "web_search"}],  # Enable web search for lead generation
+                timeout=300.0
+            )
                     
                     # Parse response
                     result_text = response.choices[0].message.content.strip()
@@ -258,7 +259,7 @@ Return ONLY valid JSON in this exact format:
             prompt = self._build_comprehensive_prompt(campaign_data, tenant_context, sector_data)
             
             # Call OpenAI with web search
-            response = self.ai_service.openai_client.chat.completions.create(
+            response = self.ai_service.openai_client.responses.create(
                 model="gpt-5-mini",
                 messages=[
                     {
@@ -268,6 +269,7 @@ Return ONLY valid JSON in this exact format:
                     {"role": "user", "content": prompt}
                 ],
                 max_completion_tokens=20000,
+                tools=[{"type": "web_search"}],  # Enable web search for lead generation
                 timeout=300.0
             )
             
