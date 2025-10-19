@@ -476,6 +476,10 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             
             {company_info}
             
+             CRITICAL INSTRUCTION FOR COMPETITOR ANALYSIS:
+            When identifying competitors in section 9, find competitors OF THE PROSPECT COMPANY, NOT competitors of our company.
+            Exclude any companies in our sector (cabling, infrastructure). Return competitors of THE PROSPECT in THEIR sector.
+            
             IMPORTANT: Consider how our company's products, services, and strengths align with this prospect's needs. 
             Focus on identifying specific opportunities where we can add value based on what we offer.
 
@@ -510,8 +514,14 @@ Do not include any explanation, just the URL or NOT_FOUND."""
             8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
                 Focus on needs that align with what we offer.
 
-            9. **Competitive Landscape**: Identify 5-10 ACTUAL, LOCAL/REGIONAL UK competitor companies that directly compete with THIS SPECIFIC BUSINESS.
-                
+            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: CRITICAL - Identify 5-10 ACTUAL, LOCAL/REGIONAL UK competitor companies that directly compete with THIS ANALYZED COMPANY.
+
+                ** CRITICAL CLARIFICATION:**
+                - You are analyzing a PROSPECT/CUSTOMER company to understand their competitive landscape
+                - Find competitors OF THE COMPANY BEING ANALYZED (the prospect), NOT competitors of our company
+                - We want to know who they compete with in their market, not who competes with us
+                - Match the analyzed company's sector and services, not our sector/services
+
                 **CRITICAL FILTERING RULES (MUST FOLLOW EXACTLY):**
                 - NO national mega-corporations or publicly listed companies (plcs) UNLESS they operate locally in the same area
                 - NO generic "IT companies" - find companies with SIMILAR SPECIFIC SERVICES to this business
