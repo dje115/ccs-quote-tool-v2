@@ -125,39 +125,16 @@ class LeadGenerationService:
                     # Build prompt for this specific company
                     prompt = self._build_company_analysis_prompt(campaign_data, company_name, tenant_context)
                     
-                    # Call OpenAI to analyze the company
-                    response = self.ai_service.openai_client.chat.completions.create(
+                    # Call OpenAI to analyze the company with web search
+                    response = self.ai_service.openai_client.responses.create(
                         model="gpt-5-mini",
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": "You are a UK business research specialist. Provide comprehensive business intelligence for UK companies. Return ONLY valid JSON matching the schema provided."
-                            },
-                            {"role": "user", "content": prompt}
-                        ],
-                        max_completion_tokens=20000,
-                        timeout=180.0,
-                        tools=[{
-                            "type": "function",
-                            "function": {
-                                "name": "web_search",
-                                "description": "Search the web for a specific company or term.",
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {
-                                        "query": {
-                                            "type": "string",
-                                            "description": "The search query (e.g., company name, postcode, sector)."
-                                        },
-                                        "max_results": {
-                                            "type": "integer",
-                                            "description": "Maximum number of results to return (default: 5)."
-                                        }
-                                    },
-                                    "required": ["query"]
-                                }
-                            }
-                        }]
+                        input={
+                            "type": "text",
+                            "text": prompt
+                        },
+                        instructions="You are a UK business research specialist. Provide comprehensive business intelligence for UK companies. Return ONLY valid JSON matching the schema provided.",
+                        max_tokens=20000,
+                        timeout=180.0
                     )
                     
                     # Parse response
@@ -279,38 +256,15 @@ Return ONLY valid JSON in this exact format:
             prompt = self._build_comprehensive_prompt(campaign_data, tenant_context, sector_data)
             
             # Call OpenAI with web search
-            response = self.ai_service.openai_client.chat.completions.create(
+            response = self.ai_service.openai_client.responses.create(
                 model="gpt-5-mini",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Return ONLY valid JSON matching the schema provided — do not include explanations or text outside the JSON."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_completion_tokens=20000,
-                timeout=180.0,
-                tools=[{
-                    "type": "function",
-                    "function": {
-                        "name": "web_search",
-                        "description": "Search the web for a specific company or term.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "The search query (e.g., company name, postcode, sector)."
-                                },
-                                "max_results": {
-                                    "type": "integer",
-                                    "description": "Maximum number of results to return (default: 5)."
-                                }
-                            },
-                            "required": ["query"]
-                        }
-                    }
-                }]
+                input={
+                    "type": "text",
+                    "text": prompt
+                },
+                instructions="You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Return ONLY valid JSON matching the schema provided.",
+                max_tokens=20000,
+                timeout=180.0
             )
             
             # Parse response
