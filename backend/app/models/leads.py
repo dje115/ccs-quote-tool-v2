@@ -65,6 +65,7 @@ class LeadGenerationCampaign(BaseModel):
     include_existing_customers = Column(Boolean, default=False)
     exclude_duplicates = Column(Boolean, default=True)
     minimum_company_size = Column(Integer, nullable=True)
+    company_size_category = Column(String(50), nullable=True)  # Micro, Small, Medium, Large
     business_sectors = Column(JSON, nullable=True)
     
     # Status and tracking

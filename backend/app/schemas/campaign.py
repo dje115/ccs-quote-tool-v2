@@ -12,6 +12,7 @@ class CampaignCreate(BaseModel):
     max_results: int = Field(20, ge=5, le=100, description="Maximum number of leads to generate")
     prompt_type: str = Field("sector_search", description="Type of search prompt")
     custom_prompt: Optional[str] = Field(None, description="Custom search prompt for custom_search type")
+    company_size_category: Optional[str] = Field(None, description="Company size filter: Micro, Small, Medium, Large")
 
 class CampaignResponse(BaseModel):
     id: str
@@ -23,6 +24,7 @@ class CampaignResponse(BaseModel):
     max_results: int
     prompt_type: str
     custom_prompt: Optional[str]
+    company_size_category: Optional[str]
     status: LeadGenerationStatus
     tenant_id: str
     created_by: str
@@ -47,6 +49,7 @@ class CampaignResponse(BaseModel):
             "max_results": obj.max_results,
             "prompt_type": obj.prompt_type,
             "custom_prompt": obj.custom_prompt,
+            "company_size_category": obj.company_size_category,
             "status": obj.status,
             "tenant_id": obj.tenant_id,
             "created_by": obj.created_by,

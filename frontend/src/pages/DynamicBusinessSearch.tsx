@@ -54,6 +54,7 @@ interface CampaignData {
   max_results: number;
   prompt_type: string;
   custom_prompt: string;
+  company_size_category?: string;
 }
 
 const CampaignCreate: React.FC = () => {
@@ -263,7 +264,8 @@ const CampaignCreate: React.FC = () => {
                           distance_miles: 50,
                           max_results: 20,
                           prompt_type: 'sector_search',
-                          custom_prompt: ''
+                          custom_prompt: '',
+                          company_size_category: undefined
                         });
                       }}
                     >
@@ -533,6 +535,30 @@ const CampaignCreate: React.FC = () => {
                       )
                     }}
                   />
+                </Grid>
+
+                {/* Company Size Category */}
+                <Grid
+                  size={{
+                    xs: 12,
+                    md: 6
+                  }}>
+                  <FormControl fullWidth>
+                    <InputLabel>Company Size (Optional)</InputLabel>
+                    <Select
+                      value={campaignData.company_size_category || ''}
+                      onChange={(e) => handleInputChange('company_size_category', e.target.value || undefined)}
+                      label="Company Size (Optional)"
+                    >
+                      <MenuItem value="">
+                        <em>Any Size</em>
+                      </MenuItem>
+                      <MenuItem value="Micro">Micro (0-9 employees)</MenuItem>
+                      <MenuItem value="Small">Small (10-49 employees)</MenuItem>
+                      <MenuItem value="Medium">Medium (50-249 employees)</MenuItem>
+                      <MenuItem value="Large">Large (250+ employees)</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Grid>
 
                 {/* Submit Buttons - Move to Top */}
