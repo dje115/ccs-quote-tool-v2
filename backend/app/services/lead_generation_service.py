@@ -126,21 +126,21 @@ class LeadGenerationService:
                     prompt = self._build_company_analysis_prompt(campaign_data, company_name, tenant_context)
                     
                     # Call OpenAI to analyze the company with web search
-                    response = self.ai_service.openai_client.chat.completions.create(
+                    response = self.ai_service.openai_client.responses.create(
                         model="gpt-5-mini",
-                        messages=[
+                        input=[
                             {
                                 "role": "system",
                                 "content": "You are a UK business research specialist. Provide comprehensive business intelligence for UK companies. Return ONLY valid JSON matching the schema provided."
                             },
                             {"role": "user", "content": prompt}
                         ],
-                        max_completion_tokens=20000,
-                        timeout=180.0
+                        tools=[{"type": "web_search"}],  # Enable web search for real-time company research
+                        metadata={"task": "company_analysis"}
                     )
                     
-                    # Parse response
-                    result_text = response.choices[0].message.content.strip()
+                    # Parse response - responses API returns 'output' not 'choices'
+                    result_text = response.output.strip() if hasattr(response, 'output') else str(response).strip()
                     print(f"✅ AI analysis received for {company_name}")
                     
                     # Parse JSON
@@ -258,20 +258,20 @@ Return ONLY valid JSON in this exact format:
             prompt = self._build_comprehensive_prompt(campaign_data, tenant_context, sector_data)
             
             # Call OpenAI with web search
-            response = self.ai_service.openai_client.chat.completions.create(
+            response = self.ai_service.openai_client.responses.create(
                 model="gpt-5-mini",
-                messages=[
+                input=[
                     {
                         "role": "system", 
                         "content": "You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Return ONLY valid JSON matching the schema provided."
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=20000,
-                timeout=180.0
+                tools=[{"type": "web_search"}],  # Enable web search for real-time company research
+                metadata={"task": "sector_search"}
             )
             
-            # Parse response
+            # Parse response - responses API returns 'output' not 'choices'
             if hasattr(response, 'output'):
                 result_text = response.output.strip()
             elif hasattr(response, 'choices') and len(response.choices) > 0:
