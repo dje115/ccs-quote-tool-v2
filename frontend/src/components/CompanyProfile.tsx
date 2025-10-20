@@ -1078,13 +1078,14 @@ const CompanyProfile: React.FC = () => {
                 placeholder="Describe your company, what you do, and who you serve..."
                 sx={{ mt: 1 }}
                 variant="outlined"
+                data-tooltip="company-description"
                   />
             </CardContent>
           </Card>
                 </Grid>
                 
         {/* Contact Information Section */}
-                <Grid size={12}>
+                <Grid size={12} data-tooltip="company-details">
           <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
             <WebsiteIcon color="primary" />
             Contact Information
@@ -1096,8 +1097,9 @@ const CompanyProfile: React.FC = () => {
           size={{
             xs: 12,
             md: 6
-          }}>
-          <Card elevation={2}>
+          }}
+          data-tooltip="company-websites">
+          <Card elevation={2} data-tooltip="company-websites-card">
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <WebsiteIcon color="primary" sx={{ mr: 1 }} />
@@ -1163,8 +1165,9 @@ const CompanyProfile: React.FC = () => {
           size={{
             xs: 12,
             md: 6
-          }}>
-          <Card elevation={2}>
+          }}
+          data-tooltip="phone-numbers">
+          <Card elevation={2} data-tooltip="phone-numbers-card">
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <PhoneIcon color="secondary" sx={{ mr: 1 }} />

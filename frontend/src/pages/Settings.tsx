@@ -42,6 +42,7 @@ const Settings: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  
 
   // API Status
   const [apiStatus, setApiStatus] = useState({
@@ -91,6 +92,7 @@ const Settings: React.FC = () => {
     loadApiStatus();
     loadProfileData();
   }, []);
+
 
   const loadApiStatus = async () => {
     try {
@@ -288,6 +290,7 @@ const Settings: React.FC = () => {
     }
   };
 
+
   return (
     <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
       {/* Clean Centered Header */}
@@ -328,9 +331,24 @@ const Settings: React.FC = () => {
           }}
         >
           <Tab icon={<PersonIcon />} iconPosition="start" label="Profile" />
-          <Tab icon={<KeyIcon />} iconPosition="start" label="API Keys" />
-          <Tab icon={<WorkIcon />} iconPosition="start" label="Company Profile" />
-          <Tab icon={<PsychologyIcon />} iconPosition="start" label="AI Business Intelligence" />
+          <Tab 
+            icon={<KeyIcon />} 
+            iconPosition="start" 
+            label="API Keys" 
+            data-tooltip="api-keys-tab"
+          />
+          <Tab 
+            icon={<WorkIcon />} 
+            iconPosition="start" 
+            label="Company Profile" 
+            data-tooltip="company-profile-tab"
+          />
+          <Tab 
+            icon={<PsychologyIcon />} 
+            iconPosition="start" 
+            label="AI Business Intelligence" 
+            data-tooltip="ai-analysis-tab"
+          />
           <Tab icon={<NotificationsIcon />} iconPosition="start" label="Notifications" />
         </Tabs>
       </Paper>
@@ -354,6 +372,7 @@ const Settings: React.FC = () => {
                     value={profileData.company_name}
                     onChange={(e) => setProfileData({ ...profileData, company_name: e.target.value })}
                     helperText="Your legal company name - used throughout the system and in AI analysis"
+                    data-tooltip="company-name-field"
                   />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
@@ -535,7 +554,7 @@ const Settings: React.FC = () => {
                 keys (if available).
               </Alert>
 
-              <Grid container spacing={2}>
+              <Grid container spacing={2} data-tooltip="api-keys-inputs">
                 <Grid
                   size={{
                     xs: 12,

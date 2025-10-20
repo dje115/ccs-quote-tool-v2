@@ -343,6 +343,7 @@ const AIBusinessIntelligence: React.FC = () => {
           startIcon={analyzing ? <CircularProgress size={20} color="primary" /> : <AssessmentIcon />}
           onClick={handleRunAnalysis}
           disabled={analyzing}
+          data-tooltip="run-ai-analysis"
         >
           {analyzing ? 'Analyzing Your Business...' : 'RUN AI ANALYSIS'}
         </Button>

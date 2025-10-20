@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Drawer,
@@ -34,6 +34,8 @@ import { useTranslation } from 'react-i18next';
 import SimpleLanguageSelector from './SimpleLanguageSelector';
 import GlobalAIMonitor from './GlobalAIMonitor';
 import AIMonitorBadge from './AIMonitorBadge';
+import OnboardingTooltips from './OnboardingTooltips';
+import { settingsAPI } from '../services/api';
 
 const drawerWidth = 240;
 
@@ -47,6 +49,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { t } = useTranslation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [showOnboardingTooltips, setShowOnboardingTooltips] = useState(false);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -65,6 +68,46 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const handleLogout = () => {
     localStorage.clear();
     navigate('/login');
+  };
+
+  // Check AI analysis status and show tooltips if needed
+  const checkTooltipStatus = async () => {
+    try {
+      const response = await settingsAPI.get('/company-profile');
+      const data = response.data;
+      
+      // Check if we have meaningful AI analysis data
+      const hasAIAnalysis = !!(data.company_analysis && 
+                              typeof data.company_analysis === 'object' && 
+                              Object.keys(data.company_analysis).length > 0);
+      
+      // Check if user has seen tooltips before
+      const hasSeenTooltips = localStorage.getItem('onboarding-tooltips-seen');
+      
+      // Show tooltips if no AI analysis (regardless of whether user has seen them before)
+      if (!hasAIAnalysis && user.email) {
+        setShowOnboardingTooltips(true);
+      }
+    } catch (error) {
+      console.error('Failed to check AI analysis status:', error);
+    }
+  };
+
+  // Check on component mount and when user changes
+  useEffect(() => {
+    if (user.email) {
+      checkTooltipStatus();
+    }
+  }, [user.email]);
+
+  const handleTooltipComplete = () => {
+    setShowOnboardingTooltips(false);
+    localStorage.setItem('onboarding-tooltips-seen', 'true');
+  };
+
+  const handleTooltipSkip = () => {
+    setShowOnboardingTooltips(false);
+    localStorage.setItem('onboarding-tooltips-seen', 'true');
   };
 
   const menuItems = [
@@ -102,7 +145,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Divider />
       <List>
         <ListItem disablePadding>
-          <ListItemButton onClick={() => navigate('/settings')}>
+          <ListItemButton onClick={() => navigate('/settings')} data-tooltip="settings-menu">
             <ListItemIcon>
               <SettingsIcon />
             </ListItemIcon>
@@ -221,6 +264,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         }}
       >
         {children}
+        
+        {/* Global Onboarding Tooltips */}
+        <OnboardingTooltips
+          isActive={showOnboardingTooltips}
+          onComplete={handleTooltipComplete}
+          onSkip={handleTooltipSkip}
+        />
       </Box>
     </Box>
   );

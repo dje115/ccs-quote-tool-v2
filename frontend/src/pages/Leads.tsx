@@ -27,7 +27,9 @@ import {
   Alert,
   CircularProgress,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -45,7 +47,10 @@ import {
   CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
   FilterList as FilterListIcon,
   ArrowUpward as ArrowUpwardIcon,
-  ArrowDownward as ArrowDownwardIcon
+  ArrowDownward as ArrowDownwardIcon,
+  BusinessCenter as BusinessCenterIcon,
+  Assignment as AssignmentIcon,
+  Architecture as ArchitectureIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -90,6 +95,7 @@ const Leads: React.FC = () => {
   const [showConverted, setShowConverted] = useState(false);
   const [sortBy, setSortBy] = useState<string>('lead_score');
   const [sortOrder, setSortOrder] = useState<string>('desc');
+  const [activeTab, setActiveTab] = useState<number>(0);
 
   useEffect(() => {
     loadLeads();
@@ -243,6 +249,10 @@ const Leads: React.FC = () => {
       setSortBy(column);
       setSortOrder('desc');
     }
+  };
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
   };
 
   const handleBulkConvert = async () => {
@@ -491,7 +501,41 @@ const Leads: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
-      {/* Discoveries Table */}
+      
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange} 
+          variant="fullWidth"
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab 
+            icon={<BusinessCenterIcon />} 
+            label="Companies" 
+            iconPosition="start"
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          />
+          <Tab 
+            icon={<AssignmentIcon />} 
+            label="Tenders" 
+            iconPosition="start"
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          />
+          <Tab 
+            icon={<ArchitectureIcon />} 
+            label="Planning Applications" 
+            iconPosition="start"
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          />
+        </Tabs>
+      </Paper>
+
+      {/* Tab Content */}
+      {activeTab === 0 && (
+        <Box>
+          {/* Companies Table - Current implementation handles all discoveries.
+              For large lists, consider implementing pagination or virtual scrolling */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -538,7 +582,17 @@ const Leads: React.FC = () => {
                   )}
                 </Box>
               </TableCell>
-              <TableCell>Campaign</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('campaign_name')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Campaign
+                  {sortBy === 'campaign_name' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell 
                 sx={{ cursor: 'pointer', userSelect: 'none' }} 
                 onClick={() => handleSort('created_at')}
@@ -717,6 +771,46 @@ const Leads: React.FC = () => {
           />
         </Box>
       </Box>
+        </Box>
+      )}
+      
+      {/* Tenders Tab */}
+      {activeTab === 1 && (
+        <Box>
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <AssignmentIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+            <Typography variant="h5" gutterBottom>
+              Tenders
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              This section will display tender opportunities discovered through AI-powered searches.
+              Feature coming soon for tender campaign type development.
+            </Typography>
+            <Button variant="contained" disabled>
+              Coming Soon
+            </Button>
+          </Paper>
+        </Box>
+      )}
+      
+      {/* Planning Applications Tab */}
+      {activeTab === 2 && (
+        <Box>
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <ArchitectureIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+            <Typography variant="h5" gutterBottom>
+              Planning Applications
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              This section will display planning applications discovered through AI-powered searches.
+              Feature coming soon for planning application campaign type development.
+            </Typography>
+            <Button variant="contained" disabled>
+              Coming Soon
+            </Button>
+          </Paper>
+        </Box>
+      )}
     </Container>
   );
 };

@@ -101,7 +101,7 @@ class LeadGenerationService:
     async def _generate_leads_from_company_list(self, campaign_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Analyze pre-supplied companies from a company list import
-        Uses AI to gather intelligence on each company
+        Uses single AI call with web search for efficiency (same pattern as dynamic search)
         """
         try:
             print(f"📋 Starting Company List Import analysis...")
@@ -116,179 +116,166 @@ class LeadGenerationService:
                 print(f"⚠️  No companies provided in campaign")
                 return []
             
-            businesses = []
-            total_companies = len(company_names)
+            # Get sector data (use from campaign or default)
+            sector_name = campaign_data.get('sector_name', 'General Business')
+            sector_data = self._get_sector_data(sector_name)
             
-            # Analyze each company using the same AI analysis that dynamic search uses
-            for idx, company_name in enumerate(company_names, 1):
-                print(f"\n📊 Analyzing company {idx}/{total_companies}: {company_name}")
+            print(f"🔍 Executing comprehensive AI analysis with web search for {len(company_names)} companies...")
+            
+            # Build prompt for analyzing the company list (similar to dynamic search but with provided companies)
+            prompt = self._build_company_list_prompt(campaign_data, tenant_context, sector_data, company_names)
+            print(f"✅ Prompt built successfully, length: {len(prompt)}")
+            
+            print(f"🔍 About to call OpenAI API for company list analysis...")
+            
+            # Check if OpenAI client is properly initialized
+            if not hasattr(self.ai_service, 'openai_client') or self.ai_service.openai_client is None:
+                raise Exception("OpenAI client not initialized")
+            print(f"✅ OpenAI client is initialized")
+            
+            # Call OpenAI using responses.create() with web search (same pattern as dynamic search)
+            try:
+                # Build input string (responses.create format)
+                system_message = f"You are a UK business research specialist with access to live web search. Analyze the provided list of {len(company_names)} companies and return comprehensive business intelligence for each. Use online sources to verify and enhance company information. Return ONLY valid JSON matching the schema provided."
+                input_string = f"{system_message}\n\n{prompt}"
+                
+                response = self.ai_service.openai_client.responses.create(
+                    model="gpt-5-mini",
+                    input=input_string,
+                    tools=[{"type": "web_search_preview"}],
+                    tool_choice="auto"
+                )
+                print(f"✅ OpenAI API call completed for company list, processing response...")
+            except Exception as api_error:
+                print(f"❌ OpenAI API call failed: {api_error}")
+                print(f"❌ Error type: {type(api_error).__name__}")
+                import traceback
+                traceback.print_exc()
+                raise api_error
+            
+            # Parse response from responses.create() API (same pattern as dynamic search)
+            print(f"✅ AI search completed, processing response...")
+            
+            # Extract response content using exact format from dynamic search
+            result_text = None
+            sources = []
+            
+            # First, get the main summary from output_text (primary method)
+            if hasattr(response, 'output_text') and response.output_text:
+                result_text = response.output_text.strip()
+                print(f"🔍 Using output_text: {len(result_text)} chars")
+            elif hasattr(response, 'choices') and len(response.choices) > 0:
+                result_text = response.choices[0].message.content.strip()
+                print(f"🔍 Using choices[0].message.content (fallback): {len(result_text)} chars")
+            
+            # Extract structured web results as per dynamic search pattern
+            if hasattr(response, 'output') and isinstance(response.output, list):
+                print(f"🔍 Processing structured output with {len(response.output)} items")
+                for item in response.output:
+                    if isinstance(item, dict) and "content" in item:
+                        for block in item["content"]:
+                            if block.get("type") == "output_text" and not result_text:
+                                result_text = block.get("text", "").strip()
+                                print(f"🔍 Found text in structured output: {len(result_text)} chars")
+                            elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
+                                # Extract web search results
+                                web_results = block.get("results", [])
+                                print(f"🔍 Found {len(web_results)} web search results")
+                                for r in web_results:
+                                    sources.append({
+                                        "title": r.get("title", "Untitled"),
+                                        "url": r.get("url", ""),
+                                        "snippet": r.get("snippet", "")
+                                    })
+            
+            if not result_text:
+                print(f"❌ No response content extracted")
+                return []
+            
+            print(f"✅ AI response extracted, length: {len(result_text)}")
+            print(f"🔍 First 500 chars: {result_text[:500]}...")
+            
+            # Parse JSON response with robust error handling (same as dynamic search)
+            search_results = None
+            
+            try:
+                search_results = json.loads(result_text)
+                print(f"🔍 Successfully parsed JSON")
+            except json.JSONDecodeError as e:
+                print(f"❌ JSON parsing error: {e}")
+                print(f"❌ Attempting to fix malformed JSON...")
                 
                 try:
-                    # Use the comprehensive AI analysis service for each company (same as what's used elsewhere)
-                    print(f"🔍 Starting comprehensive AI analysis for {company_name}")
-                    analysis_result = await self.ai_service.analyze_company(
-                        company_name=company_name,
-                        company_number=None,  # Will be discovered automatically
-                        website=None,  # Will be discovered automatically
-                        known_facts=None,
-                        excluded_addresses=[]
-                    )
-                    
-                    if analysis_result.get('success'):
-                        analysis = analysis_result.get('analysis', {})
-                        source_data = analysis_result.get('source_data', {})
-                        
-                        # Debug: Log what analysis data we got
-                        print(f"[DEBUG] AI Analysis for {company_name}:")
-                        print(f"[DEBUG] Analysis keys: {list(analysis.keys())}")
-                        print(f"[DEBUG] Company profile: {analysis.get('company_profile', 'NOT_FOUND')[:100]}...")
-                        print(f"[DEBUG] Business activities: {analysis.get('primary_business_activities', 'NOT_FOUND')[:100]}...")
-                        print(f"[DEBUG] Opportunities: {analysis.get('opportunities', 'NOT_FOUND')[:100]}...")
-                        
-                        # Build comprehensive business intelligence from analysis fields
-                        business_intelligence_parts = []
-                        
-                        # Add company profile if available
-                        if analysis.get('company_profile'):
-                            business_intelligence_parts.append(f"Company Overview: {analysis['company_profile']}")
-                        
-                        # Add business activities
-                        if analysis.get('primary_business_activities'):
-                            business_intelligence_parts.append(f"Business Activities: {analysis['primary_business_activities']}")
-                        
-                        # Add growth potential
-                        if analysis.get('growth_potential'):
-                            business_intelligence_parts.append(f"Growth Potential: {analysis['growth_potential']}")
-                        
-                        # Add financial health analysis
-                        if analysis.get('financial_health_analysis'):
-                            business_intelligence_parts.append(f"Financial Health: {analysis['financial_health_analysis']}")
-                        
-                        # Add opportunities
-                        if analysis.get('opportunities'):
-                            business_intelligence_parts.append(f"Opportunities: {analysis['opportunities']}")
-                        
-                        # Add actionable recommendations
-                        if analysis.get('actionable_recommendations'):
-                            recommendations = analysis['actionable_recommendations']
-                            if isinstance(recommendations, list):
-                                business_intelligence_parts.append(f"Key Recommendations: {'; '.join(recommendations[:5])}")
-                            else:
-                                business_intelligence_parts.append(f"Key Recommendations: {recommendations}")
-                        
-                        # Add risks if available
-                        if analysis.get('risks'):
-                            business_intelligence_parts.append(f"Risk Factors: {analysis['risks']}")
-                        
-                        # Combine into comprehensive business intelligence
-                        comprehensive_ai_intelligence = "\n\n".join(business_intelligence_parts) if business_intelligence_parts else f"Comprehensive AI analysis completed for {company_name} from import list."
-                        
-                        # Debug: Log the generated business intelligence
-                        print(f"[DEBUG] Generated business intelligence length: {len(comprehensive_ai_intelligence)} chars")
-                        print(f"[DEBUG] Business intelligence preview: {comprehensive_ai_intelligence[:200]}...")
-                        
-                        # Build enhanced quick telesales summary from analysis
-                        telesales_parts = []
-                        if analysis.get('company_profile'):
-                            telesales_parts.append(f"{analysis['company_profile'][:200]}...")
-                        elif analysis.get('primary_business_activities'):
-                            telesales_parts.append(f"{analysis['primary_business_activities'][:200]}...")
-                        
-                        if analysis.get('opportunities'):
-                            telesales_parts.append(f"Key opportunities: {analysis['opportunities'][:150]}...")
-                        
-                        enhanced_telesales = ". ".join(telesales_parts) if telesales_parts else analysis.get('quick_telesales_summary', f'Company from import list: {company_name}')
-                        
-                        # Convert analysis result to the same format as dynamic search
-                        business_data = {
-                            'company_name': company_name,
-                            'website': analysis.get('website') or source_data.get('web_scraping', {}).get('website'),
-                            'description': analysis.get('company_description', analysis.get('company_profile', f'Analysis of {company_name}')),
-                            'contact_phone': analysis.get('contact_phone') or source_data.get('web_scraping', {}).get('contact_phone'),
-                            'contact_email': analysis.get('contact_email') or source_data.get('web_scraping', {}).get('contact_email'),
-                            'postcode': analysis.get('postcode') or source_data.get('google_maps', {}).get('postcode'),
-                            'business_sector': analysis.get('business_sector', 'Unknown'),
-                            'lead_score': analysis.get('lead_score', 60),
-                            'fit_reason': analysis.get('fit_reason', f'Company from import list: {company_name}'),
-                            'source_url': source_data.get('web_scraping', {}).get('website'),
-                            'quick_telesales_summary': enhanced_telesales,
-                            'ai_business_intelligence': comprehensive_ai_intelligence,
-                            # Store the raw source data for enhancement
-                            'google_maps_data': source_data.get('google_maps', {}),
-                            'companies_house_data': source_data.get('companies_house', {}),
-                            'website_data': source_data.get('web_scraping', {})
-                        }
-                        
-                        # Ensure required fields are set
-                        if not business_data.get('company_name'):
-                            business_data['company_name'] = company_name
-                    
+                    fixed_text = self._fix_malformed_json(result_text)
+                    if fixed_text != result_text:
+                        search_results = json.loads(fixed_text)
+                        print(f"✅ Fixed JSON by truncating at complete object")
                     else:
-                        print(f"❌ AI analysis failed for {company_name}: {analysis_result.get('error', 'Unknown error')}")
-                        # Create fallback record in same format as dynamic search
-                        business_data = {
-                            'company_name': company_name,
-                            'website': None,
-                            'description': f'Company from import list: {company_name}',
-                            'contact_phone': None,
-                            'contact_email': None,
-                            'postcode': None,
-                            'business_sector': 'Unknown',
-                            'lead_score': 50,
-                            'fit_reason': 'Imported from company list - analysis pending',
-                            'source_url': None,
-                            'quick_telesales_summary': f'Company from import list: {company_name}',
-                            'ai_business_intelligence': 'Analysis failed - manual review required'
-                        }
-                    
-                    # Apply the same enhancement logic as dynamic search
+                        raise json.JSONDecodeError("Could not fix JSON", result_text, e.pos)
+                except json.JSONDecodeError:
                     try:
-                        print(f"🔄 Processing business {idx}/{total_companies}: {business_data.get('company_name', 'Unknown')}")
-                        
-                        # Ensure sector is populated (same as dynamic search)
-                        campaign_sector = campaign_data.get('sector_name', 'Unknown')
-                        if not business_data.get('business_sector') or business_data.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
-                            business_data['business_sector'] = campaign_sector
-                        
-                        # Use the same enhancement method as dynamic search
-                        enhanced = await self._enhance_business_data(business_data, tenant_context)
-                        
-                        # Ensure sector is populated, fallback to campaign sector if needed (same as dynamic search)
-                        if not enhanced.get('business_sector') or enhanced.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
-                            enhanced['business_sector'] = campaign_sector
-                        
-                        businesses.append(enhanced)
-                        print(f"✅ Successfully processed: {company_name}")
-                        
-                    except Exception as e:
-                        print(f"⚠️ Error enhancing business {idx}: {e}")
-                        # Ensure sector is set even if enhancement fails (same as dynamic search)
-                        if not business_data.get('business_sector') or business_data.get('business_sector') == 'Unknown':
-                            business_data['business_sector'] = campaign_sector
-                        businesses.append(business_data)  # Keep the original
-                    
-                except Exception as e:
-                    print(f"❌ Error analyzing {company_name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # Add basic record so campaign doesn't fail (same format as dynamic search)
-                    businesses.append({
-                        'company_name': company_name,
-                        'website': None,
-                        'description': f'Company from import list: {company_name}',
-                        'contact_phone': None,
-                        'contact_email': None,
-                        'postcode': None,
-                        'business_sector': 'Unknown',
-                        'lead_score': 40,
-                        'fit_reason': 'Imported from company list - error during analysis',
-                        'source_url': None,
-                        'quick_telesales_summary': f'Company from import list: {company_name}',
-                        'ai_business_intelligence': f'Analysis error: {str(e)}'
-                    })
+                        search_results = self._extract_json_from_response(result_text)
+                        if search_results:
+                            print(f"✅ Extracted JSON using fallback method")
+                        else:
+                            raise json.JSONDecodeError("Could not extract JSON", result_text, e.pos)
+                    except Exception as fallback_error:
+                        print(f"❌ All JSON recovery methods failed: {fallback_error}")
+                        return []
             
-            print(f"\n✅ Company list analysis complete: {len(businesses)} companies analyzed")
-            return businesses
+            if not search_results:
+                print(f"❌ No search results after parsing")
+                return []
+            
+            # Extract businesses - same pattern as dynamic search
+            businesses = []
+            
+            if isinstance(search_results, dict):
+                if 'results' in search_results and isinstance(search_results['results'], list):
+                    businesses = search_results['results']
+                    print(f"✅ Found {len(businesses)} businesses in 'results' key")
+                    
+                    # Propagate top-level sector to each business record
+                    if 'sector' in search_results:
+                        for business in businesses:
+                            business['business_sector'] = search_results['sector']
+                else:
+                    print(f"⚠️ No 'results' key or not a list. Available keys: {list(search_results.keys())}")
+            elif isinstance(search_results, list):
+                businesses = search_results
+                print(f"✅ Using response as direct list with {len(businesses)} businesses")
+            
+            print(f"📊 Final business count: {len(businesses)}")
+            if len(businesses) == 0:
+                print(f"⚠️ No businesses found after parsing")
+                return []
+            
+            # Enhance each business with additional data and ensure sector is populated (same as dynamic search)
+            enhanced_businesses = []
+            campaign_sector = campaign_data.get('sector_name', 'Unknown')
+            
+            for idx, business in enumerate(businesses, 1):
+                try:
+                    print(f"🔄 Processing business {idx}/{len(businesses)}: {business.get('company_name', 'Unknown')}")
+                    
+                    # Ensure sector is populated (fallback to campaign sector if missing)
+                    if not business.get('business_sector') or business.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
+                        business['business_sector'] = campaign_sector
+                    
+                    enhanced = await self._enhance_business_data(business, tenant_context)
+                    # Ensure sector is populated, fallback to campaign sector if needed
+                    if not enhanced.get('business_sector') or enhanced.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
+                        enhanced['business_sector'] = campaign_sector
+                    enhanced_businesses.append(enhanced)
+                except Exception as e:
+                    print(f"⚠️ Error enhancing business {idx}: {e}")
+                    # Ensure sector is set even if enhancement fails
+                    if not business.get('business_sector') or business.get('business_sector') == 'Unknown':
+                        business['business_sector'] = campaign_sector
+                    enhanced_businesses.append(business)  # Keep the original
+            
+            print(f"\n✅ Company list analysis complete: {len(enhanced_businesses)} companies analyzed")
+            return enhanced_businesses
             
         except Exception as e:
             print(f"❌ Error in company list analysis: {e}")
@@ -667,6 +654,132 @@ Return only valid JSON in this structure:
 - If fewer than {campaign_data.get('max_results', 20)} genuine businesses are found, return only verified ones.
 {f"- Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({self._get_company_size_description(campaign_data.get('company_size_category'))})" if campaign_data.get('company_size_category') else "- Prioritize SMEs and small-to-medium enterprises over large corporations."}
 - Never include fictional examples or template data.
+"""
+        
+        return prompt
+    
+    def _build_company_list_prompt(self, campaign_data: Dict, tenant_context: Dict, sector_data: Dict, company_names: List[str]) -> str:
+        """Build the AI prompt for analyzing a provided list of companies"""
+        
+        print(f"🔍 Building company list prompt - determining installer status...")
+        # Determine if tenant is installation provider
+        is_installer = tenant_context.get('is_installation_provider', False)
+        
+        print(f"🔍 Building prompt - generating customer/partner types...")
+        # Generate dynamic customer/partner recommendations
+        customer_type = self._generate_customer_type(tenant_context, sector_data)
+        partner_type = self._generate_partner_type(tenant_context, sector_data)
+        print(f"✅ Customer/partner types generated")
+        
+        # Create company names list for the prompt
+        company_names_list = "\n".join([f"- {name}" for name in company_names])
+        
+        prompt = f"""You are a UK business research specialist with access to live web search. 
+Analyze the provided list of {len(company_names)} companies and return comprehensive business intelligence for each.
+Return ONLY valid JSON matching the schema provided — do not include explanations or text outside the JSON.
+
+---
+
+## CONTEXT:
+Company: {tenant_context['company_name']}
+Description: {tenant_context['company_description']}
+Services: {', '.join(tenant_context['services'][:5])}
+Location: {tenant_context['location']}
+Primary Market: {tenant_context['primary_market']}
+Installation Provider: {is_installer}
+
+Sector: {sector_data['sector_name']}
+Sector Focus: {sector_data['sector_description']}
+Campaign Type: Company List Import
+
+---
+
+## COMPANIES TO ANALYZE:
+{company_names_list}
+
+---
+
+## OBJECTIVE
+Analyze each of the {len(company_names)} companies listed above and provide comprehensive business intelligence for each.
+Use web search to verify company information, find contact details, and gather current business intelligence.
+
+IMPORTANT: You MUST analyze ALL companies in the list. Do not skip any companies.
+
+---
+
+## ANALYSIS APPROACH
+1. Use web search to verify each company exists and gather current information
+2. Find contact details (phone, email, website) for each company
+3. Determine business sector, size, and activities for each company
+4. Assess each company's fit as a potential customer or partner
+5. Generate actionable business intelligence for sales teams
+
+## KEYWORDS TO CONSIDER:
+{sector_data.get('example_keywords', 'Industry-specific keywords')}
+
+---
+
+## DATA TO RETURN
+For each business, extract:
+- `company_name` (official name)
+- `website` (URL, or null if not verifiable)
+- `description` (short summary of services)
+- `contact_phone` (or null)
+- `contact_email` (or null)
+- `postcode`
+- `sector` (from context)
+- `lead_score` (60–95, based on relevance)
+- `fit_reason` (why this business fits as a customer or partner)
+- `source_url` (where you found it)
+- `quick_telesales_summary` (2-3 sentences for telesales team)
+- `ai_business_intelligence` (comprehensive analysis, 300+ words)
+
+---
+
+## DYNAMIC INSIGHTS TO INCLUDE
+Generate these automatically based on the sector and company data:
+
+**Recommended Customer Type:**  
+{customer_type}
+
+**Recommended Partner Type:**  
+{partner_type}
+
+---
+
+## OUTPUT FORMAT
+Return only valid JSON in this structure:
+{{
+  "query_type": "company_list_analysis",
+  "sector": "{sector_data['sector_name']}",
+  "results": [
+    {{
+      "company_name": "string",
+      "website": "string or null",
+      "description": "string",
+      "contact_phone": "string or null",
+      "contact_email": "string or null",
+      "postcode": "string",
+      "lead_score": 60–95,
+      "fit_reason": "string",
+      "source_url": "string",
+      "recommended_customer_type": "{customer_type}",
+      "recommended_partner_type": "{partner_type}",
+      "quick_telesales_summary": "string",
+      "ai_business_intelligence": "string"
+    }}
+  ]
+}}
+
+---
+
+## QUALITY RULES
+- Analyze ALL companies in the provided list
+- Use web search to verify each company exists and gather current information
+- Focus on finding real, verifiable contact information
+- Provide comprehensive business intelligence for each company
+- Never include fictional examples or template data
+- If a company cannot be found or verified, mark it clearly in the analysis
 """
         
         return prompt
