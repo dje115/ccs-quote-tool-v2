@@ -138,11 +138,72 @@ class LeadGenerationService:
                         analysis = analysis_result.get('analysis', {})
                         source_data = analysis_result.get('source_data', {})
                         
+                        # Debug: Log what analysis data we got
+                        print(f"[DEBUG] AI Analysis for {company_name}:")
+                        print(f"[DEBUG] Analysis keys: {list(analysis.keys())}")
+                        print(f"[DEBUG] Company profile: {analysis.get('company_profile', 'NOT_FOUND')[:100]}...")
+                        print(f"[DEBUG] Business activities: {analysis.get('primary_business_activities', 'NOT_FOUND')[:100]}...")
+                        print(f"[DEBUG] Opportunities: {analysis.get('opportunities', 'NOT_FOUND')[:100]}...")
+                        
+                        # Build comprehensive business intelligence from analysis fields
+                        business_intelligence_parts = []
+                        
+                        # Add company profile if available
+                        if analysis.get('company_profile'):
+                            business_intelligence_parts.append(f"Company Overview: {analysis['company_profile']}")
+                        
+                        # Add business activities
+                        if analysis.get('primary_business_activities'):
+                            business_intelligence_parts.append(f"Business Activities: {analysis['primary_business_activities']}")
+                        
+                        # Add growth potential
+                        if analysis.get('growth_potential'):
+                            business_intelligence_parts.append(f"Growth Potential: {analysis['growth_potential']}")
+                        
+                        # Add financial health analysis
+                        if analysis.get('financial_health_analysis'):
+                            business_intelligence_parts.append(f"Financial Health: {analysis['financial_health_analysis']}")
+                        
+                        # Add opportunities
+                        if analysis.get('opportunities'):
+                            business_intelligence_parts.append(f"Opportunities: {analysis['opportunities']}")
+                        
+                        # Add actionable recommendations
+                        if analysis.get('actionable_recommendations'):
+                            recommendations = analysis['actionable_recommendations']
+                            if isinstance(recommendations, list):
+                                business_intelligence_parts.append(f"Key Recommendations: {'; '.join(recommendations[:5])}")
+                            else:
+                                business_intelligence_parts.append(f"Key Recommendations: {recommendations}")
+                        
+                        # Add risks if available
+                        if analysis.get('risks'):
+                            business_intelligence_parts.append(f"Risk Factors: {analysis['risks']}")
+                        
+                        # Combine into comprehensive business intelligence
+                        comprehensive_ai_intelligence = "\n\n".join(business_intelligence_parts) if business_intelligence_parts else f"Comprehensive AI analysis completed for {company_name} from import list."
+                        
+                        # Debug: Log the generated business intelligence
+                        print(f"[DEBUG] Generated business intelligence length: {len(comprehensive_ai_intelligence)} chars")
+                        print(f"[DEBUG] Business intelligence preview: {comprehensive_ai_intelligence[:200]}...")
+                        
+                        # Build enhanced quick telesales summary from analysis
+                        telesales_parts = []
+                        if analysis.get('company_profile'):
+                            telesales_parts.append(f"{analysis['company_profile'][:200]}...")
+                        elif analysis.get('primary_business_activities'):
+                            telesales_parts.append(f"{analysis['primary_business_activities'][:200]}...")
+                        
+                        if analysis.get('opportunities'):
+                            telesales_parts.append(f"Key opportunities: {analysis['opportunities'][:150]}...")
+                        
+                        enhanced_telesales = ". ".join(telesales_parts) if telesales_parts else analysis.get('quick_telesales_summary', f'Company from import list: {company_name}')
+                        
                         # Convert analysis result to the same format as dynamic search
                         business_data = {
                             'company_name': company_name,
                             'website': analysis.get('website') or source_data.get('web_scraping', {}).get('website'),
-                            'description': analysis.get('company_description', f'Analysis of {company_name}'),
+                            'description': analysis.get('company_description', analysis.get('company_profile', f'Analysis of {company_name}')),
                             'contact_phone': analysis.get('contact_phone') or source_data.get('web_scraping', {}).get('contact_phone'),
                             'contact_email': analysis.get('contact_email') or source_data.get('web_scraping', {}).get('contact_email'),
                             'postcode': analysis.get('postcode') or source_data.get('google_maps', {}).get('postcode'),
@@ -150,8 +211,8 @@ class LeadGenerationService:
                             'lead_score': analysis.get('lead_score', 60),
                             'fit_reason': analysis.get('fit_reason', f'Company from import list: {company_name}'),
                             'source_url': source_data.get('web_scraping', {}).get('website'),
-                            'quick_telesales_summary': analysis.get('quick_telesales_summary', f'Company from import list: {company_name}'),
-                            'ai_business_intelligence': analysis.get('ai_business_intelligence', 'Comprehensive analysis completed'),
+                            'quick_telesales_summary': enhanced_telesales,
+                            'ai_business_intelligence': comprehensive_ai_intelligence,
                             # Store the raw source data for enhancement
                             'google_maps_data': source_data.get('google_maps', {}),
                             'companies_house_data': source_data.get('companies_house', {}),

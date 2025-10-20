@@ -660,10 +660,10 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
                   </Box>
                 )}
                 
-                {customer.ai_analysis_raw.it_budget_estimate && (
+                {(customer.ai_analysis_raw.service_budget_estimate || customer.ai_analysis_raw.it_budget_estimate) && (
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="caption" display="block" sx={{ opacity: 0.9 }}>IT Budget Estimate</Typography>
-                    <Typography variant="body2" fontWeight="600">{customer.ai_analysis_raw.it_budget_estimate}</Typography>
+                    <Typography variant="caption" display="block" sx={{ opacity: 0.9 }}>Service Budget Estimate</Typography>
+                    <Typography variant="body2" fontWeight="600">{customer.ai_analysis_raw.service_budget_estimate || customer.ai_analysis_raw.it_budget_estimate}</Typography>
                   </Box>
                 )}
                 

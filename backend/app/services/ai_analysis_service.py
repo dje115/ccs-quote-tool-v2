@@ -141,34 +141,49 @@ class AIAnalysisService:
             
             print(f"[WEBSITE DISCOVERY] Using Responses API with web search for: {company_name}")
             
-            # Use Responses API with web search (same as campaigns)
+            # Use Responses API with web search (same as working dynamic search format)
+            system_message = "You are a helpful assistant that finds company websites. Respond only with the URL or NOT_FOUND."
+            input_string = f"{system_message}\n\nFind the official website URL for the company: {company_name}\n\nPlease respond with ONLY the website URL (e.g., https://example.com) or \"NOT_FOUND\" if you cannot find it.\nDo not include any explanation, just the URL or NOT_FOUND."
+            
             response = self.openai_client.responses.create(
                 model="gpt-5-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that finds company websites. Respond only with the URL or NOT_FOUND."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""Find the official website URL for the company: {company_name}
-
-Please respond with ONLY the website URL (e.g., https://example.com) or "NOT_FOUND" if you cannot find it.
-Do not include any explanation, just the URL or NOT_FOUND."""
-                    }
-                ],
-                tools=[{"type": "web_search"}],  # Enable web search like campaigns
-                max_completion_tokens=10000,
-                timeout=120.0
+                input=input_string,
+                tools=[{"type": "web_search_preview"}],
+                tool_choice="auto"
             )
             
-            # Extract website from response
-            if hasattr(response, 'choices') and len(response.choices) > 0:
+            # Extract website from response (handle both responses.create and chat.completions formats)
+            website = None
+            
+            # Try responses.create format first (output_text)
+            if hasattr(response, 'output_text') and response.output_text:
+                website = response.output_text.strip()
+                print(f"[WEBSITE DISCOVERY] Using output_text: {website[:100]}...")
+            
+            # Try structured output format for web_search_preview
+            elif hasattr(response, 'output') and isinstance(response.output, list):
+                print(f"[WEBSITE DISCOVERY] Processing structured output with {len(response.output)} items")
+                for item in response.output:
+                    if isinstance(item, dict) and "content" in item:
+                        for block in item["content"]:
+                            if block.get("type") == "output_text" and not website:
+                                website = block.get("text", "").strip()
+                                print(f"[WEBSITE DISCOVERY] Found in structured output: {website[:100]}...")
+                            elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
+                                # Extract from web search results if needed
+                                web_results = block.get("results", [])
+                                print(f"[WEBSITE DISCOVERY] Found {len(web_results)} web search results")
+            
+            # Fallback to other formats
+            elif hasattr(response, 'choices') and len(response.choices) > 0:
                 website = response.choices[0].message.content.strip()
+                print(f"[WEBSITE DISCOVERY] Using choices fallback: {website[:100]}...")
             elif hasattr(response, 'output'):
                 website = response.output.strip()
+                print(f"[WEBSITE DISCOVERY] Using output fallback: {website[:100]}...")
             else:
                 website = str(response).strip()
+                print(f"[WEBSITE DISCOVERY] Using string fallback: {website[:100]}...")
             
             if website and website != "NOT_FOUND" and ("http://" in website or "https://" in website):
                 # Clean up the URL
@@ -624,6 +639,11 @@ Better 3 verified than 10 unverified.
             
             {company_info}
             
+            IMPORTANT BUDGET ANALYSIS INSTRUCTION:
+            When estimating budget ranges in section 5, focus on services that match what WE provide (from the tenant context above). 
+            For example, if we provide crane hire, lifting services, or construction support, estimate their spending capacity for THOSE services, not generic IT budgets.
+            Base your budget estimates on their business activities and what services they would actually need from companies like ours.
+            
              CRITICAL INSTRUCTION FOR COMPETITOR ANALYSIS:
             When identifying competitors in section 9, find competitors OF THE PROSPECT COMPANY, NOT competitors of our company.
             Exclude any companies in our sector (cabling, infrastructure). Return competitors of THE PROSPECT in THEIR sector.
@@ -649,7 +669,7 @@ Better 3 verified than 10 unverified.
                - Enterprise: Complex, integrated systems, dedicated teams
                (If technology isn't relevant to your industry, assess operational maturity)
 
-            5. **Budget Estimate**: Based on their revenue and company size, estimate their likely annual spending range for products/services like ours
+            5. **Service Budget Estimate**: Based on their revenue and company size, estimate their likely annual spending range for services like ours (crane hire, lifting services, construction support, etc.) - NOT generic IT budgets unless that's what we provide
 
             6. **Financial Health Analysis**: Analyze the financial data from Companies House:
                - Comment on their profitability trend (Growing/Stable/Declining)
@@ -706,7 +726,7 @@ Better 3 verified than 10 unverified.
                 "business_size_category": "string (Small/Medium/Large/Enterprise)",
                 "primary_business_activities": "string (detailed description)",
                 "technology_maturity": "string (Basic/Intermediate/Advanced/Enterprise)",
-                "it_budget_estimate": "string (budget range)",
+                "service_budget_estimate": "string (budget range for services like ours - crane hire, lifting, construction support, etc.)",
                 "growth_potential": "string (High/Medium/Low)",
                 "technology_needs": "string (predicted IT needs)",
                 "competitors": ["array of 5-10 competitor company names as strings"],
@@ -1166,11 +1186,11 @@ Better 3 verified than 10 unverified.
             elif growth_potential == 'medium':
                 score += 8
             
-            # IT budget scoring (rough estimate)
-            it_budget = str(analysis.get('it_budget_estimate', '')).lower()
-            if '50k' in it_budget or '100k' in it_budget or '1m' in it_budget:
+            # Service budget scoring (rough estimate)
+            service_budget = str(analysis.get('service_budget_estimate', analysis.get('it_budget_estimate', ''))).lower()
+            if '50k' in service_budget or '100k' in service_budget or '1m' in service_budget:
                 score += 10
-            elif '10k' in it_budget or '25k' in it_budget:
+            elif '10k' in service_budget or '25k' in service_budget:
                 score += 5
             
             return min(100, max(0, score))

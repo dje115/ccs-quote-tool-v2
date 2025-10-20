@@ -571,14 +571,14 @@ const LeadDetail: React.FC = () => {
                         <Typography variant="body2">{lead.ai_analysis.technology_maturity}</Typography>
                       </Grid>
                     )}
-                    {lead.ai_analysis.it_budget_estimate && (
+                    {(lead.ai_analysis.service_budget_estimate || lead.ai_analysis.it_budget_estimate) && (
                       <Grid
                         size={{
                           xs: 12,
                           sm: 6
                         }}>
-                        <Typography variant="caption" color="text.secondary">IT Budget Estimate</Typography>
-                        <Typography variant="body2">{lead.ai_analysis.it_budget_estimate}</Typography>
+                        <Typography variant="caption" color="text.secondary">Service Budget Estimate</Typography>
+                        <Typography variant="body2">{lead.ai_analysis.service_budget_estimate || lead.ai_analysis.it_budget_estimate}</Typography>
                       </Grid>
                     )}
                     {lead.ai_analysis.growth_potential && (

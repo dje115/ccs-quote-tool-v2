@@ -596,14 +596,14 @@ const CustomerDetail: React.FC = () => {
                     <Typography variant="body2">{customer.ai_analysis_raw.technology_maturity}</Typography>
                   </Grid>
                 )}
-                {customer.ai_analysis_raw.it_budget_estimate && (
+                {(customer.ai_analysis_raw.service_budget_estimate || customer.ai_analysis_raw.it_budget_estimate) && (
                   <Grid
                     size={{
                       xs: 12,
                       sm: 6
                     }}>
                     <Typography variant="caption" color="text.secondary">Budget Estimate</Typography>
-                    <Typography variant="body2">{customer.ai_analysis_raw.it_budget_estimate}</Typography>
+                    <Typography variant="body2">{customer.ai_analysis_raw.service_budget_estimate || customer.ai_analysis_raw.it_budget_estimate}</Typography>
                   </Grid>
                 )}
                 {customer.ai_analysis_raw.growth_potential && (
@@ -807,10 +807,10 @@ const CustomerDetail: React.FC = () => {
                     xs: 12,
                     md: 6
                   }}>
-                  {customer.ai_analysis_raw.it_budget_estimate && (
+                  {(customer.ai_analysis_raw.service_budget_estimate || customer.ai_analysis_raw.it_budget_estimate) && (
                     <Box sx={{ mb: 3 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>IT Budget Estimate</Typography>
-                      <Typography variant="body1" sx={{ mt: 0.5 }}>{customer.ai_analysis_raw.it_budget_estimate}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Service Budget Estimate</Typography>
+                      <Typography variant="body1" sx={{ mt: 0.5 }}>{customer.ai_analysis_raw.service_budget_estimate || customer.ai_analysis_raw.it_budget_estimate}</Typography>
                     </Box>
                   )}
                   {customer.ai_analysis_raw.growth_potential && (
