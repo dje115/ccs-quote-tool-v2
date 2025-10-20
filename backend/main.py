@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CCS Quote Tool v2 API",
     description="Multi-tenant SaaS CRM and Quoting Platform with AI-powered features",
-    version="2.7.0",
+    version="2.8.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -89,7 +89,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "CCS Quote Tool v2 API",
-        "version": "2.0.0",
+        "version": "2.8.0",
         "status": "running",
         "docs": "/docs",
         "health": "/health"
@@ -101,7 +101,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "2.0.0",
+        "version": "2.8.0",
         "timestamp": "2025-10-09T21:45:00Z"
     }
 
