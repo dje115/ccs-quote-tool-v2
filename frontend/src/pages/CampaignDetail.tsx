@@ -468,31 +468,6 @@ const CampaignDetail: React.FC = () => {
             </Grid>
           )}
 
-          {campaign.company_names && campaign.company_names.length > 0 && (
-            <Grid size={12}>
-              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Target Companies ({campaign.company_names.length})
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                  {campaign.company_names.map((name: string, index: number) => (
-                    <Chip 
-                      key={index} 
-                      label={name} 
-                      size="small" 
-                      variant="outlined" 
-                      sx={{ 
-                        backgroundColor: '#e3f2fd',
-                        borderColor: '#2196f3',
-                        color: '#1976d2'
-                      }}
-                    />
-                  ))}
-                </Box>
-              </Box>
-            </Grid>
-          )}
-
           {campaign.description && (
             <Grid size={12}>
               <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
@@ -502,6 +477,34 @@ const CampaignDetail: React.FC = () => {
                 <Typography variant="body1" sx={{ color: 'text.primary' }}>
                   {campaign.description}
                 </Typography>
+              </Box>
+            </Grid>
+          )}
+
+          {campaign.company_names && campaign.company_names.length > 0 && (
+            <Grid size={12}>
+              <Box sx={{ p: 2, backgroundColor: 'white', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Imported Company List ({campaign.company_names.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                  {campaign.company_names.map((name: string, index: number) => (
+                    <Chip 
+                      key={index} 
+                      label={name} 
+                      size="small" 
+                      variant="outlined" 
+                      sx={{ 
+                        backgroundColor: '#e8f5e8',
+                        borderColor: '#4caf50',
+                        color: '#2e7d32',
+                        '&:hover': {
+                          backgroundColor: '#c8e6c9'
+                        }
+                      }}
+                    />
+                  ))}
+                </Box>
               </Box>
             </Grid>
           )}

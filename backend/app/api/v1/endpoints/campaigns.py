@@ -4,10 +4,12 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import time
 import json
+import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models.tenant import User, Tenant
-from app.models.leads import LeadGenerationCampaign, LeadGenerationStatus, Lead
+from app.models.leads import LeadGenerationCampaign, LeadGenerationStatus, Lead, LeadStatus
+from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
 from app.schemas.campaign import CampaignCreate, CampaignResponse
 from app.services.lead_generation_service import LeadGenerationService
 from app.tasks.lead_generation_tasks import run_lead_generation_campaign, test_lead_generation_campaign
@@ -27,13 +29,17 @@ async def create_campaign(
         campaign = LeadGenerationCampaign(
             name=campaign_data.name,
             description=campaign_data.description,
-            business_sectors=[campaign_data.sector_name],  # Store sector_name as business_sectors array
+            business_sectors=[campaign_data.sector_name] if campaign_data.sector_name else ["General Business"],  # Store sector_name as business_sectors array
             postcode=campaign_data.postcode,
             distance_miles=campaign_data.distance_miles,
             max_results=campaign_data.max_results,
             prompt_type=campaign_data.prompt_type,
             custom_prompt=campaign_data.custom_prompt,
             company_size_category=campaign_data.company_size_category,
+            # Company list campaign fields
+            company_names=campaign_data.company_names,
+            exclude_duplicates=campaign_data.exclude_duplicates if campaign_data.exclude_duplicates is not None else True,
+            include_existing_customers=campaign_data.include_existing_customers if campaign_data.include_existing_customers is not None else False,
             status=LeadGenerationStatus.DRAFT,
             tenant_id=current_user.tenant_id,
             created_by=current_user.id
@@ -147,7 +153,11 @@ def start_campaign(
                 "max_results": campaign.max_results,
                 "prompt_type": campaign.prompt_type,
                 "custom_prompt": campaign.custom_prompt,
-                "company_size_category": campaign.company_size_category
+                "company_size_category": campaign.company_size_category,
+                # Company list campaign fields
+                "company_names": campaign.company_names,
+                "exclude_duplicates": campaign.exclude_duplicates,
+                "include_existing_customers": campaign.include_existing_customers
             },
             current_user.tenant_id
         )
@@ -257,7 +267,12 @@ def restart_campaign(
                 "distance_miles": campaign.distance_miles,
                 "max_results": campaign.max_results,
                 "prompt_type": campaign.prompt_type,
-                "custom_prompt": campaign.custom_prompt
+                "custom_prompt": campaign.custom_prompt,
+                "company_size_category": campaign.company_size_category,
+                # Company list campaign fields
+                "company_names": campaign.company_names,
+                "exclude_duplicates": campaign.exclude_duplicates,
+                "include_existing_customers": campaign.include_existing_customers
             },
             current_user.tenant_id
         )
@@ -319,6 +334,21 @@ def _safe_json_parse(json_string: Optional[str]) -> Dict[str, Any]:
         return json.loads(json_string)
     except (json.JSONDecodeError, TypeError):
         return {}
+
+def _safe_parse_ai_analysis(ai_analysis):
+    """Safely parse ai_analysis field that might be string or dict"""
+    if ai_analysis is None:
+        return None
+    if isinstance(ai_analysis, dict):
+        return ai_analysis
+    if isinstance(ai_analysis, str):
+        try:
+            import json
+            return json.loads(ai_analysis)
+        except (json.JSONDecodeError, TypeError):
+            # If it's not valid JSON, wrap it in a dict
+            return {"raw": ai_analysis}
+    return None
 
 @router.get("/leads/all")
 def get_all_leads(
@@ -475,4 +505,100 @@ def get_campaign_leads(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve campaign leads: {str(e)}"
+        )
+
+@router.post("/leads/{lead_id}/convert")
+async def convert_lead_to_customer(
+    lead_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Convert a discovery lead to a customer record"""
+    try:
+        # Find the lead
+        lead = db.query(Lead).filter(
+            Lead.id == lead_id,
+            Lead.tenant_id == current_user.tenant_id,
+            Lead.is_deleted == False
+        ).first()
+        
+        if not lead:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lead not found"
+            )
+        
+        # Check if lead is already converted (has converted_to_customer_id)
+        if lead.converted_to_customer_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Lead has already been converted to customer"
+            )
+        
+        # Map lead data to customer fields
+        # Handle business sector mapping - ignore empty/N/A values
+        business_sector = None
+        if lead.business_sector and lead.business_sector.strip() not in ['', 'N/A', 'n/a', 'None', 'null']:
+            try:
+                # Try to map the sector string to BusinessSector enum
+                business_sector = BusinessSector(lead.business_sector)
+            except ValueError:
+                # If the sector doesn't match any enum value, try to find a close match
+                # or default to None - the user can manually update later
+                print(f"Warning: Could not map business_sector '{lead.business_sector}' to BusinessSector enum")
+        
+        # Handle business size mapping - ignore empty/N/A values
+        business_size = None
+        if lead.company_size and lead.company_size.strip() not in ['', 'N/A', 'n/a', 'None', 'null']:
+            try:
+                business_size = BusinessSize(lead.company_size)
+            except ValueError:
+                print(f"Warning: Could not map company_size '{lead.company_size}' to BusinessSize enum")
+        
+        # Create customer record
+        customer = Customer(
+            id=str(uuid.uuid4()),
+            tenant_id=current_user.tenant_id,
+            company_name=lead.company_name,
+            status=CustomerStatus.LEAD,  # Start as LEAD status
+            business_sector=business_sector,
+            business_size=business_size,
+            description=lead.qualification_reason or f"Converted from discovery - {lead.company_name}",
+            website=lead.website,
+            main_email=lead.contact_email,
+            main_phone=lead.contact_phone,
+            billing_address=lead.address,
+            billing_postcode=lead.postcode,
+            lead_score=lead.lead_score,
+            ai_analysis_raw=_safe_parse_ai_analysis(lead.ai_analysis),
+            companies_house_data=_safe_json_parse(lead.companies_house_data),
+            google_maps_data=_safe_json_parse(lead.google_maps_data),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+        
+        db.add(customer)
+        db.flush()  # Get the customer ID
+        
+        # Update the lead to reference the new customer
+        lead.converted_to_customer_id = customer.id
+        lead.status = LeadStatus.CONVERTED  # Update lead status
+        lead.conversion_date = datetime.now(timezone.utc)
+        
+        db.commit()
+        db.refresh(customer)
+        
+        return {
+            "success": True,
+            "message": "Lead converted to customer successfully",
+            "customer_id": customer.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to convert lead: {str(e)}"
         )

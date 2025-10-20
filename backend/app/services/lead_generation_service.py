@@ -6,6 +6,8 @@ Combines web search, Google Maps, Companies House, and AI analysis for comprehen
 import json
 import httpx
 import googlemaps
+import asyncio
+import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -117,72 +119,111 @@ class LeadGenerationService:
             businesses = []
             total_companies = len(company_names)
             
-            # Analyze each company
+            # Analyze each company using the same AI analysis that dynamic search uses
             for idx, company_name in enumerate(company_names, 1):
                 print(f"\n📊 Analyzing company {idx}/{total_companies}: {company_name}")
                 
                 try:
-                    # Build prompt for this specific company
-                    prompt = self._build_company_analysis_prompt(campaign_data, company_name, tenant_context)
-                    
-                    # Call OpenAI to analyze the company with web search
-                    response = self.ai_service.openai_client.responses.create(
-                        model="gpt-5-mini",
-                        input=[
-                            {
-                                "role": "system",
-                                "content": "You are a UK business research specialist. Provide comprehensive business intelligence for UK companies. Return ONLY valid JSON matching the schema provided."
-                            },
-                            {"role": "user", "content": prompt}
-                        ],
-                        tools=[{"type": "web_search"}],  # Enable web search for real-time company research
-                        metadata={"task": "company_analysis"}
+                    # Use the comprehensive AI analysis service for each company (same as what's used elsewhere)
+                    print(f"🔍 Starting comprehensive AI analysis for {company_name}")
+                    analysis_result = await self.ai_service.analyze_company(
+                        company_name=company_name,
+                        company_number=None,  # Will be discovered automatically
+                        website=None,  # Will be discovered automatically
+                        known_facts=None,
+                        excluded_addresses=[]
                     )
                     
-                    # Parse response - responses API returns 'output' not 'choices'
-                    result_text = response.output.strip() if hasattr(response, 'output') else str(response).strip()
-                    print(f"✅ AI analysis received for {company_name}")
+                    if analysis_result.get('success'):
+                        analysis = analysis_result.get('analysis', {})
+                        source_data = analysis_result.get('source_data', {})
+                        
+                        # Convert analysis result to the same format as dynamic search
+                        business_data = {
+                            'company_name': company_name,
+                            'website': analysis.get('website') or source_data.get('web_scraping', {}).get('website'),
+                            'description': analysis.get('company_description', f'Analysis of {company_name}'),
+                            'contact_phone': analysis.get('contact_phone') or source_data.get('web_scraping', {}).get('contact_phone'),
+                            'contact_email': analysis.get('contact_email') or source_data.get('web_scraping', {}).get('contact_email'),
+                            'postcode': analysis.get('postcode') or source_data.get('google_maps', {}).get('postcode'),
+                            'business_sector': analysis.get('business_sector', 'Unknown'),
+                            'lead_score': analysis.get('lead_score', 60),
+                            'fit_reason': analysis.get('fit_reason', f'Company from import list: {company_name}'),
+                            'source_url': source_data.get('web_scraping', {}).get('website'),
+                            'quick_telesales_summary': analysis.get('quick_telesales_summary', f'Company from import list: {company_name}'),
+                            'ai_business_intelligence': analysis.get('ai_business_intelligence', 'Comprehensive analysis completed'),
+                            # Store the raw source data for enhancement
+                            'google_maps_data': source_data.get('google_maps', {}),
+                            'companies_house_data': source_data.get('companies_house', {}),
+                            'website_data': source_data.get('web_scraping', {})
+                        }
+                        
+                        # Ensure required fields are set
+                        if not business_data.get('company_name'):
+                            business_data['company_name'] = company_name
                     
-                    # Parse JSON
-                    try:
-                        company_data = json.loads(result_text)
-                        
-                        # Ensure required fields
-                        if not company_data.get('company_name'):
-                            company_data['company_name'] = company_name
-                        
-                        # Add AI intelligence
-                        company_data = await self._enhance_business_data(company_data, tenant_context)
-                        
-                        businesses.append(company_data)
-                        print(f"✅ Successfully analyzed: {company_name}")
-                        
-                    except json.JSONDecodeError as e:
-                        print(f"❌ JSON parsing error for {company_name}: {e}")
-                        # Create minimal record
-                        businesses.append({
+                    else:
+                        print(f"❌ AI analysis failed for {company_name}: {analysis_result.get('error', 'Unknown error')}")
+                        # Create fallback record in same format as dynamic search
+                        business_data = {
                             'company_name': company_name,
                             'website': None,
-                            'description': 'Company added from import list',
+                            'description': f'Company from import list: {company_name}',
                             'contact_phone': None,
                             'contact_email': None,
                             'postcode': None,
-                            'sector': 'Unknown',
+                            'business_sector': 'Unknown',
                             'lead_score': 50,
-                            'fit_reason': 'Imported from company list',
+                            'fit_reason': 'Imported from company list - analysis pending',
                             'source_url': None,
                             'quick_telesales_summary': f'Company from import list: {company_name}',
-                            'ai_business_intelligence': 'Awaiting detailed analysis'
-                        })
+                            'ai_business_intelligence': 'Analysis failed - manual review required'
+                        }
+                    
+                    # Apply the same enhancement logic as dynamic search
+                    try:
+                        print(f"🔄 Processing business {idx}/{total_companies}: {business_data.get('company_name', 'Unknown')}")
+                        
+                        # Ensure sector is populated (same as dynamic search)
+                        campaign_sector = campaign_data.get('sector_name', 'Unknown')
+                        if not business_data.get('business_sector') or business_data.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
+                            business_data['business_sector'] = campaign_sector
+                        
+                        # Use the same enhancement method as dynamic search
+                        enhanced = await self._enhance_business_data(business_data, tenant_context)
+                        
+                        # Ensure sector is populated, fallback to campaign sector if needed (same as dynamic search)
+                        if not enhanced.get('business_sector') or enhanced.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
+                            enhanced['business_sector'] = campaign_sector
+                        
+                        businesses.append(enhanced)
+                        print(f"✅ Successfully processed: {company_name}")
+                        
+                    except Exception as e:
+                        print(f"⚠️ Error enhancing business {idx}: {e}")
+                        # Ensure sector is set even if enhancement fails (same as dynamic search)
+                        if not business_data.get('business_sector') or business_data.get('business_sector') == 'Unknown':
+                            business_data['business_sector'] = campaign_sector
+                        businesses.append(business_data)  # Keep the original
                     
                 except Exception as e:
                     print(f"❌ Error analyzing {company_name}: {e}")
-                    # Add basic record so campaign doesn't fail
+                    import traceback
+                    traceback.print_exc()
+                    # Add basic record so campaign doesn't fail (same format as dynamic search)
                     businesses.append({
                         'company_name': company_name,
-                        'description': 'Company added from import list',
+                        'website': None,
+                        'description': f'Company from import list: {company_name}',
+                        'contact_phone': None,
+                        'contact_email': None,
+                        'postcode': None,
+                        'business_sector': 'Unknown',
                         'lead_score': 40,
-                        'fit_reason': 'Imported from company list'
+                        'fit_reason': 'Imported from company list - error during analysis',
+                        'source_url': None,
+                        'quick_telesales_summary': f'Company from import list: {company_name}',
+                        'ai_business_intelligence': f'Analysis error: {str(e)}'
                     })
             
             print(f"\n✅ Company list analysis complete: {len(businesses)} companies analyzed")
@@ -194,52 +235,6 @@ class LeadGenerationService:
             traceback.print_exc()
             raise
     
-    def _build_company_analysis_prompt(self, campaign_data: Dict, company_name: str, tenant_context: Dict) -> str:
-        """
-        Build AI prompt for analyzing a single company from the import list
-        """
-        prompt = f"""Analyze this UK company and provide comprehensive business intelligence:
-
-**COMPANY TO ANALYZE:** {company_name}
-
-**YOUR COMPANY:** {tenant_context['company_name']}
-- Services: {', '.join(tenant_context['services'][:5])}
-- Target Markets: {tenant_context['target_markets']}
-- USPs: {tenant_context['unique_selling_points']}
-
-Please research this company and provide:
-
-1. **Company Name**: Official name
-2. **Business Sector**: Industry classification
-3. **Estimated Employees**: Size estimate
-4. **Estimated Revenue**: Revenue range estimate
-5. **Website**: URL if you can find it
-6. **Contact Information**: Phone/email if available
-7. **Postcode**: Primary location postcode
-8. **Lead Score**: 0-100 score for sales fit with our company
-9. **Fit Reason**: Why they could be a good fit for our services
-10. **Quick Sales Summary**: 2-3 sentences for telesales
-11. **Business Intelligence**: 200+ word comprehensive analysis
-12. **Contact Phone**: Direct contact number if available
-13. **Contact Email**: Email address if available
-14. **Opportunities**: How our services could help them
-
-Return ONLY valid JSON in this exact format:
-{{
-  "company_name": "string",
-  "website": "string or null",
-  "description": "string",
-  "contact_phone": "string or null",
-  "contact_email": "string or null", 
-  "postcode": "string or null",
-  "sector": "string",
-  "lead_score": 0-100,
-  "fit_reason": "string",
-  "source_url": "string or null",
-  "quick_telesales_summary": "string",
-  "ai_business_intelligence": "string"
-}}"""
-        return prompt
     
     async def _generate_leads_from_sector_search(self, campaign_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -249,76 +244,207 @@ Return ONLY valid JSON in this exact format:
             print(f"🔍 Executing comprehensive AI search with web search enabled...")
             
             # Get tenant context
+            print(f"🔍 Getting tenant context...")
             tenant_context = self._get_tenant_context()
+            print(f"✅ Tenant context retrieved: {tenant_context.get('company_name', 'Unknown')}")
             
             # Get sector data
+            print(f"🔍 Getting sector data for: {campaign_data.get('sector_name')}")
             sector_data = self._get_sector_data(campaign_data.get('sector_name'))
+            print(f"✅ Sector data retrieved: {sector_data.get('sector_name', 'Unknown')}")
             
             # Build comprehensive prompt
+            print(f"🔍 Building comprehensive prompt...")
             prompt = self._build_comprehensive_prompt(campaign_data, tenant_context, sector_data)
+            print(f"✅ Prompt built successfully, length: {len(prompt)}")
             
-            # Call OpenAI with web search
-            response = self.ai_service.openai_client.responses.create(
-                model="gpt-5-mini",
-                input=[
-                    {
-                        "role": "system", 
-                        "content": "You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Return ONLY valid JSON matching the schema provided."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                tools=[{"type": "web_search"}],  # Enable web search for real-time company research
-                metadata={"task": "sector_search"}
-            )
+            print(f"🔍 About to call OpenAI API...")
             
-            # Parse response - responses API returns 'output' not 'choices'
-            if hasattr(response, 'output'):
-                result_text = response.output.strip()
+            # Check if OpenAI client is properly initialized
+            if not hasattr(self.ai_service, 'openai_client') or self.ai_service.openai_client is None:
+                raise Exception("OpenAI client not initialized")
+            print(f"✅ OpenAI client is initialized")
+            
+            # Call OpenAI using responses.create() with web search (working format from ai_analysis_service)
+            print(f"🔍 Calling OpenAI API with responses.create() and web search...")
+            try:
+                # Build input string (responses.create format from user example)
+                max_results = campaign_data.get('max_results', 20)
+                system_message = f"You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Focus on finding the top {max_results} most relevant results. Return ONLY valid JSON matching the schema provided."
+                input_string = f"{system_message}\n\n{prompt}"
+                
+                response = self.ai_service.openai_client.responses.create(
+                    model="gpt-5-mini",
+                    input=input_string,
+                    tools=[{"type": "web_search_preview"}],
+                    tool_choice="auto"
+                )
+                print(f"✅ OpenAI API call completed, processing response...")
+            except Exception as api_error:
+                print(f"❌ OpenAI API call failed: {api_error}")
+                print(f"❌ Error type: {type(api_error).__name__}")
+                import traceback
+                traceback.print_exc()
+                raise api_error
+            
+            # Parse response from responses.create() API
+            print(f"✅ AI search completed, processing response...")
+            print(f"🔍 Response type: {type(response)}")
+            print(f"🔍 Response attributes: {dir(response)}")
+            
+            # Extract response content using exact format from user example
+            result_text = None
+            sources = []
+            
+            # First, get the main summary from output_text (primary method from user example)
+            if hasattr(response, 'output_text') and response.output_text:
+                result_text = response.output_text.strip()
+                print(f"🔍 Using output_text (responses.create format): {len(result_text)} chars")
             elif hasattr(response, 'choices') and len(response.choices) > 0:
                 result_text = response.choices[0].message.content.strip()
-            else:
+                print(f"🔍 Using choices[0].message.content (fallback): {len(result_text)} chars")
+            
+            # Extract structured web results as per user example
+            if hasattr(response, 'output') and isinstance(response.output, list):
+                print(f"🔍 Processing structured output with {len(response.output)} items")
+                for item in response.output:
+                    if isinstance(item, dict) and "content" in item:
+                        for block in item["content"]:
+                            if block.get("type") == "output_text" and not result_text:
+                                # Use this if we haven't found text yet
+                                result_text = block.get("text", "").strip()
+                                print(f"🔍 Found text in structured output: {len(result_text)} chars")
+                            elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
+                                # Extract web search results as per user example, limiting to max_results
+                                web_results = block.get("results", [])
+                                max_results = campaign_data.get('max_results', 20)  # Default to 20 if not set
+                                print(f"🔍 Found {len(web_results)} web search results, limiting to {max_results}")
+                                for r in web_results[:max_results]:  # Limit results like in user example
+                                    sources.append({
+                                        "title": r.get("title", "Untitled"),
+                                        "url": r.get("url", ""),
+                                        "snippet": r.get("snippet", "")
+                                    })
+                
+                # If we still don't have text, try fallback
+                if not result_text:
+                    result_text = '\n'.join(str(item) for item in response.output).strip()
+                    print(f"🔍 Using output list join (fallback): {len(result_text)} chars")
+            elif hasattr(response, 'output'):
+                result_text = str(response.output).strip()
+                print(f"🔍 Using output string: {len(result_text)} chars")
+            
+            if not result_text:
                 result_text = str(response).strip()
+                print(f"🔍 Using str(response) fallback: {len(result_text)} chars")
             
-            print(f"✅ AI search completed, parsing results...")
-            print(f"🔍 Raw AI response: {result_text[:500]}...")  # Show first 500 chars
+            if not result_text:
+                print(f"❌ No response content extracted")
+                return []
             
-            # Parse JSON response
+            print(f"✅ AI response extracted, length: {len(result_text)}")
+            print(f"🔍 Web sources found: {len(sources)}")
+            if sources:
+                for i, source in enumerate(sources[:3]):  # Show first 3 sources
+                    print(f"🔍 Source {i+1}: {source.get('title', 'No title')}")
+            print(f"🔍 First 500 chars: {result_text[:500]}...")
+            
+            # Parse JSON response with robust error handling
+            search_results = None
+            
             try:
                 search_results = json.loads(result_text)
-                print(f"🔍 Parsed JSON structure: {list(search_results.keys()) if isinstance(search_results, dict) else 'Not a dict'}")
-                
-                # Try different possible keys for the business list
-                businesses = []
-                
-                if isinstance(search_results, dict):
-                    # Check for 'results' key
-                    if 'results' in search_results and isinstance(search_results['results'], list):
-                        businesses = search_results['results']
-                    # Check if the dict itself contains business-like keys
-                    elif any(key in search_results for key in ['company_name', 'businesses', 'companies']):
-                        businesses = [search_results]
-                elif isinstance(search_results, list):
-                    businesses = search_results
-                
-                print(f"📊 Found {len(businesses)} businesses from AI search")
-                
-                # Enhance each business with additional data
-                enhanced_businesses = []
-                for idx, business in enumerate(businesses, 1):
-                    try:
-                        print(f"🔄 Processing business {idx}/{len(businesses)}: {business.get('company_name', 'Unknown')}")
-                        enhanced = await self._enhance_business_data(business, tenant_context)
-                        enhanced_businesses.append(enhanced)
-                    except Exception as e:
-                        print(f"⚠️ Error enhancing business {idx}: {e}")
-                        enhanced_businesses.append(business)  # Keep the original
-                
-                return enhanced_businesses
-                
+                print(f"🔍 Successfully parsed JSON")
             except json.JSONDecodeError as e:
                 print(f"❌ JSON parsing error: {e}")
-                print(f"❌ Raw response was: {result_text[:1000]}")
+                print(f"❌ Attempting to fix malformed JSON...")
+                
+                # Try to fix common JSON issues
+                try:
+                    # Method 1: Try to find the end of the last complete JSON object
+                    fixed_text = self._fix_malformed_json(result_text)
+                    if fixed_text != result_text:
+                        search_results = json.loads(fixed_text)
+                        print(f"✅ Fixed JSON by truncating at complete object")
+                    else:
+                        raise json.JSONDecodeError("Could not fix JSON", result_text, e.pos)
+                except json.JSONDecodeError:
+                    # Method 2: Try to extract JSON from around the results array
+                    try:
+                        search_results = self._extract_json_from_response(result_text)
+                        if search_results:
+                            print(f"✅ Extracted JSON using fallback method")
+                        else:
+                            raise json.JSONDecodeError("Could not extract JSON", result_text, e.pos)
+                    except Exception as fallback_error:
+                        print(f"❌ All JSON recovery methods failed: {fallback_error}")
+                        print(f"❌ Raw response was: {result_text[:1000]}...")
+                        return []
+            
+            if not search_results:
+                print(f"❌ No search results after parsing")
                 return []
+                
+            print(f"🔍 JSON type: {type(search_results)}")
+            
+            if isinstance(search_results, dict):
+                print(f"🔍 JSON keys: {list(search_results.keys())}")
+            elif isinstance(search_results, list):
+                print(f"🔍 JSON is list with {len(search_results)} items")
+            
+            # Extract businesses - the API response has 'results' key containing the array
+            businesses = []
+            
+            if isinstance(search_results, dict):
+                # The working response format has a 'results' key with the business array
+                if 'results' in search_results and isinstance(search_results['results'], list):
+                    businesses = search_results['results']
+                    print(f"✅ Found {len(businesses)} businesses in 'results' key")
+                    
+                    # Propagate top-level sector to each business record
+                    if 'sector' in search_results:
+                        for business in businesses:
+                            business['business_sector'] = search_results['sector']
+                else:
+                    print(f"⚠️ No 'results' key or not a list. Available keys: {list(search_results.keys())}")
+            elif isinstance(search_results, list):
+                businesses = search_results
+                print(f"✅ Using response as direct list with {len(businesses)} businesses")
+            
+            print(f"📊 Final business count: {len(businesses)}")
+            if len(businesses) == 0:
+                print(f"⚠️ No businesses found after parsing")
+                print(f"⚠️ search_results type: {type(search_results)}")
+                if isinstance(search_results, dict):
+                    print(f"⚠️ search_results keys: {list(search_results.keys())}")
+                print(f"⚠️ Full search_results: {search_results}")
+                return []
+            
+            # Enhance each business with additional data and ensure sector is populated
+            enhanced_businesses = []
+            campaign_sector = campaign_data.get('sector_name', 'Unknown')
+            
+            for idx, business in enumerate(businesses, 1):
+                try:
+                    print(f"🔄 Processing business {idx}/{len(businesses)}: {business.get('company_name', 'Unknown')}")
+                    
+                    # Ensure sector is populated (fallback to campaign sector if missing)
+                    if not business.get('business_sector') or business.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
+                        business['business_sector'] = campaign_sector
+                    
+                    enhanced = await self._enhance_business_data(business, tenant_context)
+                    # Ensure sector is populated, fallback to campaign sector if needed
+                    if not enhanced.get('business_sector') or enhanced.get('business_sector', '').strip() in ['', 'N/A', 'None', 'null']:
+                        enhanced['business_sector'] = campaign_sector
+                    enhanced_businesses.append(enhanced)
+                except Exception as e:
+                    print(f"⚠️ Error enhancing business {idx}: {e}")
+                    # Ensure sector is set even if enhancement fails
+                    if not business.get('sector') or business.get('sector') == 'Unknown':
+                        business['sector'] = campaign_sector
+                    enhanced_businesses.append(business)  # Keep the original
+            
+            return enhanced_businesses
         
         except Exception as e:
             print(f"❌ Error in sector search: {e}")
@@ -365,12 +491,15 @@ Return ONLY valid JSON in this exact format:
     def _build_comprehensive_prompt(self, campaign_data: Dict, tenant_context: Dict, sector_data: Dict) -> str:
         """Build the comprehensive AI prompt for business discovery"""
         
+        print(f"🔍 Building prompt - determining installer status...")
         # Determine if tenant is installation provider
         is_installer = tenant_context.get('is_installation_provider', False)
         
+        print(f"🔍 Building prompt - generating customer/partner types...")
         # Generate dynamic customer/partner recommendations
         customer_type = self._generate_customer_type(tenant_context, sector_data)
         partner_type = self._generate_partner_type(tenant_context, sector_data)
+        print(f"✅ Customer/partner types generated")
         
         prompt = f"""You are a UK business research specialist. 
 Find REAL, VERIFIED UK businesses based on your training data and knowledge. 
@@ -597,3 +726,102 @@ Return only valid JSON in this structure:
         except Exception as e:
             print(f"⚠️ Companies House API error: {e}")
             return {}
+    
+    def _fix_malformed_json(self, json_text: str) -> str:
+        """
+        Attempt to fix malformed JSON by finding the end of the last complete object/array
+        """
+        try:
+            # Look for common JSON termination issues and try to fix them
+            original_text = json_text
+            
+            # Method 1: Find the last complete } or ] before the error
+            if '"results"' in json_text:
+                # Try to find the closing of the results array
+                results_start = json_text.find('"results": [')
+                if results_start != -1:
+                    results_start = json_text.find('[', results_start)
+                    bracket_count = 0
+                    pos = results_start
+                    
+                    while pos < len(json_text):
+                        if json_text[pos] == '[':
+                            bracket_count += 1
+                        elif json_text[pos] == ']':
+                            bracket_count -= 1
+                            if bracket_count == 0:
+                                # Found end of results array, truncate there
+                                end_pos = pos + 1
+                                # Find the end of the main object
+                                while end_pos < len(json_text) and json_text[end_pos] not in ['\n', '\r']:
+                                    if json_text[end_pos] == '}':
+                                        return json_text[:end_pos + 1] + '}'
+                                    end_pos += 1
+                                return json_text[:pos + 1] + '}'
+                        pos += 1
+            
+            # Method 2: Find the last complete object by counting braces
+            brace_count = 0
+            last_valid_pos = -1
+            in_string = False
+            escape_next = False
+            
+            for i, char in enumerate(json_text):
+                if escape_next:
+                    escape_next = False
+                    continue
+                    
+                if char == '\\' and in_string:
+                    escape_next = True
+                    continue
+                    
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            last_valid_pos = i
+            
+            if last_valid_pos > 0:
+                return json_text[:last_valid_pos + 1]
+                
+            return original_text
+            
+        except Exception as e:
+            print(f"⚠️ Error in _fix_malformed_json: {e}")
+            return json_text
+    
+    def _extract_json_from_response(self, response_text: str) -> Optional[Any]:
+        """
+        Fallback method to extract JSON from malformed responses
+        """
+        try:
+            # Look for the JSON structure and try to extract it
+            import re
+            
+            # Try to find JSON object boundaries
+            json_match = re.search(r'\{.*"results".*\[.*\].*\}', response_text, re.DOTALL)
+            if json_match:
+                extracted = json_match.group(0)
+                try:
+                    return json.loads(extracted)
+                except:
+                    pass
+            
+            # Try to find just the results array
+            results_match = re.search(r'"results"\s*:\s*\[(.*?)\]', response_text, re.DOTALL)
+            if results_match:
+                results_content = results_match.group(1)
+                # Try to parse each object in the array
+                # This is a simplified approach - would need more robust parsing for real use
+                pass
+                
+            return None
+            
+        except Exception as e:
+            print(f"⚠️ Error in _extract_json_from_response: {e}")
+            return None

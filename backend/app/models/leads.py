@@ -115,7 +115,7 @@ class Lead(BaseModel):
     
     # Address information
     address = Column(Text, nullable=True)
-    postcode = Column(String(20), nullable=True)
+    postcode = Column(String(50), nullable=True)
     distance_from_search_center = Column(Float, nullable=True)  # in miles
     
     # Business details

@@ -27,7 +27,8 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Upload as UploadIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  AutoAwesome as QuickSetupIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { campaignAPI } from '../services/api';
@@ -72,6 +73,37 @@ const CompanyListImportCampaign: React.FC = () => {
     setPasteDialogOpen(false);
   };
 
+  const handleQuickSetup = () => {
+    const now = new Date();
+    const dateTime = now.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    let campaignName = '';
+    
+    // Check if we have source data from CRM record
+    if (state?.source) {
+      // Extract the customer name from source like "Competitors of Acme Corp"
+      let customerName = state.source;
+      if (customerName.includes('Competitors of ')) {
+        customerName = customerName.replace('Competitors of ', '');
+      }
+      campaignName = `${customerName} - ${dateTime}`;
+    } else if (state?.customerName) {
+      // Direct customer name passed
+      campaignName = `${state.customerName} - ${dateTime}`;
+    } else {
+      // Manual entry - just use "List"
+      campaignName = `List - ${dateTime}`;
+    }
+    
+    setCampaignName(campaignName);
+  };
+
   const handleCreateCampaign = async () => {
     setError(null);
 
@@ -106,7 +138,23 @@ const CompanyListImportCampaign: React.FC = () => {
       }, 1500);
     } catch (err: any) {
       console.error('Error creating campaign:', err);
-      setError(err.response?.data?.detail || 'Failed to create campaign');
+      
+      // Handle validation errors from FastAPI
+      if (err.response?.status === 422 && err.response?.data?.detail) {
+        const detail = err.response.data.detail;
+        if (Array.isArray(detail)) {
+          // Multiple validation errors
+          const errorMessages = detail.map((error: any) => 
+            `${error.loc ? error.loc.join('.') : 'field'}: ${error.msg}`
+          );
+          setError(`Validation failed: ${errorMessages.join(', ')}`);
+        } else {
+          // Single error message
+          setError(detail);
+        }
+      } else {
+        setError(err.response?.data?.detail || err.message || 'Failed to create campaign');
+      }
     } finally {
       setLoading(false);
     }
@@ -143,7 +191,7 @@ const CompanyListImportCampaign: React.FC = () => {
       {/* Error Message */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+          {typeof error === 'string' ? error : JSON.stringify(error)}
         </Alert>
       )}
 
@@ -160,15 +208,28 @@ const CompanyListImportCampaign: React.FC = () => {
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                 Campaign Details
               </Typography>
-              <TextField
-                fullWidth
-                label="Campaign Name"
-                value={campaignName}
-                onChange={(e) => setCampaignName(e.target.value)}
-                placeholder="e.g., Competitor Analysis - Q4 2025"
-                sx={{ mb: 2 }}
-                disabled={loading}
-              />
+              
+              {/* Campaign Name with Quick Setup */}
+              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                <TextField
+                  fullWidth
+                  label="Campaign Name"
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  placeholder="e.g., Competitor Analysis - Q4 2025"
+                  disabled={loading}
+                />
+                <Button
+                  variant="outlined"
+                  startIcon={<QuickSetupIcon />}
+                  onClick={handleQuickSetup}
+                  disabled={loading}
+                  sx={{ whiteSpace: 'nowrap', minWidth: 140, flexShrink: 0 }}
+                  title="Auto-generate campaign name with source and timestamp"
+                >
+                  Quick Setup
+                </Button>
+              </Box>
               <TextField
                 fullWidth
                 label="Description (Optional)"

@@ -737,7 +737,7 @@ Better 3 verified than 10 unverified.
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=16000,
+                max_completion_tokens=8000,
                 timeout=180.0
             )
             

@@ -89,6 +89,22 @@ class CustomerUpdate(BaseModel):
     is_competitor: bool | None = None
 
 
+def _safe_parse_json_field(value):
+    """Safely parse JSON field that might be a string or dict"""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            import json
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            # If it's not valid JSON, wrap it in a dict
+            return {"raw": value}
+    return None
+
+
 @router.get("/", response_model=List[CustomerResponse])
 async def list_customers(
     skip: int = 0,
@@ -122,6 +138,12 @@ async def list_customers(
     stmt = stmt.offset(skip).limit(limit)
     result = db.execute(stmt)
     customers = result.scalars().all()
+    
+    # Fix ai_analysis_raw field that might be a string instead of dict
+    for customer in customers:
+        if hasattr(customer, 'ai_analysis_raw'):
+            customer.ai_analysis_raw = _safe_parse_json_field(customer.ai_analysis_raw)
+    
     return customers
 
 
@@ -242,6 +264,10 @@ async def get_customer(
     
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Fix ai_analysis_raw field that might be a string instead of dict
+    if hasattr(customer, 'ai_analysis_raw'):
+        customer.ai_analysis_raw = _safe_parse_json_field(customer.ai_analysis_raw)
     
     return customer
 
