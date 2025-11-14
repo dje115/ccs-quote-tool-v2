@@ -17,6 +17,21 @@ from .sales import (
     ActivityOutcome
 )
 
+from .planning import (
+    PlanningApplicationCreate,
+    PlanningApplicationUpdate,
+    PlanningApplicationResponse,
+    PlanningApplicationCampaignCreate,
+    PlanningApplicationCampaignUpdate,
+    PlanningApplicationCampaignResponse,
+    PlanningKeywordCreate,
+    PlanningKeywordResponse,
+    PlanningApplicationListResponse,
+    PlanningApplicationStatus,
+    PlanningCampaignStatus,
+    ApplicationType
+)
+
 __all__ = [
     "SalesActivityCreate",
     "SalesActivityUpdate",
@@ -29,6 +44,18 @@ __all__ = [
     "AISalesAssistantRequest",
     "AISalesAssistantResponse",
     "ActivityType",
-    "ActivityOutcome"
+    "ActivityOutcome",
+    "PlanningApplicationCreate",
+    "PlanningApplicationUpdate",
+    "PlanningApplicationResponse",
+    "PlanningApplicationCampaignCreate",
+    "PlanningApplicationCampaignUpdate",
+    "PlanningApplicationCampaignResponse",
+    "PlanningKeywordCreate",
+    "PlanningKeywordResponse",
+    "PlanningApplicationListResponse",
+    "PlanningApplicationStatus",
+    "PlanningCampaignStatus",
+    "ApplicationType"
 ]
 

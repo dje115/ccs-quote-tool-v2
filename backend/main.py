@@ -18,6 +18,7 @@ from app.core.redis import init_redis
 from app.core.celery import init_celery
 from app.core.middleware import TenantMiddleware, LoggingMiddleware
 from app.api.v1.api import api_router
+from app.api.v1.endpoints.version import get_version
 
 
 @asynccontextmanager
@@ -50,11 +51,14 @@ async def lifespan(app: FastAPI):
     print("🛑 Shutting down CCS Quote Tool v2...")
 
 
+# Get version from VERSION file or environment
+APP_VERSION = get_version()
+
 # Create FastAPI application
 app = FastAPI(
     title="CCS Quote Tool v2 API",
     description="Multi-tenant SaaS CRM and Quoting Platform with AI-powered features",
-    version="2.8.0",
+    version=APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -89,7 +93,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "CCS Quote Tool v2 API",
-        "version": "2.8.0",
+        "version": APP_VERSION,
         "status": "running",
         "docs": "/docs",
         "health": "/health"
@@ -99,23 +103,49 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    from datetime import datetime
     return {
         "status": "healthy",
-        "version": "2.8.0",
-        "timestamp": "2025-10-09T21:45:00Z"
+        "version": APP_VERSION,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler"""
+    """Global exception handler with CORS headers"""
+    import traceback
+    from fastapi.responses import Response
+    
+    # Get the origin from the request
+    origin = request.headers.get("origin")
+    
+    # Check if origin is allowed
+    allowed_origins = settings.CORS_ORIGINS
+    if origin and origin in allowed_origins:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    else:
+        headers = {}
+    
+    # Log the error for debugging
+    if settings.ENVIRONMENT == "development":
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
             "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong",
             "path": str(request.url)
-        }
+        },
+        headers=headers
     )
 
 

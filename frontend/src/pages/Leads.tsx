@@ -802,11 +802,15 @@ const Leads: React.FC = () => {
               Planning Applications
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              This section will display planning applications discovered through AI-powered searches.
-              Feature coming soon for planning application campaign type development.
+              Monitor UK planning applications and generate leads from relevant developments.
+              Access full planning management with campaign setup and AI analysis.
             </Typography>
-            <Button variant="contained" disabled>
-              Coming Soon
+            <Button 
+              variant="contained" 
+              onClick={() => navigate('/planning-applications')}
+              startIcon={<ArchitectureIcon />}
+            >
+              Manage Planning Applications
             </Button>
           </Paper>
         </Box>

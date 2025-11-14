@@ -151,8 +151,20 @@ Your Company: {tenant.company_name}
                 if tenant.unique_selling_points:
                     tenant_context += f"USPs: {tenant.unique_selling_points[:200]}...\n"
             
-            # Create AI prompt
-            prompt = f"""You are a sales assistant AI helping to process activity notes for a CRM system.
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            from app.models.ai_prompt import PromptCategory
+            
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.ACTIVITY_ENHANCEMENT.value,
+                tenant_id=self.tenant_id
+            )
+            
+            # Fallback to hardcoded prompt if database prompt not found
+            if not prompt_obj:
+                print("[ActivityService] Using fallback prompt - database prompt not found")
+                user_prompt = f"""You are a sales assistant AI helping to process activity notes for a CRM system.
 
 ACTIVITY TYPE: {activity.activity_type.value.upper()}
 ORIGINAL NOTES (from salesperson):
@@ -181,8 +193,23 @@ Respond in JSON format:
   "key_points": ["point1", "point2", "point3"],
   "follow_up_priority": "high|medium|low",
   "suggested_follow_up_date": "YYYY-MM-DD or null"
-}}
-"""
+}}"""
+                system_prompt = "You are a sales assistant AI that helps clean up and analyze sales activity notes. Always respond with valid JSON."
+                model = "gpt-5-mini"
+                max_tokens = 10000
+            else:
+                # Render prompt with variables
+                rendered = prompt_service.render_prompt(prompt_obj, {
+                    "activity_type": activity.activity_type.value.upper(),
+                    "notes": activity.notes,
+                    "customer_context": customer_context,
+                    "tenant_context": tenant_context,
+                    "activity_context": activity_context
+                })
+                user_prompt = rendered['user_prompt']
+                system_prompt = rendered['system_prompt']
+                model = rendered['model']
+                max_tokens = rendered['max_tokens']
             
             # Call OpenAI API
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -193,18 +220,18 @@ Respond in JSON format:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "gpt-5-mini",
+                        "model": model,
                         "messages": [
                             {
                                 "role": "system",
-                                "content": "You are a sales assistant AI that helps clean up and analyze sales activity notes. Always respond with valid JSON."
+                                "content": system_prompt
                             },
                             {
                                 "role": "user",
-                                "content": prompt
+                                "content": user_prompt
                             }
                         ],
-                        "max_completion_tokens": 10000,
+                        "max_completion_tokens": max_tokens,
                         "response_format": {"type": "json_object"}
                     }
                 )
@@ -409,8 +436,20 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
 {tenant.partnership_opportunities if tenant and tenant.partnership_opportunities else 'N/A'}
 """
             
-            # Create AI prompt
-            prompt = f"""You are a sales advisor AI helping prioritize customer engagement actions.
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            from app.models.ai_prompt import PromptCategory
+            
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.ACTION_SUGGESTIONS.value,
+                tenant_id=self.tenant_id
+            )
+            
+            # Fallback to hardcoded prompt if database prompt not found
+            if not prompt_obj:
+                print("[ActivityService] Using fallback prompt for action suggestions - database prompt not found")
+                user_prompt = f"""You are a sales advisor AI helping prioritize customer engagement actions.
 
 CUSTOMER INFORMATION:
 Company: {customer.company_name}
@@ -462,8 +501,28 @@ Respond in JSON:
     "objectives": ["objective1", "objective2"],
     "timing": "When to schedule"
   }}
-}}
-"""
+}}"""
+                system_prompt = "You are a sales strategy AI that provides actionable customer engagement suggestions. Always respond with valid JSON."
+                model = "gpt-5-mini"
+                max_tokens = 20000
+            else:
+                # Render prompt with variables
+                rendered = prompt_service.render_prompt(prompt_obj, {
+                    "company_name": customer.company_name,
+                    "status": customer.status.value,
+                    "lead_score": str(customer.lead_score or 'N/A'),
+                    "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
+                    "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
+                    "activity_summary": activity_summary,
+                    "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
+                    "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
+                    "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
+                    "tenant_context": tenant_context
+                })
+                user_prompt = rendered['user_prompt']
+                system_prompt = rendered['system_prompt']
+                model = rendered['model']
+                max_tokens = rendered['max_tokens']
             
             # Call OpenAI (use longer timeout for complex analysis)
             async with httpx.AsyncClient(timeout=240.0) as client:
@@ -474,18 +533,18 @@ Respond in JSON:
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "gpt-5-mini",
+                        "model": model,
                         "messages": [
                             {
                                 "role": "system",
-                                "content": "You are a sales strategy AI that provides actionable customer engagement suggestions. Always respond with valid JSON."
+                                "content": system_prompt
                             },
                             {
                                 "role": "user",
-                                "content": prompt
+                                "content": user_prompt
                             }
                         ],
-                        "max_completion_tokens": 20000,
+                        "max_completion_tokens": max_tokens,
                         "response_format": {"type": "json_object"}
                     }
                 )

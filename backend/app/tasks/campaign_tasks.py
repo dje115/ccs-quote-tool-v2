@@ -59,6 +59,16 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
         print(f"   Location: {campaign.postcode} (±{campaign.distance_miles} miles)")
         print(f"   Target: {campaign.max_results} leads")
         
+        # Publish started event
+        from app.core.events import get_event_publisher
+        event_publisher = get_event_publisher()
+        event_publisher.publish_campaign_started(
+            tenant_id=tenant_id,
+            campaign_id=campaign_id,
+            campaign_name=campaign.name,
+            task_id=self.request.id
+        )
+        
         # Initialize lead generation service
         service = LeadGenerationService(db, tenant_id)
         
@@ -76,6 +86,19 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
             print(f"   Duplicates Skipped: {result.get('duplicates_skipped', 0)}")
             print(f"{'='*80}\n")
             
+            # Publish completed event
+            result_data = {
+                'total_found': result.get('total_found', 0),
+                'leads_created': result.get('leads_created', 0),
+                'duplicates_skipped': result.get('duplicates_skipped', 0)
+            }
+            event_publisher.publish_campaign_completed(
+                tenant_id=tenant_id,
+                campaign_id=campaign_id,
+                campaign_name=campaign.name,
+                result=result_data
+            )
+            
             return {
                 'success': True,
                 'campaign_id': campaign_id,
@@ -91,6 +114,14 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
             print(f"{'='*80}")
             print(f"Error: {error_msg}")
             print(f"{'='*80}\n")
+            
+            # Publish failed event
+            event_publisher.publish_campaign_failed(
+                tenant_id=tenant_id,
+                campaign_id=campaign_id,
+                campaign_name=campaign.name,
+                error=error_msg
+            )
             
             # Retry if it's a transient error
             if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
@@ -127,6 +158,16 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
                 campaign.completed_at = datetime.utcnow()
                 campaign.errors_count += 1
                 db.commit()
+                
+                # Publish failed event
+                from app.core.events import get_event_publisher
+                event_publisher = get_event_publisher()
+                event_publisher.publish_campaign_failed(
+                    tenant_id=tenant_id,
+                    campaign_id=campaign_id,
+                    campaign_name=campaign.name,
+                    error=error_msg
+                )
         except Exception as db_error:
             print(f"Failed to update campaign status: {db_error}")
         

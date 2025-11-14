@@ -51,6 +51,7 @@ import {
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { activityAPI } from '../services/api';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 interface Activity {
   id: string;
@@ -97,6 +98,7 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [suggestions, setSuggestions] = useState<ActionSuggestion | null>(null);
   const [loading, setLoading] = useState(true);
+  const { subscribe, isConnected } = useWebSocketContext();
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsRefreshing, setSuggestionsRefreshing] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
@@ -116,6 +118,25 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
     loadActivities();
     loadSuggestions();
   }, [customerId]);
+
+  // Subscribe to WebSocket events for suggestions updates
+  useEffect(() => {
+    if (!isConnected || !customerId) return;
+
+    const unsubscribe = subscribe('activity.suggestions_updated', (event) => {
+      if (event.data.customer_id === customerId) {
+        console.log('Suggestions updated via WebSocket, reloading...');
+        setSuggestionsRefreshing(false);
+        loadSuggestions();
+        setSuccess('Suggestions updated successfully!');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isConnected, customerId, subscribe]);
 
   const loadActivities = async () => {
     try {
@@ -153,32 +174,18 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
       // Queue the background task
       await activityAPI.refreshSuggestionsBackground(customerId);
       
-      // Poll for updated suggestions every 3 seconds
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await activityAPI.getActionSuggestions(customerId, false);
-          if (response.data.success && response.data.suggestions && !response.data.cached) {
-            // New suggestions are available!
-            setSuggestions(response.data.suggestions);
-            setSuccess('Suggestions updated successfully!');
-            setSuggestionsRefreshing(false);
-            clearInterval(pollInterval);
-            setTimeout(() => setSuccess(null), 3000);
-          }
-        } catch (error) {
-          console.error('Error polling suggestions:', error);
-        }
-      }, 3000);
-      
-      // Stop polling after 60 seconds
-      setTimeout(() => {
-        clearInterval(pollInterval);
+      // WebSocket will notify us when suggestions are updated
+      // Set a timeout as fallback in case WebSocket doesn't work
+      const timeoutId = setTimeout(() => {
         if (suggestionsRefreshing) {
           setSuggestionsRefreshing(false);
           setError('Suggestion refresh is taking longer than expected. Please refresh the page in a moment.');
           setTimeout(() => setError(null), 5000);
         }
       }, 60000);
+      
+      // Store timeout ID for cleanup
+      return () => clearTimeout(timeoutId);
       
     } catch (error) {
       console.error('Error refreshing suggestions:', error);

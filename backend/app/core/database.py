@@ -16,6 +16,8 @@ from app.models.tenant import Tenant, User, TenantStatus, UserRole
 from app.models.crm import Customer, Contact, CustomerInteraction
 from app.models.leads import LeadGenerationCampaign, Lead, LeadInteraction, LeadGenerationPrompt
 from app.models.quotes import Quote, QuoteItem, QuoteTemplate, PricingItem
+from app.models.product import Product, PricingRule, QuoteVersion
+from app.models.ai_prompt import AIPrompt, AIPromptVersion
 from passlib.context import CryptContext
 import uuid
 

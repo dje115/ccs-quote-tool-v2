@@ -45,6 +45,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: development
+      args:
+        APP_VERSION: ${APP_VERSION:-2.5.0}
+        BUILD_DATE: ${BUILD_DATE:-}
+        BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-backend
     environment:
       - DATABASE_URL=postgresql://postgres:postgres_password_2025@postgres:5432/ccs_quote_tool
@@ -107,6 +111,72 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+    networks:
+      - ccs-network
+    restart: unless-stopped
+
+  # Celery Worker (Background Task Processing)
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+      args:
+        APP_VERSION: ${APP_VERSION:-2.5.0}
+        BUILD_DATE: ${BUILD_DATE:-}
+        BUILD_HASH: ${BUILD_HASH:-}
+    container_name: ccs-celery-worker
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres_password_2025@postgres:5432/ccs_quote_tool
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=ccs_super_secret_key_2025_change_in_production
+      - DEFAULT_TENANT=ccs
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - ccs-network
+    restart: unless-stopped
+
+  # Celery Beat (Scheduled Tasks)
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+      args:
+        APP_VERSION: ${APP_VERSION:-2.5.0}
+        BUILD_DATE: ${BUILD_DATE:-}
+        BUILD_HASH: ${BUILD_HASH:-}
+    container_name: ccs-celery-beat
+    command: celery -A app.core.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres_password_2025@postgres:5432/ccs_quote_tool
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=ccs_super_secret_key_2025_change_in_production
+      - DEFAULT_TENANT=ccs
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
     networks:
       - ccs-network
     restart: unless-stopped

@@ -105,6 +105,23 @@ async def create_activity(
         
         print(f"✓ Activity created with AI enhancement: {new_activity.id}")
         
+        # Publish activity.created event
+        from app.core.events import get_event_publisher
+        event_publisher = get_event_publisher()
+        activity_dict = {
+            "id": new_activity.id,
+            "customer_id": new_activity.customer_id,
+            "activity_type": new_activity.activity_type.value if hasattr(new_activity.activity_type, 'value') else str(new_activity.activity_type),
+            "subject": new_activity.subject,
+            "notes": new_activity.notes,
+            "activity_date": new_activity.activity_date.isoformat() if new_activity.activity_date else None,
+        }
+        event_publisher.publish_activity_created(
+            tenant_id=current_tenant.id,
+            activity_id=new_activity.id,
+            activity_data=activity_dict
+        )
+        
         return new_activity
         
     except KeyError as e:

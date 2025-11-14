@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -10,14 +10,27 @@ import {
   Link
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, versionAPI } from '../services/api';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [version, setVersion] = useState<string>('2.5.0');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const response = await versionAPI.get();
+        setVersion(response.data.version);
+      } catch (error) {
+        console.error('Failed to fetch version:', error);
+      }
+    };
+    fetchVersion();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +119,7 @@ const Login: React.FC = () => {
         </Paper>
 
         <Typography variant="body2" color="text.secondary" sx={{ mt: 4 }}>
-          Version 2.0.0 - Development
+          Version {version}
         </Typography>
       </Box>
     </Container>

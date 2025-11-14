@@ -242,6 +242,14 @@ Respond in this exact JSON format:
             print(f"✅ Successfully generated and cached suggestions for {customer.company_name}")
             print(f"{'='*80}\n")
             
+            # Publish suggestions updated event
+            from app.core.events import get_event_publisher
+            event_publisher = get_event_publisher()
+            event_publisher.publish_activity_suggestions_updated(
+                tenant_id=tenant_id,
+                customer_id=customer_id
+            )
+            
             return {
                 'success': True,
                 'customer_id': customer_id,
@@ -308,6 +316,16 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
         customer.ai_analysis_status = 'running'
         db.commit()
         
+        # Publish started event
+        from app.core.events import get_event_publisher
+        event_publisher = get_event_publisher()
+        event_publisher.publish_ai_analysis_started(
+            tenant_id=tenant_id,
+            customer_id=customer_id,
+            task_id=self.request.id,
+            customer_name=customer.company_name
+        )
+        
         # Get API keys for this tenant
         from app.models.tenant import Tenant
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
@@ -347,6 +365,14 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+        
+        # Publish progress event - starting analysis
+        event_publisher.publish_ai_analysis_progress(
+            tenant_id=tenant_id,
+            customer_id=customer_id,
+            task_id=self.request.id,
+            progress={"step": "starting", "message": "Beginning AI analysis"}
+        )
         
         # Run the analysis
         analysis_result = loop.run_until_complete(
@@ -429,17 +455,27 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             print(f"[AI ANALYSIS] Final status: {customer.ai_analysis_status}")
             print(f"{'='*80}\n")
             
+            # Publish completed event
+            result_data = {
+                'lead_score': customer.lead_score,
+                'has_phone': bool(customer.main_phone),
+                'has_website': bool(customer.website),
+                'has_financial_data': bool(customer.companies_house_data),
+                'has_location_data': bool(customer.google_maps_data)
+            }
+            event_publisher.publish_ai_analysis_completed(
+                tenant_id=tenant_id,
+                customer_id=customer_id,
+                task_id=self.request.id,
+                customer_name=customer.company_name,
+                result=result_data
+            )
+            
             return {
                 'success': True,
                 'customer_id': customer_id,
                 'customer_name': customer.company_name,
-                'analysis_summary': {
-                    'lead_score': customer.lead_score,
-                    'has_phone': bool(customer.main_phone),
-                    'has_website': bool(customer.website),
-                    'has_financial_data': bool(customer.companies_house_data),
-                    'has_location_data': bool(customer.google_maps_data)
-                }
+                'analysis_summary': result_data
             }
         else:
             error_msg = analysis_result.get('error', 'AI analysis failed')
@@ -450,6 +486,15 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             customer.ai_analysis_status = 'failed'
             customer.ai_analysis_completed_at = datetime.now(timezone.utc)
             db.commit()
+            
+            # Publish failed event
+            event_publisher.publish_ai_analysis_failed(
+                tenant_id=tenant_id,
+                customer_id=customer_id,
+                task_id=self.request.id,
+                customer_name=customer.company_name,
+                error=error_msg
+            )
             
             return {'success': False, 'error': error_msg}
             
@@ -466,6 +511,17 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
                 customer.ai_analysis_status = 'failed'
                 customer.ai_analysis_completed_at = datetime.now(timezone.utc)
                 db.commit()
+                
+                # Publish failed event
+                from app.core.events import get_event_publisher
+                event_publisher = get_event_publisher()
+                event_publisher.publish_ai_analysis_failed(
+                    tenant_id=tenant_id,
+                    customer_id=customer_id,
+                    task_id=self.request.id,
+                    customer_name=customer.company_name,
+                    error=str(e)
+                )
         except:
             pass
         

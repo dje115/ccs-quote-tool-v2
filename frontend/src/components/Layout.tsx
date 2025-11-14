@@ -27,7 +27,8 @@ import {
   Logout as LogoutIcon,
   AccountCircle,
   Group as GroupIcon,
-  Business as CompetitorsIcon
+  Business as CompetitorsIcon,
+  Architecture as ArchitectureIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +36,7 @@ import SimpleLanguageSelector from './SimpleLanguageSelector';
 import GlobalAIMonitor from './GlobalAIMonitor';
 import AIMonitorBadge from './AIMonitorBadge';
 import OnboardingTooltips from './OnboardingTooltips';
+import VersionDisplay from './VersionDisplay';
 import { settingsAPI } from '../services/api';
 
 const drawerWidth = 240;
@@ -114,6 +116,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: t('navigation.dashboard'), icon: <DashboardIcon />, path: '/dashboard' },
     { text: t('navigation.customers'), icon: <PeopleIcon />, path: '/customers' },
     { text: t('navigation.discoveries'), icon: <LeadsIcon />, path: '/leads' },
+    { text: t('navigation.planning'), icon: <ArchitectureIcon />, path: '/planning-applications' },
     { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
     { text: t('navigation.competitors'), icon: <CompetitorsIcon />, path: '/competitors' },
@@ -271,6 +274,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           onComplete={handleTooltipComplete}
           onSkip={handleTooltipSkip}
         />
+        
+        {/* Version Display */}
+        <VersionDisplay variant="footer" />
       </Box>
     </Box>
   );

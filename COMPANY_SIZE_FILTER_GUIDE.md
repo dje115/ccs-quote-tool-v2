@@ -217,3 +217,4 @@ ADD COLUMN IF NOT EXISTS company_size_category VARCHAR(50) NULL;
 - [ ] Industry-specific size recommendations
 - [ ] Historical performance by company size
 - [ ] A/B testing results by size category
+

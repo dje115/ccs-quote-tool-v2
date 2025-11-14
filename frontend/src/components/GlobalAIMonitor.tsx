@@ -1,34 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Chip, CircularProgress, Snackbar, Alert, Badge } from '@mui/material';
 import { Psychology as AiIcon } from '@mui/icons-material';
 import { customerAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 /**
  * Global AI Analysis Monitor
  * Shows a persistent indicator when AI analysis is running on any customer
- * Polls all customers and displays active tasks
+ * Uses WebSocket for real-time updates instead of polling
  */
 const GlobalAIMonitor: React.FC = () => {
   const [runningAnalyses, setRunningAnalyses] = useState<any[]>([]);
   const [showCompletion, setShowCompletion] = useState<string | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
   const navigate = useNavigate();
+  const { subscribe, isConnected } = useWebSocketContext();
+  const runningAnalysesRef = useRef<any[]>([]);
 
+  // Initial load of running analyses
   useEffect(() => {
-    // Only poll if user is authenticated
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      console.log('[GlobalAIMonitor] No auth token found, skipping poll');
-      return;
-    }
-
-    setIsPolling(true);
-
-    // Poll every 15 seconds to check for running analyses
-    const pollInterval = setInterval(async () => {
+    const loadRunningAnalyses = async () => {
       try {
-        // Get all customers and check their AI analysis status
         const response = await customerAPI.list({ limit: 1000 });
         const customers = response.data.items || [];
         
@@ -36,40 +28,84 @@ const GlobalAIMonitor: React.FC = () => {
           customer.ai_analysis_status === 'running' || customer.ai_analysis_status === 'queued'
         );
         
-        // Only log when there are actual active analyses
-        if (activeAnalyses.length > 0) {
-          console.log('[GlobalAIMonitor] Active analyses:', activeAnalyses.length, activeAnalyses.map((a: any) => a.company_name));
-        }
-        
-        // Check if any previously running analysis has completed
-        runningAnalyses.forEach((prevAnalysis: any) => {
-          const stillRunning = activeAnalyses.find((a: any) => a.id === prevAnalysis.id);
-          if (!stillRunning) {
-            // Analysis completed!
-            setShowCompletion(`AI analysis completed for ${prevAnalysis.company_name}`);
-            setTimeout(() => setShowCompletion(null), 5000);
-          }
-        });
-        
         setRunningAnalyses(activeAnalyses);
+        runningAnalysesRef.current = activeAnalyses;
       } catch (error: any) {
-        // Silently ignore auth errors (user logged out)
         if (error?.response?.status !== 401 && error?.response?.status !== 403) {
-          console.error('[GlobalAIMonitor] Error polling for AI analyses:', error);
+          console.error('[GlobalAIMonitor] Error loading analyses:', error);
         }
       }
-    }, 15000);
+    };
+
+    loadRunningAnalyses();
+  }, []);
+
+  // Subscribe to AI analysis events via WebSocket
+  useEffect(() => {
+    if (!isConnected) return;
+
+    // Subscribe to ai_analysis.started
+    const unsubscribeStarted = subscribe('ai_analysis.started', (event) => {
+      const analysis = {
+        id: event.data.customer_id,
+        company_name: event.data.customer_name,
+        ai_analysis_status: 'running',
+        ai_analysis_task_id: event.data.task_id,
+      };
+      
+      setRunningAnalyses((prev) => {
+        const updated = [...prev, analysis].filter((a, index, self) => 
+          index === self.findIndex((t) => t.id === a.id)
+        );
+        runningAnalysesRef.current = updated;
+        return updated;
+      });
+    });
+
+    // Subscribe to ai_analysis.completed
+    const unsubscribeCompleted = subscribe('ai_analysis.completed', (event) => {
+      const customerId = event.data.customer_id;
+      const customerName = event.data.customer_name;
+      
+      // Remove from running analyses
+      setRunningAnalyses((prev) => {
+        const updated = prev.filter((a) => a.id !== customerId);
+        runningAnalysesRef.current = updated;
+        
+        // Check if this was previously running
+        const wasRunning = runningAnalysesRef.current.find((a) => a.id === customerId);
+        if (wasRunning) {
+          setShowCompletion(`AI analysis completed for ${customerName}`);
+          setTimeout(() => setShowCompletion(null), 5000);
+        }
+        
+        return updated;
+      });
+    });
+
+    // Subscribe to ai_analysis.failed
+    const unsubscribeFailed = subscribe('ai_analysis.failed', (event) => {
+      const customerId = event.data.customer_id;
+      
+      // Remove from running analyses
+      setRunningAnalyses((prev) => {
+        const updated = prev.filter((a) => a.id !== customerId);
+        runningAnalysesRef.current = updated;
+        return updated;
+      });
+    });
 
     return () => {
-      clearInterval(pollInterval);
+      unsubscribeStarted();
+      unsubscribeCompleted();
+      unsubscribeFailed();
     };
-  }, [runningAnalyses]);
+  }, [isConnected, subscribe]);
 
-  // Always show a debug indicator if polling
   return (
     <>
-      {/* Debug indicator - always visible when component is loaded */}
-      {isPolling && (
+      {/* Debug indicator - shows WebSocket connection status */}
+      {isConnected && (
         <Box
           sx={{
             position: 'fixed',
@@ -81,7 +117,7 @@ const GlobalAIMonitor: React.FC = () => {
             opacity: 0.5,
           }}
         >
-          Monitoring ({runningAnalyses.length} active)
+          WebSocket Connected ({runningAnalyses.length} active)
         </Box>
       )}
 

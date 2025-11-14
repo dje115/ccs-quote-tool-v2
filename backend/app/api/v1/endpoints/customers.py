@@ -235,6 +235,26 @@ async def create_customer(
         db.commit()
         db.refresh(customer)
         
+        # Publish customer.created event
+        from app.core.events import get_event_publisher
+        event_publisher = get_event_publisher()
+        # Convert customer to dict for event
+        customer_dict = {
+            "id": customer.id,
+            "company_name": customer.company_name,
+            "status": customer.status.value if hasattr(customer.status, 'value') else str(customer.status),
+            "website": customer.website,
+            "main_email": customer.main_email,
+            "main_phone": customer.main_phone,
+            "business_sector": customer.business_sector.value if customer.business_sector and hasattr(customer.business_sector, 'value') else str(customer.business_sector) if customer.business_sector else None,
+            "business_size": customer.business_size.value if customer.business_size and hasattr(customer.business_size, 'value') else str(customer.business_size) if customer.business_size else None,
+        }
+        event_publisher.publish_customer_created(
+            tenant_id=current_user.tenant_id,
+            customer_id=customer.id,
+            customer_data=customer_dict
+        )
+        
         return customer
         
     except Exception as e:
@@ -325,6 +345,27 @@ async def update_customer(
     db.commit()
     db.refresh(customer)
     
+    # Publish customer.updated event
+    from app.core.events import get_event_publisher
+    event_publisher = get_event_publisher()
+    # Convert customer to dict for event
+    customer_dict = {
+        "id": customer.id,
+        "company_name": customer.company_name,
+        "status": customer.status.value if hasattr(customer.status, 'value') else str(customer.status),
+        "website": customer.website,
+        "main_email": customer.main_email,
+        "main_phone": customer.main_phone,
+        "business_sector": customer.business_sector.value if customer.business_sector and hasattr(customer.business_sector, 'value') else str(customer.business_sector) if customer.business_sector else None,
+        "business_size": customer.business_size.value if customer.business_size and hasattr(customer.business_size, 'value') else str(customer.business_size) if customer.business_size else None,
+        "is_competitor": customer.is_competitor,
+    }
+    event_publisher.publish_customer_updated(
+        tenant_id=current_user.tenant_id,
+        customer_id=customer.id,
+        customer_data=customer_dict
+    )
+    
     return customer
 
 
@@ -352,6 +393,14 @@ async def delete_customer(
     customer.is_deleted = True
     customer.deleted_at = datetime.utcnow()
     db.commit()
+    
+    # Publish customer.deleted event
+    from app.core.events import get_event_publisher
+    event_publisher = get_event_publisher()
+    event_publisher.publish_customer_deleted(
+        tenant_id=current_user.tenant_id,
+        customer_id=customer_id
+    )
     
     return None
 

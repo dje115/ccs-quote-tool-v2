@@ -6,13 +6,18 @@ AI-powered translation service for multilingual support
 import json
 from typing import Dict, Optional
 import openai
+from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.services.ai_prompt_service import AIPromptService
+from app.models.ai_prompt import PromptCategory
 
 
 class TranslationService:
     """Service for AI-powered translation"""
     
-    def __init__(self):
+    def __init__(self, db: Optional[Session] = None, tenant_id: Optional[str] = None):
+        self.db = db
+        self.tenant_id = tenant_id
         self.openai_client = None
         self._initialize_client()
     
@@ -33,25 +38,55 @@ class TranslationService:
             return {'success': False, 'error': 'Translation service not available'}
         
         try:
-            prompt = f"""Translate the following text from {source_language} to {target_language}.
+            # Try to get prompt from database
+            user_prompt = None
+            system_prompt = None
+            model = "gpt-5-mini"
+            max_tokens = 2000
+            
+            if self.db:
+                try:
+                    prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+                    prompt_obj = await prompt_service.get_prompt(
+                        category=PromptCategory.TRANSLATION.value,
+                        tenant_id=self.tenant_id
+                    )
+                    
+                    if prompt_obj:
+                        rendered = prompt_service.render_prompt(prompt_obj, {
+                            "source_language": source_language,
+                            "target_language": target_language,
+                            "text": text
+                        })
+                        user_prompt = rendered['user_prompt']
+                        system_prompt = rendered['system_prompt']
+                        model = rendered['model']
+                        max_tokens = rendered['max_tokens']
+                except Exception as e:
+                    print(f"[TRANSLATION] Error fetching prompt from database: {e}")
+            
+            # Fallback to hardcoded prompt
+            if not user_prompt:
+                user_prompt = f"""Translate the following text from {source_language} to {target_language}.
 Return ONLY the translated text, no explanations.
 
 Text to translate:
 {text}"""
+                system_prompt = "You are a professional translator. Translate accurately and naturally."
             
             response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
+                model=model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a professional translator. Translate accurately and naturally."
+                        "content": system_prompt
                     },
                     {
                         "role": "user",
-                        "content": prompt
+                        "content": user_prompt
                     }
                 ],
-                max_completion_tokens=2000
+                max_completion_tokens=max_tokens
             )
             
             translated_text = response.choices[0].message.content.strip()
@@ -96,6 +131,7 @@ Text to translate:
             
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
 
 
 

@@ -34,6 +34,41 @@ class Quote(BaseModel):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     
+    # Project details (from v1)
+    project_title = Column(String(200), nullable=True)
+    project_description = Column(Text, nullable=True)
+    site_address = Column(Text, nullable=True)
+    
+    # Building/project details (from v1)
+    building_type = Column(String(100), nullable=True)
+    building_size = Column(Float, nullable=True)  # in square meters
+    number_of_floors = Column(Integer, default=1, nullable=True)
+    number_of_rooms = Column(Integer, default=1, nullable=True)
+    
+    # Requirements (from v1)
+    cabling_type = Column(String(50), nullable=True)  # cat5e, cat6, fiber
+    wifi_requirements = Column(Boolean, default=False, nullable=True)
+    cctv_requirements = Column(Boolean, default=False, nullable=True)
+    door_entry_requirements = Column(Boolean, default=False, nullable=True)
+    special_requirements = Column(Text, nullable=True)
+    
+    # Travel cost (from v1)
+    travel_distance_km = Column(Float, nullable=True)
+    travel_time_minutes = Column(Float, nullable=True)
+    travel_cost = Column(Numeric(10, 2), nullable=True)
+    
+    # AI analysis fields (from v1, stored as JSON)
+    ai_analysis = Column(JSON, nullable=True)
+    recommended_products = Column(JSON, nullable=True)
+    labour_breakdown = Column(JSON, nullable=True)
+    quotation_details = Column(JSON, nullable=True)
+    clarifications_log = Column(JSON, nullable=True)  # Array of {question, answer}
+    ai_raw_response = Column(Text, nullable=True)  # Complete raw AI response
+    
+    # Estimated fields (from v1)
+    estimated_time = Column(Integer, nullable=True)  # hours
+    estimated_cost = Column(Numeric(10, 2), nullable=True)
+    
     # Status and dates
     status = Column(Enum(QuoteStatus), default=QuoteStatus.DRAFT, nullable=False)
     valid_until = Column(DateTime(timezone=True), nullable=True)
@@ -57,9 +92,13 @@ class Quote(BaseModel):
     viewed_at = Column(DateTime(timezone=True), nullable=True)
     viewed_count = Column(Integer, default=0, nullable=False)
     
+    # Created by
+    created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
     # Relationships
     template = relationship("QuoteTemplate")
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
+    created_by_user = relationship("User", foreign_keys=[created_by])
     
     def __repr__(self):
         return f"<Quote {self.quote_number} - {self.title}>"
@@ -132,8 +171,10 @@ class QuoteTemplate(BaseModel):
         return f"<QuoteTemplate {self.name}>"
 
 
+# Note: Product model moved to product.py for better organization
+# PricingItem kept for backward compatibility but consider migrating to Product
 class PricingItem(BaseModel):
-    """Pricing item model for catalog"""
+    """Pricing item model for catalog (legacy - consider using Product instead)"""
     __tablename__ = "pricing_items"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

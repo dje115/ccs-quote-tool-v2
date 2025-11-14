@@ -64,6 +64,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI } from '../services/api';
 import api from '../services/api';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 import CustomerOverviewTab from '../components/CustomerOverviewTab';
 import ActivityCenter from '../components/ActivityCenter';
 import ContactDialog from '../components/ContactDialog';
@@ -92,46 +93,46 @@ const CustomerDetail: React.FC = () => {
     }
   }, [id]);
 
-  // Poll for AI analysis completion (persists across navigation like campaigns)
+  // Subscribe to WebSocket events for AI analysis and customer updates
+  const { subscribe, isConnected } = useWebSocketContext();
+  
   useEffect(() => {
-    if (!customer) return;
-    
-    // Check if analysis is running or queued
-    const isAnalysisActive = customer.ai_analysis_status === 'running' || customer.ai_analysis_status === 'queued';
-    
-    if (isAnalysisActive) {
-      console.log(`AI analysis is ${customer.ai_analysis_status} for ${customer.company_name}, polling for completion...`);
-      
-      const pollInterval = setInterval(async () => {
-        try {
-          const customerRes = await customerAPI.get(id!);
-          const updatedCustomer = customerRes.data;
-          
-          // Check if status changed to completed
-          if (updatedCustomer.ai_analysis_status === 'completed') {
-            console.log('AI analysis completed! Reloading data...');
-            clearInterval(pollInterval);
-            setAiAnalysisSuccess('AI analysis completed successfully!');
-            await loadCustomerData();
-            setTimeout(() => setAiAnalysisSuccess(null), 5000);
-          } else if (updatedCustomer.ai_analysis_status === 'failed') {
-            console.log('AI analysis failed.');
-            clearInterval(pollInterval);
-            setAiAnalysisError('AI analysis failed. Please try again.');
-            await loadCustomerData();
-            setTimeout(() => setAiAnalysisError(null), 5000);
-          }
-        } catch (pollError) {
-          console.error('Error polling for analysis completion:', pollError);
-        }
-      }, 3000);
-      
-      // Cleanup on unmount or when customer changes
-      return () => {
-        clearInterval(pollInterval);
-      };
-    }
-  }, [customer?.ai_analysis_status, id]);
+    if (!id || !customer || !isConnected) return;
+
+    // Subscribe to ai_analysis.completed for this customer
+    const unsubscribeCompleted = subscribe('ai_analysis.completed', (event) => {
+      if (event.data.customer_id === id) {
+        console.log('AI analysis completed! Reloading data...');
+        setAiAnalysisSuccess('AI analysis completed successfully!');
+        loadCustomerData();
+        setTimeout(() => setAiAnalysisSuccess(null), 5000);
+      }
+    });
+
+    // Subscribe to ai_analysis.failed for this customer
+    const unsubscribeFailed = subscribe('ai_analysis.failed', (event) => {
+      if (event.data.customer_id === id) {
+        console.log('AI analysis failed.');
+        setAiAnalysisError('AI analysis failed. Please try again.');
+        loadCustomerData();
+        setTimeout(() => setAiAnalysisError(null), 5000);
+      }
+    });
+
+    // Subscribe to customer.updated for this customer
+    const unsubscribeUpdated = subscribe('customer.updated', (event) => {
+      if (event.data.customer_id === id) {
+        console.log('Customer updated via WebSocket, reloading...');
+        loadCustomerData();
+      }
+    });
+
+    return () => {
+      unsubscribeCompleted();
+      unsubscribeFailed();
+      unsubscribeUpdated();
+    };
+  }, [id, customer, loadCustomerData]);
 
   const loadCustomerData = async () => {
     try {

@@ -9,6 +9,7 @@ import './i18n';
 // Components
 import Layout from './components/Layout';
 import GlobalAIMonitor from './components/GlobalAIMonitor';
+import { WebSocketProvider } from './contexts/WebSocketContext';
 
 // Pages
 import Login from './pages/Login';
@@ -23,6 +24,7 @@ import CustomerAnalysis from './pages/CustomerAnalysis';
 import Leads from './pages/Leads';
 import LeadDetail from './pages/LeadDetail';
 import Campaigns from './pages/Campaigns';
+import PlanningApplications from './pages/PlanningApplications';
 import CampaignCreate from './pages/CampaignCreate';
 import DynamicBusinessSearch from './pages/DynamicBusinessSearch';
 import CompanyListImportCampaign from './pages/CompanyListImportCampaign';
@@ -52,9 +54,10 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <WebSocketProvider>
         <BrowserRouter>
-        <GlobalAIMonitor />
-        <Routes>
+          <GlobalAIMonitor />
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route
@@ -170,6 +173,14 @@ function App() {
             }
           />
           <Route
+            path="/planning-applications"
+            element={
+              <ProtectedRoute>
+                <PlanningApplications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/quotes"
             element={
               <ProtectedRoute>
@@ -193,9 +204,10 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </BrowserRouter>
+          <Route path="/" element={<Navigate to="/dashboard" />}           />
+          </Routes>
+        </BrowserRouter>
+      </WebSocketProvider>
     </ThemeProvider>
   );
 }

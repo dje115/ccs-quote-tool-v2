@@ -15,7 +15,8 @@ celery_app = Celery(
         "app.tasks.campaign_tasks", 
         "app.tasks.activity_tasks", 
         "app.tasks.lead_generation_tasks",
-        "app.tasks.campaign_monitor_tasks"
+        "app.tasks.campaign_monitor_tasks",
+        "app.tasks.planning_tasks"
     ]  # Import task modules
 )
 

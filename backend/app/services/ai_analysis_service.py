@@ -341,8 +341,20 @@ class AIAnalysisService:
             locations_text = ', '.join(locations[:3]) if locations else 'Multiple UK locations'
             postcode_text = ', '.join(set(postcodes)) if postcodes else 'UK-wide'
             
-            # Build focused competitor search prompt with web search
-            competitor_prompt = f"""
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            from app.models.ai_prompt import PromptCategory
+            
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.COMPETITOR_ANALYSIS.value,
+                tenant_id=self.tenant_id
+            )
+            
+            # Fallback to hardcoded prompt if database prompt not found
+            if not prompt_obj:
+                print("[COMPETITORS] Using fallback prompt - database prompt not found")
+                competitor_prompt = f"""
 Find REAL, VERIFIED UK competitors for: {company_name}
 
 COMPANY DETAILS:
@@ -377,15 +389,34 @@ Return ONLY verified real company names (one per line).
 If you find fewer than 5 real competitors, return 2-3 that are verified.
 Better 3 verified than 10 unverified.
 """
+                system_prompt = "You are an expert at finding real, verified business competitors. Only return companies that actually exist and are currently trading. Use web search to verify each company before including it."
+                model = "gpt-5"
+                max_tokens = 8000
+            else:
+                # Render prompt with variables
+                rendered = prompt_service.render_prompt(prompt_obj, {
+                    "company_name": company_name,
+                    "business_activities": business_activities,
+                    "business_sector": business_sector,
+                    "company_size": company_size,
+                    "locations_text": locations_text,
+                    "postcode_text": postcode_text,
+                    "turnover": turnover,
+                    "employees": employees
+                })
+                competitor_prompt = rendered['user_prompt']
+                system_prompt = rendered['system_prompt']
+                model = rendered['model']
+                max_tokens = rendered['max_tokens']
             
             # Call GPT-5 with web search enabled for competitor discovery
             response = self.openai_client.chat.completions.create(
-                model="gpt-5",
+                model=model,
                 messages=[
-                    {"role": "system", "content": "You are an expert at finding real, verified business competitors. Only return companies that actually exist and are currently trading. Use web search to verify each company before including it."},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": competitor_prompt}
                 ],
-                max_completion_tokens=8000,
+                max_completion_tokens=max_tokens,
                 timeout=180.0
             )
             
@@ -631,8 +662,20 @@ Better 3 verified than 10 unverified.
                 except Exception as e:
                     print(f"[DEBUG] Could not load tenant context: {e}")
             
-            # V1 comprehensive prompt with tenant context
-            prompt = f"""
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            from app.models.ai_prompt import PromptCategory
+            
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.CUSTOMER_ANALYSIS.value,
+                tenant_id=self.tenant_id
+            )
+            
+            # Fallback to hardcoded prompt if database prompt not found
+            if not prompt_obj:
+                print("[AI ANALYSIS] Using fallback prompt - database prompt not found")
+                user_prompt = f"""
             Analyze this company and provide comprehensive business intelligence that helps us sell to them.
             
             {tenant_context}
@@ -745,19 +788,32 @@ Better 3 verified than 10 unverified.
 
             Focus on UK market context and be realistic in your assessments.
             """
+                system_prompt = self._build_dynamic_system_prompt("general")
+                model = "gpt-5-mini"
+                max_tokens = 8000
+            else:
+                # Render prompt with variables
+                rendered = prompt_service.render_prompt(prompt_obj, {
+                    "tenant_context": tenant_context,
+                    "company_info": company_info
+                })
+                user_prompt = rendered['user_prompt']
+                system_prompt = rendered['system_prompt']
+                model = rendered['model']
+                max_tokens = rendered['max_tokens']
             
-            system_prompt = self._build_dynamic_system_prompt("general")
+            prompt = user_prompt
             
             print(f"[AI] Making GPT-5-mini API call for customer analysis...")
             print(f"[AI] System prompt: {system_prompt[:100]}...")
             
             response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=8000,
+                max_completion_tokens=max_tokens,
                 timeout=180.0
             )
             

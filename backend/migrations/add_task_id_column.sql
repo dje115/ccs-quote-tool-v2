@@ -8,3 +8,4 @@ ADD COLUMN task_id VARCHAR(255) NULL;
 COMMENT ON COLUMN lead_generation_campaigns.task_id IS 'Celery task ID for tracking campaign execution status';
 
 
+

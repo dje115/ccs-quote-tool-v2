@@ -1,11 +1,19 @@
 # Multi-stage build for FastAPI backend
 FROM python:3.12-slim as base
 
+# Accept build arguments
+ARG APP_VERSION=2.5.0
+ARG BUILD_DATE
+ARG BUILD_HASH
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    APP_VERSION=${APP_VERSION} \
+    BUILD_DATE=${BUILD_DATE} \
+    BUILD_HASH=${BUILD_HASH}
 
 # Install system dependencies (including XML libraries for lxml)
 RUN apt-get update && apt-get install -y \

@@ -12,3 +12,4 @@ class SectorResponse(BaseModel):
         from_attributes = True
 
 
+

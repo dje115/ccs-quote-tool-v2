@@ -170,5 +170,43 @@ export const activityAPI = {
   getPendingFollowUps: (daysAhead?: number) => apiClient.get('/activities/pending-followups', { params: { days_ahead: daysAhead } }),
 };
 
+// Planning API
+export const planningAPI = {
+  // Counties
+  getCounties: () => apiClient.get('/planning/counties'),
+  getCountyStatus: () => apiClient.get('/planning/counties/status'),
+  runCounty: (countyCode: string) => apiClient.post(`/planning/counties/${countyCode}/run`),
+  stopCounty: (countyCode: string) => apiClient.post(`/planning/counties/${countyCode}/stop`),
+  updateCountySchedule: (countyCode: string, data: any) => apiClient.put(`/planning/counties/${countyCode}/schedule`, data),
+  
+  // Campaigns (legacy - kept for compatibility)
+  listCampaigns: (params?: any) => apiClient.get('/planning/campaigns', { params }),
+  createCampaign: (data: any) => apiClient.post('/planning/campaigns', data),
+  getCampaign: (id: string) => apiClient.get(`/planning/campaigns/${id}`),
+  updateCampaign: (id: string, data: any) => apiClient.put(`/planning/campaigns/${id}`, data),
+  deleteCampaign: (id: string) => apiClient.delete(`/planning/campaigns/${id}`),
+  runCampaign: (id: string) => apiClient.post(`/planning/campaigns/${id}/run`),
+  
+  // Applications
+  listApplications: (params?: any) => apiClient.get('/planning/applications', { params }),
+  getApplication: (id: string) => apiClient.get(`/planning/applications/${id}`),
+  updateApplication: (id: string, data: any) => apiClient.put(`/planning/applications/${id}`, data),
+  archiveApplications: (applicationIds: string[], archived: boolean = true) => 
+    apiClient.post('/planning/applications/archive', { 
+      application_ids: applicationIds, 
+      archived 
+    }),
+  
+  // Keywords
+  listKeywords: (params?: any) => apiClient.get('/planning/keywords', { params }),
+  createKeyword: (data: any) => apiClient.post('/planning/keywords', data),
+  deleteKeyword: (id: string) => apiClient.delete(`/planning/keywords/${id}`),
+};
+
+// Version API
+export const versionAPI = {
+  get: () => apiClient.get('/version'),
+};
+
 
 
