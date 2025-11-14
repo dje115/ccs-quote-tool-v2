@@ -84,6 +84,31 @@ export const dashboardAPI = {
   post: (endpoint: string, data?: any, config?: any) => apiClient.post(`/dashboard${endpoint}`, data, config),
 };
 
+// Supplier API
+export const supplierAPI = {
+  // Categories
+  listCategories: () => apiClient.get('/suppliers/categories'),
+  createCategory: (data: any) => apiClient.post('/suppliers/categories', data),
+  getCategory: (id: string) => apiClient.get(`/suppliers/categories/${id}`),
+  updateCategory: (id: string, data: any) => apiClient.put(`/suppliers/categories/${id}`, data),
+  deleteCategory: (id: string) => apiClient.delete(`/suppliers/categories/${id}`),
+  
+  // Suppliers
+  list: (params?: any) => apiClient.get('/suppliers/', { params }),
+  create: (data: any) => apiClient.post('/suppliers/', data),
+  get: (id: string) => apiClient.get(`/suppliers/${id}`),
+  update: (id: string, data: any) => apiClient.put(`/suppliers/${id}`, data),
+  delete: (id: string) => apiClient.delete(`/suppliers/${id}`),
+  
+  // Pricing
+  getPricingSummary: () => apiClient.get('/suppliers/pricing/summary'),
+  refreshAllPricing: () => apiClient.post('/suppliers/pricing/refresh-all'),
+  refreshSupplierPricing: (id: string) => apiClient.post(`/suppliers/${id}/pricing/refresh`),
+  getSupplierPricingSummary: (id: string) => apiClient.get(`/suppliers/${id}/pricing/summary`),
+  testPricing: (supplierName: string, productName: string, forceRefresh?: boolean) => 
+    apiClient.get(`/suppliers/pricing/test/${supplierName}/${productName}`, { params: { force_refresh: forceRefresh } }),
+};
+
 // Customer API
 export const customerAPI = {
   list: (params?: any) => apiClient.get('/customers/', { params }),

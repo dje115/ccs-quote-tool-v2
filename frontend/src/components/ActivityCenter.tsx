@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -117,7 +117,7 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
   useEffect(() => {
     loadActivities();
     loadSuggestions();
-  }, [customerId]);
+  }, [customerId, loadActivities, loadSuggestions]);
 
   // Subscribe to WebSocket events for suggestions updates
   useEffect(() => {
@@ -136,9 +136,9 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
     return () => {
       unsubscribe();
     };
-  }, [isConnected, customerId, subscribe]);
+  }, [isConnected, customerId, subscribe, loadSuggestions]);
 
-  const loadActivities = async () => {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
       const response = await activityAPI.getCustomerActivities(customerId);
@@ -149,9 +149,9 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerId]);
 
-  const loadSuggestions = async () => {
+  const loadSuggestions = useCallback(async () => {
     try {
       setSuggestionsLoading(true);
       // Load cached suggestions (fast - from database)
@@ -164,7 +164,7 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
     } finally {
       setSuggestionsLoading(false);
     }
-  };
+  }, [customerId]);
 
   const refreshSuggestionsBackground = async () => {
     try {

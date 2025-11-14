@@ -3,7 +3,7 @@
 Quote management endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
@@ -17,6 +17,7 @@ from app.models.quotes import Quote, QuoteStatus
 from app.models.tenant import User, Tenant
 from app.services.quote_analysis_service import QuoteAnalysisService
 from app.services.quote_pricing_service import QuotePricingService
+from app.services.quote_consistency_service import QuoteConsistencyService
 from app.core.api_keys import get_api_keys
 
 router = APIRouter()
@@ -27,6 +28,7 @@ class QuoteCreate(BaseModel):
     title: str
     description: str | None = None
     valid_until: datetime | None = None
+    quote_type: str | None = None  # e.g., 'cabling', 'network_build', 'server_build', 'software_dev', 'testing', 'design'
     # Project details (from v1)
     project_title: str | None = None
     project_description: str | None = None
@@ -75,9 +77,22 @@ class QuoteUpdate(BaseModel):
 
 
 class QuoteAnalyzeRequest(BaseModel):
-    quote_id: str
+    quote_id: str | None = None
     clarification_answers: List[Dict[str, str]] | None = None
     questions_only: bool = False
+    # Quote data for analysis before creation
+    project_title: str | None = None
+    project_description: str | None = None
+    site_address: str | None = None
+    building_type: str | None = None
+    building_size: float | None = None
+    number_of_floors: int | None = None
+    number_of_rooms: int | None = None
+    cabling_type: str | None = None
+    wifi_requirements: bool = False
+    cctv_requirements: bool = False
+    door_entry_requirements: bool = False
+    special_requirements: str | None = None
 
 
 class QuoteCalculatePricingRequest(BaseModel):
@@ -93,16 +108,34 @@ async def list_quotes(
     db: Session = Depends(get_db)
 ):
     """List quotes for current tenant"""
-    query = db.query(Quote).filter_by(
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    )
-    
-    if status:
-        query = query.filter_by(status=status)
-    
-    quotes = query.order_by(Quote.created_at.desc()).offset(skip).limit(limit).all()
-    return quotes
+    try:
+        query = db.query(Quote).filter_by(
+            tenant_id=current_user.tenant_id,
+            is_deleted=False
+        )
+        
+        if status:
+            query = query.filter_by(status=status)
+        
+        quotes = query.order_by(Quote.created_at.desc()).offset(skip).limit(limit).all()
+        
+        # Convert to response format
+        return [
+            QuoteResponse(
+                id=quote.id,
+                customer_id=quote.customer_id,
+                quote_number=quote.quote_number,
+                title=quote.title,
+                status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
+                total_amount=float(quote.total_amount) if quote.total_amount else 0.0,
+                created_at=quote.created_at
+            )
+            for quote in quotes
+        ]
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching quotes: {str(e)}")
 
 
 @router.post("/", response_model=QuoteResponse, status_code=status.HTTP_201_CREATED)
@@ -125,6 +158,7 @@ async def create_quote(
             quote_number=quote_number,
             title=quote_data.title,
             description=quote_data.description,
+            quote_type=quote_data.quote_type,
             status=QuoteStatus.DRAFT,
             valid_until=quote_data.valid_until,
             subtotal=Decimal('0.00'),
@@ -309,16 +343,8 @@ async def analyze_quote_requirements(
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Analyze quote requirements using AI"""
+    """Analyze quote requirements using AI (can analyze before or after quote creation)"""
     try:
-        quote = db.query(Quote).filter(
-            Quote.id == request.quote_id,
-            Quote.tenant_id == current_user.tenant_id
-        ).first()
-        
-        if not quote:
-            raise HTTPException(status_code=404, detail="Quote not found")
-        
         # Get API keys
         api_keys = get_api_keys(db, current_tenant)
         if not api_keys.openai:
@@ -327,21 +353,49 @@ async def analyze_quote_requirements(
                 detail="OpenAI API key not configured"
             )
         
-        # Build quote data dict
-        quote_data = {
-            'project_title': quote.project_title or quote.title,
-            'project_description': quote.project_description or quote.description,
-            'site_address': quote.site_address,
-            'building_type': quote.building_type,
-            'building_size': quote.building_size,
-            'number_of_floors': quote.number_of_floors or 1,
-            'number_of_rooms': quote.number_of_rooms or 1,
-            'cabling_type': quote.cabling_type,
-            'wifi_requirements': quote.wifi_requirements or False,
-            'cctv_requirements': quote.cctv_requirements or False,
-            'door_entry_requirements': quote.door_entry_requirements or False,
-            'special_requirements': quote.special_requirements
-        }
+        # Build quote data dict - use request data if provided, otherwise fetch from quote
+        if request.quote_id:
+            quote = db.query(Quote).filter(
+                Quote.id == request.quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            ).first()
+            
+            if not quote:
+                raise HTTPException(status_code=404, detail="Quote not found")
+            
+            quote_data = {
+                'project_title': quote.project_title or quote.title,
+                'project_description': quote.project_description or quote.description,
+                'site_address': quote.site_address,
+                'building_type': quote.building_type,
+                'building_size': quote.building_size,
+                'number_of_floors': quote.number_of_floors or 1,
+                'number_of_rooms': quote.number_of_rooms or 1,
+                'cabling_type': quote.cabling_type,
+                'wifi_requirements': quote.wifi_requirements or False,
+                'cctv_requirements': quote.cctv_requirements or False,
+                'door_entry_requirements': quote.door_entry_requirements or False,
+                'special_requirements': quote.special_requirements,
+                'quote_type': quote.quote_type or request.quote_type
+            }
+        else:
+            # Use data from request (for analysis before quote creation)
+            quote_data = {
+                'project_title': request.project_title or '',
+                'project_description': request.project_description or '',
+                'site_address': request.site_address or '',
+                'building_type': request.building_type,
+                'building_size': request.building_size,
+                'number_of_floors': request.number_of_floors or 1,
+                'number_of_rooms': request.number_of_rooms or 1,
+                'cabling_type': request.cabling_type,
+                'wifi_requirements': request.wifi_requirements,
+                'cctv_requirements': request.cctv_requirements,
+                'door_entry_requirements': request.door_entry_requirements,
+                'special_requirements': request.special_requirements,
+                'quote_type': request.quote_type
+            }
+            quote = None
         
         # Analyze requirements
         analysis_service = QuoteAnalysisService(
@@ -362,8 +416,8 @@ async def analyze_quote_requirements(
                 detail=result.get('error', 'Analysis failed')
             )
         
-        # Update quote with analysis results (if not questions_only)
-        if not request.questions_only and result.get('analysis'):
+        # Update quote with analysis results (if not questions_only and quote exists)
+        if quote and not request.questions_only and result.get('analysis'):
             analysis = result['analysis']
             quote.ai_analysis = analysis
             quote.recommended_products = analysis.get('recommended_products')
@@ -512,4 +566,404 @@ async def duplicate_quote(
         raise HTTPException(
             status_code=500,
             detail=f"Error duplicating quote: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/clarifications")
+async def submit_clarifications(
+    quote_id: str,
+    clarification_answers: List[Dict[str, str]],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Submit clarification answers and re-analyze quote"""
+    try:
+        import json
+        
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Store clarification answers
+        clarifications_log = []
+        if quote.clarifications_log:
+            if isinstance(quote.clarifications_log, str):
+                clarifications_log = json.loads(quote.clarifications_log)
+            else:
+                clarifications_log = quote.clarifications_log
+        
+        clarifications_log.extend(clarification_answers)
+        quote.clarifications_log = json.dumps(clarifications_log)
+        
+        # Re-analyze with clarification answers
+        quote_data = {
+            'project_title': quote.project_title or quote.title,
+            'project_description': quote.project_description or quote.description,
+            'site_address': quote.site_address,
+            'building_type': quote.building_type,
+            'building_size': quote.building_size,
+            'number_of_floors': quote.number_of_floors,
+            'number_of_rooms': quote.number_of_rooms,
+            'cabling_type': quote.cabling_type,
+            'wifi_requirements': quote.wifi_requirements or False,
+            'cctv_requirements': quote.cctv_requirements or False,
+            'door_entry_requirements': quote.door_entry_requirements or False,
+            'special_requirements': quote.special_requirements
+        }
+        
+        api_keys = get_api_keys(db, current_user.tenant)
+        analysis_service = QuoteAnalysisService(
+            db=db,
+            tenant_id=current_user.tenant_id,
+            openai_api_key=api_keys.openai
+        )
+        
+        result = await analysis_service.analyze_requirements(
+            quote_data=quote_data,
+            clarification_answers=clarification_answers,
+            questions_only=False
+        )
+        
+        if result.get('success') and result.get('analysis'):
+            analysis = result['analysis']
+            quote.ai_analysis = analysis
+            quote.recommended_products = json.dumps(analysis.get('recommended_products', []))
+            quote.labour_breakdown = json.dumps(analysis.get('labour_breakdown', []))
+            quote.estimated_time = analysis.get('estimated_time')
+            quote.estimated_cost = analysis.get('estimated_cost')
+            quote.quotation_details = json.dumps(analysis.get('quotation', {}))
+            
+            if result.get('raw_response'):
+                quote.ai_raw_response = result['raw_response']
+        
+        db.commit()
+        db.refresh(quote)
+        
+        return {
+            'success': True,
+            'quote': quote,
+            'analysis': result.get('analysis')
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error submitting clarifications: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/approve")
+async def approve_quote(
+    quote_id: str,
+    current_user: User = Depends(check_permission("quote:approve")),
+    db: Session = Depends(get_db)
+):
+    """Approve a quote"""
+    try:
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        quote.status = QuoteStatus.ACCEPTED
+        db.commit()
+        db.refresh(quote)
+        
+        # Publish quote.approved event
+        from app.core.events import get_event_publisher
+        event_publisher = get_event_publisher()
+        await event_publisher.publish_quote_status_changed(
+            tenant_id=current_user.tenant_id,
+            quote_id=quote.id,
+            old_status="pending",
+            new_status="accepted"
+        )
+        
+        return {
+            'success': True,
+            'quote': quote
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error approving quote: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/reject")
+async def reject_quote(
+    quote_id: str,
+    reason: Optional[str] = None,
+    current_user: User = Depends(check_permission("quote:approve")),
+    db: Session = Depends(get_db)
+):
+    """Reject a quote"""
+    try:
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        quote.status = QuoteStatus.REJECTED
+        if reason:
+            quote.notes = (quote.notes or "") + f"\nRejection reason: {reason}"
+        
+        db.commit()
+        db.refresh(quote)
+        
+        # Publish quote.rejected event
+        from app.core.events import get_event_publisher
+        event_publisher = get_event_publisher()
+        await event_publisher.publish_quote_status_changed(
+            tenant_id=current_user.tenant_id,
+            quote_id=quote.id,
+            old_status="pending",
+            new_status="rejected"
+        )
+        
+        return {
+            'success': True,
+            'quote': quote
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error rejecting quote: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/consistency")
+async def get_quote_consistency(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get consistency analysis for a quote"""
+    try:
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        consistency_service = QuoteConsistencyService(db, current_user.tenant_id)
+        analysis = consistency_service.analyze_quote_consistency(quote_id)
+        
+        return {
+            'success': True,
+            'analysis': analysis
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error analyzing consistency: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/versions")
+async def list_quote_versions(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all versions of a quote"""
+    try:
+        from app.models.product import QuoteVersion
+        
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        versions = db.query(QuoteVersion).filter(
+            QuoteVersion.quote_id == quote_id
+        ).order_by(QuoteVersion.created_at.desc()).all()
+        
+        return {
+            'success': True,
+            'versions': versions
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error listing versions: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/create-version")
+async def create_quote_version(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new version of a quote"""
+    try:
+        from app.models.product import QuoteVersion
+        import json
+        
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Get current version number
+        existing_versions = db.query(QuoteVersion).filter(
+            QuoteVersion.quote_id == quote_id
+        ).count()
+        
+        version_number = f"{existing_versions + 1}.0"
+        
+        # Create snapshot of quote data
+        quote_snapshot = {
+            'id': quote.id,
+            'quote_number': quote.quote_number,
+            'title': quote.title,
+            'description': quote.description,
+            'status': quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
+            'subtotal': float(quote.subtotal) if quote.subtotal else 0,
+            'tax_amount': float(quote.tax_amount) if quote.tax_amount else 0,
+            'total_amount': float(quote.total_amount) if quote.total_amount else 0,
+            'project_title': quote.project_title,
+            'project_description': quote.project_description,
+            'site_address': quote.site_address,
+            'building_type': quote.building_type,
+            'building_size': quote.building_size,
+            'number_of_floors': quote.number_of_floors,
+            'number_of_rooms': quote.number_of_rooms,
+            'cabling_type': quote.cabling_type,
+            'wifi_requirements': quote.wifi_requirements,
+            'cctv_requirements': quote.cctv_requirements,
+            'door_entry_requirements': quote.door_entry_requirements,
+            'special_requirements': quote.special_requirements,
+            'ai_analysis': quote.ai_analysis,
+            'recommended_products': quote.recommended_products,
+            'labour_breakdown': quote.labour_breakdown,
+            'quotation_details': quote.quotation_details,
+            'items': [{
+                'description': item.description,
+                'quantity': float(item.quantity),
+                'unit_price': float(item.unit_price),
+                'total_price': float(item.total_price)
+            } for item in quote.items]
+        }
+        
+        version = QuoteVersion(
+            quote_id=quote_id,
+            version=version_number,
+            quote_data=json.dumps(quote_snapshot),
+            created_by=current_user.id
+        )
+        
+        db.add(version)
+        db.commit()
+        db.refresh(version)
+        
+        return {
+            'success': True,
+            'version': version
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating version: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/document")
+async def generate_quote_document(
+    quote_id: str,
+    format: str = Query("docx", regex="^(docx|pdf)$"),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """Generate Word or PDF document for a quote"""
+    try:
+        from fastapi.responses import StreamingResponse
+        from app.services.document_generator_service import DocumentGeneratorService
+        
+        quote = db.query(Quote).filter(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        generator = DocumentGeneratorService(db, current_user.tenant_id)
+        
+        if format == "pdf":
+            document = generator.generate_pdf_document(quote)
+            if not document:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to generate PDF document"
+                )
+            return StreamingResponse(
+                document,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="quote_{quote.quote_number}.pdf"'
+                }
+            )
+        else:  # docx
+            document = generator.generate_word_document(quote)
+            if not document:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to generate Word document"
+                )
+            return StreamingResponse(
+                document,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={
+                    "Content-Disposition": f'attachment; filename="quote_{quote.quote_number}.docx"'
+                }
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating document: {str(e)}"
         )

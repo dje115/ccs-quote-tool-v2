@@ -25,6 +25,8 @@ class PromptCategory(str, enum.Enum):
     PLANNING_ANALYSIS = "planning_analysis"
     TRANSLATION = "translation"
     QUOTE_ANALYSIS = "quote_analysis"
+    PRODUCT_SEARCH = "product_search"
+    BUILDING_ANALYSIS = "building_analysis"
 
 
 class AIPrompt(Base, TimestampMixin):
@@ -37,6 +39,7 @@ class AIPrompt(Base, TimestampMixin):
     name = Column(String(200), nullable=False)
     category = Column(String(50), nullable=False, index=True)
     description = Column(Text, nullable=True)
+    quote_type = Column(String(100), nullable=True, index=True)  # For quote_analysis category: 'cabling', 'network_build', 'server_build', 'software_dev', 'testing', 'design', etc.
     
     # Prompt content
     system_prompt = Column(Text, nullable=False)

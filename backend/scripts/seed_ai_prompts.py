@@ -486,24 +486,60 @@ Please provide:
     else:
         print("⏭️  translation prompt already exists")
     
-    # 7. Quote Analysis Prompt (from v1)
+    # 7. Quote Analysis Prompt (from v1 - Enhanced)
     quote_analysis_prompt = """You are a structured cabling contractor. The client has supplied the information below.
 
-{quote_context}
+Project Title: {project_title}
+Description: {project_description}
+Building Type: {building_type}
+Building Size: {building_size} sqm
+Number of Floors: {number_of_floors}
+Number of Rooms/Areas: {number_of_rooms}
+Site Address: {site_address}
 
-Analyze the requirements and provide:
-1. Recommended products/materials with quantities
-2. Labour breakdown with time estimates
-3. Estimated total time and cost
-4. Any assumptions or clarifications needed
+Solution Requirements:
+- WiFi installation needed: {wifi_requirements}
+- CCTV installation needed: {cctv_requirements}
+- Door entry installation needed: {door_entry_requirements}
+- Special requirements or constraints: {special_requirements}
 
-Return in JSON format with:
-- recommended_products: Array of {{name, quantity, unit, unit_price, total_price, category}}
-- labour_breakdown: Array of {{task, hours, days, day_rate, cost}}
-- estimated_time: Total hours
-- estimated_cost: Total estimated cost
-- assumptions: Array of assumptions made
-- clarifications: Array of clarification questions if needed"""
+Your tasks:
+1. Identify any missing critical details (containment type, ceiling construction, patch panel counts, testing & certification, rack power, etc.). Ask up to 5 short clarification questions.
+2. When sufficient information is available (or you must make reasonable assumptions), prepare a structured cabling quotation that includes: client requirement restatement, scope of works, materials list, labour estimate, and assumptions/exclusions.
+
+Response rules:
+- Always respond in JSON format.
+- When the caller is only requesting questions (questions_only mode) return: {{"clarifications": [..]}}.
+- Otherwise return a JSON object with these keys:
+  - analysis: concise narrative summary (string).
+  - products: array of recommended products with EXACT pricing data:
+      * item: product name (string)
+      * quantity: numeric quantity only (number, not text like "Allowance")
+      * unit: unit type (string: "each", "meters", "box", etc.)
+      * unit_price: exact unit price in GBP (number)
+      * total_price: exact total price in GBP (number)
+      * part_number: manufacturer part number (string)
+      * notes: installation notes (string)
+  - alternatives: array describing optional approaches with pros/cons.
+  - estimated_time: total installation hours (number).
+  - labour_breakdown: array of objects describing tasks with hours, engineer_count, day_rate, cost, notes.
+  - clarifications: array of outstanding clarification questions (if any remain).
+  - quotation: object containing:
+      * client_requirement (string summary)
+      * scope_of_works (array of bullet strings)
+      * materials (array of objects with item, quantity, unit_price, total_price, part_number, notes)
+      * labour (object with engineers, hours, day_rate, total_cost, notes)
+      * assumptions_exclusions (array of strings)
+
+CRITICAL PRICING REQUIREMENTS:
+- All quantities MUST be numeric values only (e.g., 52.0, not "52.0 each" or "Allowance")
+- All prices MUST be real GBP amounts (e.g., 125.00 for U6-Pro, 89.00 for U6-Lite)
+- Include part numbers for all products when available
+- Use real pricing from supplier websites when possible
+- If you cannot find real pricing, use realistic estimates but note that these will be marked as estimated (*)
+- Always provide unit_price and total_price as numbers, never as text
+
+If details are missing, state the assumption you are making inside the quotation sections and keep questions short and specific."""
     
     quote_analysis_system = """You are a seasoned structured cabling contractor and estimator. You produce practical, buildable quotations, highlight assumptions, and make sensible allowances for labour and materials."""
     
@@ -532,6 +568,106 @@ Return in JSON format with:
         print("✅ Created quote_analysis prompt")
     else:
         print("⏭️  quote_analysis prompt already exists")
+    
+    # 8. Product Search Prompt (from v1)
+    product_search_prompt = """Search for {category} products related to: {query}
+
+Provide a list of specific products with:
+- Product name and model
+- Brief description
+- Typical use case
+- Estimated price range
+
+Format as JSON array of objects with:
+- name: Product name
+- model: Model number
+- description: Brief description
+- use_case: Typical use case
+- price_range_min: Minimum estimated price
+- price_range_max: Maximum estimated price
+- category: Product category"""
+    
+    product_search_system = "You are a product expert for structured cabling, networking, and security equipment. Provide accurate product recommendations."
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.PRODUCT_SEARCH.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Product Search",
+            category=PromptCategory.PRODUCT_SEARCH.value,
+            system_prompt=product_search_system,
+            user_prompt_template=product_search_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=10000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "category": "Product category (cabling, wifi, cctv, etc.)",
+                "query": "Search query"
+            },
+            description="Search for products using AI"
+        )
+        print("✅ Created product_search prompt")
+    else:
+        print("⏭️  product_search prompt already exists")
+    
+    # 9. Building Analysis Prompt (from v1)
+    building_analysis_prompt = """Analyze this building for structured cabling requirements:
+
+Address: {address}
+Building Type: {building_type}
+Size: {building_size} sqm
+
+Provide recommendations for:
+- Cable routing
+- Equipment placement
+- Power requirements
+- Access considerations
+- Estimated installation complexity
+- Special considerations
+
+Format as JSON object with:
+- cable_routing: Recommendations for cable routing
+- equipment_placement: Recommended equipment locations
+- power_requirements: Power needs assessment
+- access_considerations: Access challenges and solutions
+- complexity: Low/Medium/High
+- special_considerations: Array of special notes"""
+    
+    building_analysis_system = "You are a building analysis expert. Analyze building information and provide technical insights for cabling projects."
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.BUILDING_ANALYSIS.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Building Analysis",
+            category=PromptCategory.BUILDING_ANALYSIS.value,
+            system_prompt=building_analysis_system,
+            user_prompt_template=building_analysis_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "address": "Building address",
+                "building_type": "Type of building",
+                "building_size": "Building size in sqm"
+            },
+            description="Analyze building for cabling requirements"
+        )
+        print("✅ Created building_analysis prompt")
+    else:
+        print("⏭️  building_analysis prompt already exists")
     
     print("✅ AI prompts seeding complete!")
 

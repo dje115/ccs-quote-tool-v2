@@ -22,14 +22,10 @@ $BUILD_DATE = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
 # Get git hash if available
 $BUILD_HASH = ""
 if (Get-Command git -ErrorAction SilentlyContinue) {
-    try {
-        $gitOutput = git rev-parse HEAD 2>&1
-        if ($LASTEXITCODE -eq 0 -and $gitOutput) {
-            $BUILD_HASH = $gitOutput.ToString().Trim()
-            Write-Host "🔖 Git hash: $BUILD_HASH" -ForegroundColor Cyan
-        }
-    } catch {
-        # Git not available or not a git repo
+    $gitOutput = git rev-parse HEAD 2>&1
+    if ($LASTEXITCODE -eq 0 -and $gitOutput) {
+        $BUILD_HASH = $gitOutput.ToString().Trim()
+        Write-Host "🔖 Git hash: $BUILD_HASH" -ForegroundColor Cyan
     }
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Container,
   Paper,
@@ -87,15 +87,39 @@ const CustomerDetail: React.FC = () => {
     return savedTab ? parseInt(savedTab) : 0;
   });
 
+  // Subscribe to WebSocket events for AI analysis and customer updates
+  const { subscribe, isConnected } = useWebSocketContext();
+
+  // Define loadCustomerData using useCallback to avoid dependency issues
+  const loadCustomerData = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      const [customerRes, contactsRes, quotesRes] = await Promise.all([
+        customerAPI.get(id),
+        contactAPI.list(id),
+        quoteAPI.list({ customer_id: id })
+      ]);
+
+      setCustomer(customerRes.data);
+      setContacts(contactsRes.data);
+      setQuotes(quotesRes.data);
+    } catch (error) {
+      console.error('Error loading customer data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  // Load customer data on mount or when id changes
   useEffect(() => {
     if (id) {
       loadCustomerData();
     }
-  }, [id]);
-
-  // Subscribe to WebSocket events for AI analysis and customer updates
-  const { subscribe, isConnected } = useWebSocketContext();
+  }, [id, loadCustomerData]);
   
+  // Subscribe to WebSocket events
   useEffect(() => {
     if (!id || !customer || !isConnected) return;
 
@@ -132,26 +156,7 @@ const CustomerDetail: React.FC = () => {
       unsubscribeFailed();
       unsubscribeUpdated();
     };
-  }, [id, customer, loadCustomerData]);
-
-  const loadCustomerData = async () => {
-    try {
-      setLoading(true);
-      const [customerRes, contactsRes, quotesRes] = await Promise.all([
-        customerAPI.get(id!),
-        contactAPI.list(id!),
-        quoteAPI.list({ customer_id: id })
-      ]);
-
-      setCustomer(customerRes.data);
-      setContacts(contactsRes.data);
-      setQuotes(quotesRes.data);
-    } catch (error) {
-      console.error('Error loading customer data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [id, customer, isConnected, subscribe, loadCustomerData]);
 
   const runAiAnalysis = async () => {
     try {

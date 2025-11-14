@@ -12,8 +12,10 @@ import httpx
 
 from app.models.quotes import Quote
 from app.models.ai_prompt import PromptCategory
+from app.models.supplier import Supplier, SupplierCategory
 from app.services.ai_prompt_service import AIPromptService
 from app.services.google_maps_service import GoogleMapsService
+from app.services.quote_consistency_service import QuoteConsistencyService
 from app.core.api_keys import get_api_keys
 from app.models.tenant import Tenant
 
@@ -51,15 +53,51 @@ class QuoteAnalysisService:
             Analysis result with recommended products, labour breakdown, etc.
         """
         try:
-            # Get prompt from database
+            # Get prompt from database - use quote_type if provided
+            quote_type = quote_data.get('quote_type')
             prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
             prompt_obj = await prompt_service.get_prompt(
                 category=PromptCategory.QUOTE_ANALYSIS.value,
-                tenant_id=self.tenant_id
+                tenant_id=self.tenant_id,
+                quote_type=quote_type
             )
             
-            # Build quote context for prompt
+            # Build quote context for prompt (with supplier preferences)
             quote_context = self._build_quote_context(quote_data, clarification_answers)
+            
+            # Add supplier information and consistency context
+            supplier_info = self._get_supplier_preferences()
+            consistency_context = ""
+            real_pricing_reference = ""
+            
+            if not questions_only:
+                # Get consistency context for full analysis
+                quote_obj = self.db.query(Quote).filter(
+                    Quote.tenant_id == self.tenant_id
+                ).first()  # This is a placeholder - in real usage, quote_id would be passed
+                if quote_obj:
+                    consistency_service = QuoteConsistencyService(self.db, self.tenant_id)
+                    consistency_context = consistency_service.get_consistency_context_for_ai(quote_obj)
+                
+                # Get real pricing data for common products
+                real_pricing_reference = self._get_real_pricing_data()
+            
+            # Build enhanced context with all additions
+            enhanced_context = quote_context
+            if supplier_info:
+                enhanced_context += f"\n\n{supplier_info}"
+            if consistency_context:
+                enhanced_context += f"\n\n{consistency_context}"
+            if real_pricing_reference:
+                enhanced_context += f"\n\n**REAL PRICING REFERENCE (Use these exact prices):**\n{real_pricing_reference}"
+                enhanced_context += "\n\n**CRITICAL:** Use the exact pricing above. Do not estimate or guess prices. All unit_price and total_price values must be real numbers, not text."
+            
+            # Get day rate info
+            day_rate_info = self._get_day_rate_info()
+            if day_rate_info:
+                enhanced_context += f"\n\n{day_rate_info}"
+            
+            quote_context = enhanced_context
             
             # Fallback to hardcoded prompt if database prompt not found
             if not prompt_obj:
@@ -69,15 +107,49 @@ class QuoteAnalysisService:
                 model = "gpt-5-mini"
                 max_tokens = 8000
             else:
-                # Render prompt with variables
-                rendered = prompt_service.render_prompt(prompt_obj, {
-                    "quote_context": quote_context,
-                    "questions_only": str(questions_only).lower()
-                })
+                # Build variables for prompt rendering (base template variables)
+                prompt_variables = {
+                    "project_title": quote_data.get('project_title', ''),
+                    "project_description": quote_data.get('project_description', ''),
+                    "building_type": quote_data.get('building_type', ''),
+                    "building_size": str(quote_data.get('building_size', 0)),
+                    "number_of_floors": str(quote_data.get('number_of_floors', 1)),
+                    "number_of_rooms": str(quote_data.get('number_of_rooms', 1)),
+                    "site_address": quote_data.get('site_address', ''),
+                    "wifi_requirements": str(quote_data.get('wifi_requirements', False)),
+                    "cctv_requirements": str(quote_data.get('cctv_requirements', False)),
+                    "door_entry_requirements": str(quote_data.get('door_entry_requirements', False)),
+                    "special_requirements": quote_data.get('special_requirements', '')
+                }
+                
+                # Render base prompt template
+                rendered = prompt_service.render_prompt(prompt_obj, prompt_variables)
                 user_prompt = rendered['user_prompt']
                 system_prompt = rendered['system_prompt']
                 model = rendered['model']
                 max_tokens = rendered['max_tokens']
+                
+                # Add additional context (like v1 does) - append to user_prompt
+                if real_pricing_reference:
+                    user_prompt += f"\n\n**REAL PRICING REFERENCE (Use these exact prices):**\n{real_pricing_reference}"
+                    user_prompt += "\n\n**CRITICAL:** Use the exact pricing above. Do not estimate or guess prices. All unit_price and total_price values must be real numbers, not text."
+                if consistency_context:
+                    user_prompt += f"\n\n{consistency_context}"
+                if supplier_info:
+                    user_prompt += f"\n\n{supplier_info}"
+                day_rate_info = self._get_day_rate_info()
+                if day_rate_info:
+                    user_prompt += f"\n\n{day_rate_info}"
+                
+                # Add clarification answers if provided
+                if clarification_answers:
+                    clarification_lines = []
+                    for idx, item in enumerate(clarification_answers, start=1):
+                        question = item.get('question', '')
+                        answer = item.get('answer', '')
+                        clarification_lines.append(f"{idx}. Question: {question}\n   Answer: {answer if answer else 'Not provided'}")
+                    if clarification_lines:
+                        user_prompt += "\n\nClarification Responses:\n" + "\n".join(clarification_lines)
             
             # Call OpenAI API
             async with httpx.AsyncClient(timeout=300.0) as client:
@@ -173,6 +245,111 @@ class QuoteAnalysisService:
                 context_parts.append(f"A: {qa.get('answer', '')}")
         
         return "\n".join(context_parts)
+    
+    def _get_supplier_preferences(self) -> str:
+        """Get supplier preferences information for AI prompts"""
+        try:
+            from app.models.supplier import Supplier, SupplierCategory
+            
+            suppliers_info = []
+            categories = self.db.query(SupplierCategory).filter(
+                SupplierCategory.tenant_id == self.tenant_id,
+                SupplierCategory.is_active == True
+            ).all()
+            
+            for category in categories:
+                preferred_suppliers = self.db.query(Supplier).filter(
+                    Supplier.tenant_id == self.tenant_id,
+                    Supplier.category_id == category.id,
+                    Supplier.is_preferred == True,
+                    Supplier.is_active == True
+                ).all()
+                
+                if preferred_suppliers:
+                    suppliers_info.append(f"\n**{category.name} Suppliers:**")
+                    for supplier in preferred_suppliers:
+                        supplier_line = f"- {supplier.name}"
+                        if supplier.website:
+                            supplier_line += f" ({supplier.website})"
+                        if supplier.notes:
+                            supplier_line += f" - {supplier.notes}"
+                        suppliers_info.append(supplier_line)
+            
+            if suppliers_info:
+                return f"\n\n**Preferred Suppliers for Pricing Reference:**{''.join(suppliers_info)}\n\nWhen recommending products, prioritize these suppliers and try to get accurate pricing from their websites when possible."
+            
+            return ""
+            
+        except Exception as e:
+            print(f"[QUOTE ANALYSIS] Error getting supplier preferences: {e}")
+            return ""
+    
+    def _get_real_pricing_data(self) -> str:
+        """Get real pricing data for common products to include in AI prompt"""
+        try:
+            from app.services.supplier_pricing_service import SupplierPricingService
+            import asyncio
+            
+            # Common products to get pricing for
+            common_products = [
+                ('Ubiquiti UniFi', 'U6-Pro'),
+                ('Ubiquiti UniFi', 'U7-Pro'),
+                ('Ubiquiti UniFi', 'G5-Bullet'),
+                ('Ubiquiti UniFi', 'G5-Dome'),
+                ('Ubiquiti UniFi', 'Switch-24-PoE'),
+                ('Ubiquiti UniFi', 'Switch-24-PoE-500W'),
+                ('Ubiquiti UniFi', 'Dream-Machine-Pro'),
+                ('Ubiquiti UniFi', 'NVR-Pro'),
+                ('Ubiquiti UniFi', 'Cloud-Key-Plus')
+            ]
+            
+            pricing_service = SupplierPricingService(self.db, self.tenant_id)
+            pricing_lines = []
+            
+            # Get pricing for each product (using cached data)
+            for supplier_name, product_name in common_products:
+                try:
+                    # Use cached pricing (don't force refresh in prompt building)
+                    result = asyncio.run(pricing_service.get_product_price(
+                        supplier_name=supplier_name,
+                        product_name=product_name,
+                        force_refresh=False
+                    ))
+                    
+                    if result and result.get('success'):
+                        price = result.get('price', 0)
+                        source = result.get('source', 'unknown')
+                        pricing_lines.append(f"- {product_name}: £{price:.2f} ({source})")
+                except Exception as e:
+                    # Skip if pricing lookup fails
+                    continue
+            
+            if pricing_lines:
+                return "\n".join(pricing_lines)
+            
+            return ""
+            
+        except Exception as e:
+            print(f"[QUOTE ANALYSIS] Error getting real pricing data: {e}")
+            return ""
+    
+    def _get_day_rate_info(self) -> str:
+        """Get day rate information for AI prompt"""
+        try:
+            # Try to get from tenant settings or admin settings
+            # For now, return default
+            day_rate = 300  # Default day rate
+            
+            # TODO: Get from tenant settings or admin settings
+            # tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            # if tenant and tenant.settings:
+            #     day_rate = tenant.settings.get('day_rate', 300)
+            
+            return f"**Labour Rate:** £{day_rate} per pair of engineers per day (8-hour day)\n**CRITICAL: £{day_rate} is the TOTAL cost for BOTH engineers working together for one day**"
+            
+        except Exception as e:
+            print(f"[QUOTE ANALYSIS] Error getting day rate info: {e}")
+            return ""
     
     def _build_fallback_prompt(self, quote_context: str, questions_only: bool) -> str:
         """Build fallback prompt if database prompt not available"""

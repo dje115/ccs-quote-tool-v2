@@ -30,8 +30,11 @@ import DynamicBusinessSearch from './pages/DynamicBusinessSearch';
 import CompanyListImportCampaign from './pages/CompanyListImportCampaign';
 import CampaignDetail from './pages/CampaignDetail';
 import Quotes from './pages/Quotes';
+import QuoteNew from './pages/QuoteNew';
+import QuoteDetail from './pages/QuoteDetail';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
+import Suppliers from './pages/Suppliers';
 
 const theme = createTheme({
   palette: {
@@ -189,6 +192,22 @@ function App() {
             }
           />
           <Route
+            path="/quotes/new"
+            element={
+              <ProtectedRoute>
+                <QuoteNew />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quotes/:id"
+            element={
+              <ProtectedRoute>
+                <QuoteDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/users"
             element={
               <ProtectedRoute>
@@ -201,6 +220,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/suppliers"
+            element={
+              <ProtectedRoute>
+                <Suppliers />
               </ProtectedRoute>
             }
           />

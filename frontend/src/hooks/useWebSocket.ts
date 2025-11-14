@@ -30,6 +30,17 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const reconnectDelay = 3000; // 3 seconds
 
   const connect = useCallback(() => {
+    // Prevent multiple simultaneous connections
+    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+      console.log('[WebSocket] Connection already in progress, skipping');
+      return;
+    }
+    
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log('[WebSocket] Already connected, skipping');
+      return;
+    }
+
     // Get JWT token from localStorage
     const token = localStorage.getItem('access_token');
     if (!token) {
@@ -42,6 +53,15 @@ export const useWebSocket = (): UseWebSocketReturn => {
     const wsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/api/v1/ws?token=' + encodeURIComponent(token);
 
     try {
+      // Close existing connection if any
+      if (wsRef.current) {
+        try {
+          wsRef.current.close(1000, 'Reconnecting');
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -69,17 +89,17 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
       ws.onmessage = (event) => {
         try {
+          // Handle pong response (plain text, not JSON)
+          if (event.data === 'pong') {
+            return;
+          }
+          
           const message = JSON.parse(event.data);
           
           // Handle connection established message
           if (message.type === 'connection.established') {
             setTenantId(message.tenant_id);
             console.log('[WebSocket] Connection established for tenant:', message.tenant_id);
-            return;
-          }
-
-          // Handle pong response
-          if (message === 'pong') {
             return;
           }
 
@@ -158,7 +178,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
       console.error('[WebSocket] Failed to connect:', error);
       setIsConnected(false);
     }
-  }, [tenantId]);
+  }, []); // Remove tenantId dependency to prevent reconnection loops
 
   useEffect(() => {
     // Connect on mount

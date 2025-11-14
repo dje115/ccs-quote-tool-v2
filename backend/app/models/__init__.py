@@ -8,6 +8,7 @@ from .crm import Customer, Contact, CustomerInteraction, CustomerStatus, Busines
 from .leads import LeadGenerationCampaign, Lead, LeadInteraction, LeadGenerationPrompt, LeadGenerationStatus, LeadStatus, LeadSource
 from .quotes import Quote, QuoteItem, QuoteTemplate, PricingItem, QuoteStatus
 from .product import Product, PricingRule, QuoteVersion
+from .supplier import Supplier, SupplierCategory, SupplierPricing
 from .sales import SalesActivity, SalesNote, ActivityType, ActivityOutcome
 from .sector import Sector
 from .planning import PlanningApplication, PlanningApplicationCampaign, PlanningApplicationKeyword, PlanningApplicationStatus, PlanningCampaignStatus, ApplicationType
@@ -20,6 +21,7 @@ __all__ = [
     "LeadGenerationCampaign", "Lead", "LeadInteraction", "LeadGenerationPrompt", "LeadGenerationStatus", "LeadStatus", "LeadSource",
     "Quote", "QuoteItem", "QuoteTemplate", "PricingItem", "QuoteStatus",
     "Product", "PricingRule", "QuoteVersion",
+    "Supplier", "SupplierCategory", "SupplierPricing",
     "SalesActivity", "SalesNote", "ActivityType", "ActivityOutcome",
     "Sector",
     "PlanningApplication", "PlanningApplicationCampaign", "PlanningApplicationKeyword", "PlanningApplicationStatus", "PlanningCampaignStatus", "ApplicationType",

@@ -34,27 +34,33 @@ class AIPromptService:
             print(f"[AIPromptService] Redis not available: {e}")
             return None
     
-    def _get_cache_key(self, category: str, tenant_id: Optional[str] = None) -> str:
+    def _get_cache_key(self, category: str, tenant_id: Optional[str] = None, quote_type: Optional[str] = None) -> str:
         """Generate cache key for prompt"""
         tenant_key = tenant_id or "system"
-        return f"ai_prompt:{category}:{tenant_key}"
+        quote_type_key = f":{quote_type}" if quote_type else ""
+        return f"ai_prompt:{category}:{tenant_key}{quote_type_key}"
     
     async def get_prompt(
         self,
         category: str,
         tenant_id: Optional[str] = None,
-        version: Optional[int] = None
+        version: Optional[int] = None,
+        quote_type: Optional[str] = None
     ) -> Optional[AIPrompt]:
         """
-        Get prompt by category with tenant fallback
+        Get prompt by category with tenant and quote_type fallback
         
-        Priority:
-        1. Tenant-specific prompt (if tenant_id provided)
-        2. System prompt (is_system=True, tenant_id=None)
-        3. None if not found
+        Priority for quote_analysis category:
+        1. Tenant-specific prompt with matching quote_type
+        2. Tenant-specific prompt with quote_type=None (generic)
+        3. System prompt with matching quote_type
+        4. System prompt with quote_type=None (generic)
+        5. None if not found
+        
+        For other categories, quote_type is ignored.
         """
         # Try cache first
-        cache_key = self._get_cache_key(category, tenant_id or self.tenant_id)
+        cache_key = self._get_cache_key(category, tenant_id or self.tenant_id, quote_type)
         redis_client = await self._get_redis()
         
         if redis_client:
@@ -84,7 +90,42 @@ class AIPromptService:
             # Get latest version
             query = query.order_by(AIPrompt.version.desc())
         
-        # Try tenant-specific first, then system
+        # For quote_analysis category, filter by quote_type if provided
+        if category == PromptCategory.QUOTE_ANALYSIS.value and quote_type:
+            # Try tenant-specific with matching quote_type first
+            if tenant_id or self.tenant_id:
+                tenant_id_to_use = tenant_id or self.tenant_id
+                prompt = query.filter(
+                    AIPrompt.tenant_id == tenant_id_to_use,
+                    AIPrompt.quote_type == quote_type
+                ).first()
+                
+                if prompt:
+                    await self._cache_prompt(prompt, cache_key)
+                    return prompt
+                
+                # Fallback to tenant-specific generic (quote_type=None)
+                prompt = query.filter(
+                    AIPrompt.tenant_id == tenant_id_to_use,
+                    AIPrompt.quote_type.is_(None)
+                ).first()
+                
+                if prompt:
+                    await self._cache_prompt(prompt, cache_key)
+                    return prompt
+            
+            # Try system prompt with matching quote_type
+            prompt = query.filter(
+                AIPrompt.is_system == True,
+                AIPrompt.tenant_id.is_(None),
+                AIPrompt.quote_type == quote_type
+            ).first()
+            
+            if prompt:
+                await self._cache_prompt(prompt, cache_key)
+                return prompt
+        
+        # Try tenant-specific first (without quote_type filter for non-quote_analysis or fallback)
         if tenant_id or self.tenant_id:
             tenant_id_to_use = tenant_id or self.tenant_id
             prompt = query.filter(
@@ -380,7 +421,7 @@ class AIPromptService:
         redis_client = await self._get_redis()
         if redis_client:
             try:
-                cache_key = self._get_cache_key(category, tenant_id)
+                cache_key = self._get_cache_key(category, tenant_id, None)
                 await redis_client.delete(cache_key)
             except Exception as e:
                 print(f"[AIPromptService] Cache invalidation error: {e}")

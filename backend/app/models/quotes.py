@@ -33,6 +33,7 @@ class Quote(BaseModel):
     quote_number = Column(String(100), unique=True, nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    quote_type = Column(String(100), nullable=True, index=True)  # e.g., 'cabling', 'network_build', 'server_build', 'software_dev', 'testing', 'design'
     
     # Project details (from v1)
     project_title = Column(String(200), nullable=True)

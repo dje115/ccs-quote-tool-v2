@@ -5,7 +5,7 @@ Main API router for v1
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket
+from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import
 
 # Create main API router
 api_router = APIRouter()
@@ -30,6 +30,10 @@ api_router.include_router(planning.router, prefix="/planning", tags=["planning-a
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(ai_prompts.router, tags=["ai-prompts"])
 api_router.include_router(products.router, tags=["products"])
+api_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])
+api_router.include_router(product_search.router, prefix="/products", tags=["product-search"])
+api_router.include_router(building_analysis.router, prefix="/buildings", tags=["building-analysis"])
+api_router.include_router(pricing_import.router, prefix="/pricing", tags=["pricing-import"])
 api_router.include_router(version.router, tags=["version"])
 api_router.include_router(websocket.router, tags=["websocket"])
 

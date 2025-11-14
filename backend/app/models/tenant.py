@@ -89,6 +89,8 @@ class Tenant(Base, TimestampMixin):
     
     # Relationships
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
+    supplier_categories = relationship("SupplierCategory", back_populates="tenant", cascade="all, delete-orphan")
+    suppliers = relationship("Supplier", back_populates="tenant", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Tenant {self.name} ({self.slug})>"

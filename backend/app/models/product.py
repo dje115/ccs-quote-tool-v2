@@ -86,3 +86,4 @@ class QuoteVersion(BaseModel):
     def __repr__(self):
         return f"<QuoteVersion {self.quote_id} v{self.version}>"
 
+
