@@ -209,6 +209,14 @@ Respond in JSON format:
             # Use AIProviderService to generate completion
             try:
                 if prompt_obj:
+                    # Render prompt to get temperature and max_tokens
+                    rendered = prompt_service.render_prompt(prompt_obj, {
+                        "activity_type": activity.activity_type.value.upper(),
+                        "notes": activity.notes,
+                        "customer_context": customer_context,
+                        "tenant_context": tenant_context,
+                        "activity_context": activity_context
+                    })
                     # Use database prompt with provider service
                     provider_response = await self.provider_service.generate(
                         prompt=prompt_obj,
@@ -266,6 +274,11 @@ Respond in JSON format:
                 print(f"[ERROR] Failed to enhance activity with AI: {e}")
                 import traceback
                 traceback.print_exc()
+        
+        except Exception as e:
+            print(f"[ERROR] Failed to enhance activity with AI (outer): {e}")
+            import traceback
+            traceback.print_exc()
     
     async def generate_action_suggestions(self, customer_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         """

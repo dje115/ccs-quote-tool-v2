@@ -783,8 +783,10 @@ async def get_global_api_keys(
     try:
         import os
         
-        # Try to get System tenant from database
-        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        # Get System tenant from database (system-wide keys only)
+        system_tenant = db.query(Tenant).filter(
+            (Tenant.name == "System") | (Tenant.plan == "system")
+        ).first()
         
         if system_tenant:
             # Return keys from database
@@ -794,7 +796,7 @@ async def get_global_api_keys(
                 google_maps_api_key=system_tenant.google_maps_api_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
             )
         else:
-            # Fallback to environment variables if System tenant doesn't exist
+            # Fallback to environment variables if no tenant found
             return GlobalAPIKeysResponse(
                 openai_api_key=os.getenv("OPENAI_API_KEY", ""),
                 companies_house_api_key=os.getenv("COMPANIES_HOUSE_API_KEY", ""),
@@ -829,8 +831,10 @@ async def update_global_api_keys(
         from app.models.tenant import TenantStatus
         import uuid
         
-        # Get or create System tenant
-        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        # Get or create System tenant (system-wide keys only)
+        system_tenant = db.query(Tenant).filter(
+            (Tenant.name == "System") | (Tenant.plan == "system")
+        ).first()
         
         if not system_tenant:
             # Create System tenant for storing global API keys
@@ -880,9 +884,11 @@ async def test_openai_api(
         import os
         import httpx
         
-        # Check database first (System tenant), then fall back to environment
+        # Check database first (System tenant only), then fall back to environment
         api_key = None
-        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        system_tenant = db.query(Tenant).filter(
+            (Tenant.name == "System") | (Tenant.plan == "system")
+        ).first()
         if system_tenant and system_tenant.openai_api_key:
             api_key = system_tenant.openai_api_key
         else:
@@ -922,9 +928,11 @@ async def test_companies_house_api(
         import httpx
         from base64 import b64encode
         
-        # Check database first (System tenant), then fall back to environment
+        # Check database first (System tenant only), then fall back to environment
         api_key = None
-        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        system_tenant = db.query(Tenant).filter(
+            (Tenant.name == "System") | (Tenant.plan == "system")
+        ).first()
         if system_tenant and system_tenant.companies_house_api_key:
             api_key = system_tenant.companies_house_api_key
         else:
@@ -964,9 +972,11 @@ async def test_google_maps_api(
         import os
         import httpx
         
-        # Check database first (System tenant), then fall back to environment
+        # Check database first (System tenant only), then fall back to environment
         api_key = None
-        system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+        system_tenant = db.query(Tenant).filter(
+            (Tenant.name == "System") | (Tenant.plan == "system")
+        ).first()
         if system_tenant and system_tenant.google_maps_api_key:
             api_key = system_tenant.google_maps_api_key
         else:

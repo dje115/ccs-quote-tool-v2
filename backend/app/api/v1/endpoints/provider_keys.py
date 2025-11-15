@@ -48,7 +48,7 @@ class ProviderKeyStatusResponse(BaseModel):
 
 class ProviderKeyRequest(BaseModel):
     """Request to save/update provider API key"""
-    api_key: str
+    api_key: Optional[str] = None  # Optional for test endpoint, required for save
     test_on_save: bool = True  # Test the key when saving
 
 
@@ -135,104 +135,6 @@ async def get_provider_key_status(
         )
 
 
-@router.put("/{provider_id}", status_code=status.HTTP_200_OK)
-async def save_provider_key(
-    provider_id: str,
-    request: ProviderKeyRequest,
-    current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db),
-    is_system: bool = False  # Query param: true for system-level key
-):
-    """
-    Save or update provider API key
-    
-    - Tenant-level keys: Any authenticated user can save for their tenant
-    - System-level keys: Only SUPER_ADMIN can save
-    """
-    try:
-        # Check permissions for system-level keys
-        if is_system and current_user.role != UserRole.SUPER_ADMIN:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="System-level API keys can only be managed by super admins"
-            )
-        
-        # Get provider
-        provider = db.query(AIProvider).filter(
-            AIProvider.id == provider_id,
-            AIProvider.is_active == True
-        ).first()
-        
-        if not provider:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Provider not found"
-            )
-        
-        # Determine tenant_id (None for system-level)
-        tenant_id = None if is_system else current_tenant.id
-        
-        # Check if key already exists
-        existing_key = db.query(ProviderAPIKey).filter(
-            ProviderAPIKey.provider_id == provider_id,
-            ProviderAPIKey.tenant_id == tenant_id
-        ).first()
-        
-        # Test the key if requested
-        test_result = None
-        test_error = None
-        is_valid = False
-        
-        if request.test_on_save:
-            provider_service = AIProviderService(db, tenant_id=tenant_id)
-            test_result_dict = await provider_service.test_provider(provider_id, request.api_key)
-            
-            is_valid = test_result_dict.get("success", False)
-            test_result = test_result_dict.get("message")
-            test_error = test_result_dict.get("error")
-        
-        # Update or create key
-        if existing_key:
-            existing_key.api_key = request.api_key.strip()
-            existing_key.is_valid = is_valid
-            existing_key.test_result = test_result
-            existing_key.test_error = test_error
-            existing_key.last_tested = datetime.now(timezone.utc) if request.test_on_save else existing_key.last_tested
-            existing_key.updated_at = datetime.now(timezone.utc)
-        else:
-            new_key = ProviderAPIKey(
-                id=str(uuid.uuid4()),
-                provider_id=provider_id,
-                tenant_id=tenant_id,
-                api_key=request.api_key.strip(),
-                is_valid=is_valid,
-                test_result=test_result,
-                test_error=test_error,
-                last_tested=datetime.now(timezone.utc) if request.test_on_save else None
-            )
-            db.add(new_key)
-        
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": f"API key saved successfully{' and tested' if request.test_on_save else ''}",
-            "is_valid": is_valid,
-            "test_result": test_result,
-            "test_error": test_error
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error saving provider key: {str(e)}"
-        )
-
-
 @router.post("/{provider_id}/test", response_model=ProviderKeyTestResponse)
 async def test_provider_key(
     provider_id: str,
@@ -314,6 +216,111 @@ async def test_provider_key(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing provider key: {str(e)}"
+        )
+
+
+@router.put("/{provider_id}", status_code=status.HTTP_200_OK)
+async def save_provider_key(
+    provider_id: str,
+    request: ProviderKeyRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    is_system: bool = False  # Query param: true for system-level key
+):
+    """
+    Save or update provider API key
+    
+    - Tenant-level keys: Any authenticated user can save for their tenant
+    - System-level keys: Only SUPER_ADMIN can save
+    """
+    try:
+        # Check permissions for system-level keys
+        if is_system and current_user.role != UserRole.SUPER_ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="System-level API keys can only be managed by super admins"
+            )
+        
+        # Get provider
+        provider = db.query(AIProvider).filter(
+            AIProvider.id == provider_id,
+            AIProvider.is_active == True
+        ).first()
+        
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
+        # Determine tenant_id (None for system-level)
+        tenant_id = None if is_system else current_tenant.id
+        
+        # Validate that api_key is provided for save operation
+        if not request.api_key or not request.api_key.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="API key is required"
+            )
+        
+        # Check if key already exists
+        existing_key = db.query(ProviderAPIKey).filter(
+            ProviderAPIKey.provider_id == provider_id,
+            ProviderAPIKey.tenant_id == tenant_id
+        ).first()
+        
+        # Test the key if requested
+        test_result = None
+        test_error = None
+        is_valid = False
+        
+        if request.test_on_save:
+            provider_service = AIProviderService(db, tenant_id=tenant_id)
+            test_result_dict = await provider_service.test_provider(provider_id, request.api_key.strip())
+            
+            is_valid = test_result_dict.get("success", False)
+            test_result = test_result_dict.get("message")
+            test_error = test_result_dict.get("error")
+        
+        # Update or create key
+        if existing_key:
+            existing_key.api_key = request.api_key.strip()
+            existing_key.is_valid = is_valid
+            existing_key.test_result = test_result
+            existing_key.test_error = test_error
+            existing_key.last_tested = datetime.now(timezone.utc) if request.test_on_save else existing_key.last_tested
+            existing_key.updated_at = datetime.now(timezone.utc)
+        else:
+            new_key = ProviderAPIKey(
+                id=str(uuid.uuid4()),
+                provider_id=provider_id,
+                tenant_id=tenant_id,
+                api_key=request.api_key.strip(),
+                is_valid=is_valid,
+                test_result=test_result,
+                test_error=test_error,
+                last_tested=datetime.now(timezone.utc) if request.test_on_save else None
+            )
+            db.add(new_key)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"API key saved successfully{' and tested' if request.test_on_save else ''}",
+            "is_valid": is_valid,
+            "test_result": test_result,
+            "test_error": test_error
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving provider key: {str(e)}"
         )
 
 

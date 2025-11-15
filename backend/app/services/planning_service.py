@@ -57,7 +57,9 @@ class PlanningApplicationService:
             
             if not api_key:
                 # Fallback to system tenant
-                system_tenant = self.db.query(Tenant).filter(Tenant.name == "System").first()
+                system_tenant = self.db.query(Tenant).filter(
+                    (Tenant.name == "System") | (Tenant.plan == "system")
+                ).first()
                 api_key = system_tenant.openai_api_key if system_tenant else None
             
             if api_key:

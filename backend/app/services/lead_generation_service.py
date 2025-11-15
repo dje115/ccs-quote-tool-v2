@@ -50,7 +50,9 @@ class LeadGenerationService:
         # Fallback to system-wide keys
         try:
             print("🔍 Looking for system tenant...")
-            system_tenant = self.db.query(Tenant).filter(Tenant.name == "System").first()
+            system_tenant = self.db.query(Tenant).filter(
+                (Tenant.name == "System") | (Tenant.plan == "system")
+            ).first()
             print(f"🔍 System tenant found: {system_tenant is not None}")
             if system_tenant:
                 print(f"🔑 OpenAI key exists: {bool(system_tenant.openai_api_key)} (length: {len(system_tenant.openai_api_key) if system_tenant.openai_api_key else 0})")

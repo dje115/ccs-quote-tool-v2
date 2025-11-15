@@ -6,9 +6,17 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3010,
+    strictPort: false,
     hmr: {
       clientPort: 3010
     },
+    // Allow all hosts to fix "Invalid host header" error
+    allowedHosts: [
+      'localhost',
+      '.localhost',
+      '127.0.0.1',
+      '0.0.0.0'
+    ],
     proxy: {
       '/api': {
         target: 'http://backend:8000',

@@ -188,7 +188,7 @@
           <el-alert
             :title="`${result.provider_name} API`"
             :type="result.success ? 'success' : 'error'"
-            :description="result.message || result.error"
+            :description="formatErrorMessage(result.message || result.error)"
             show-icon
             :closable="true"
             @close="providerTestResults = providerTestResults.filter(r => r.provider_id !== result.provider_id)"
@@ -425,11 +425,30 @@ export default {
         const providerName = provider?.name || 'Provider'
         
         providerTestResults.value = providerTestResults.value.filter(r => r.provider_id !== providerId)
+        // Format error message properly
+        let errorMessage = 'Test failed'
+        if (error.response?.data) {
+          const errorData = error.response.data
+          if (errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              errorMessage = errorData.detail.map(e => e.msg || JSON.stringify(e)).join(', ')
+            } else if (typeof errorData.detail === 'string') {
+              errorMessage = errorData.detail
+            } else {
+              errorMessage = JSON.stringify(errorData.detail)
+            }
+          } else if (errorData.message) {
+            errorMessage = errorData.message
+          }
+        } else if (error.message) {
+          errorMessage = error.message
+        }
+        
         providerTestResults.value.push({
           provider_id: providerId,
           provider_name: providerName,
           success: false,
-          error: error.response?.data?.detail || error.response?.data?.message || 'Test failed'
+          error: errorMessage
         })
         
         ElMessage.error(`${providerName} API test failed`)
@@ -448,6 +467,23 @@ export default {
       if (status.system_key_valid) return 'Valid'
       if (status.has_system_key) return 'Not Tested'
       return 'Not Configured'
+    }
+    
+    const formatErrorMessage = (error) => {
+      if (!error) return 'Unknown error'
+      if (typeof error === 'string') return error
+      if (typeof error === 'object') {
+        // Handle Pydantic validation errors
+        if (error.detail) {
+          if (Array.isArray(error.detail)) {
+            return error.detail.map(e => e.msg || JSON.stringify(e)).join(', ')
+          }
+          return error.detail
+        }
+        if (error.message) return error.message
+        return JSON.stringify(error)
+      }
+      return String(error)
     }
     
     const getStatusColor = (status) => {

@@ -66,8 +66,10 @@ def get_api_keys(db: Session, current_tenant: Tenant) -> APIKeys:
             # Use keys.openai for API calls
     """
     
-    # Get system tenant for fallback
-    system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+    # Get system tenant for fallback (system-wide keys only)
+    system_tenant = db.query(Tenant).filter(
+        (Tenant.name == "System") | (Tenant.plan == "system")
+    ).first()
     
     # Resolve each key individually with fallback logic
     # IMPORTANT: Each key is resolved independently - tenant key first, then system fallback
@@ -153,10 +155,11 @@ def get_provider_api_key(
         if not provider:
             # Fallback to legacy OpenAI key for "openai" slug
             if provider_slug == "openai":
+                system_tenant = db.query(Tenant).filter(
+                    (Tenant.name == "System") | (Tenant.plan == "system")
+                ).first()
                 return current_tenant.openai_api_key or (
-                    db.query(Tenant).filter(Tenant.name == "System").first().openai_api_key
-                    if db.query(Tenant).filter(Tenant.name == "System").first()
-                    else None
+                    system_tenant.openai_api_key if system_tenant else None
                 )
             return None
         
@@ -182,7 +185,9 @@ def get_provider_api_key(
         
         # Final fallback: legacy OpenAI key for OpenAI provider
         if provider_slug == "openai":
-            system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+            system_tenant = db.query(Tenant).filter(
+                (Tenant.name == "System") | (Tenant.plan == "system")
+            ).first()
             if system_tenant and system_tenant.openai_api_key:
                 return system_tenant.openai_api_key
         

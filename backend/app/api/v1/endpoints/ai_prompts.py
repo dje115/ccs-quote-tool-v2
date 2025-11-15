@@ -159,7 +159,9 @@ async def get_available_providers(
             if provider.slug == "openai":
                 if current_tenant.openai_api_key:
                     has_tenant_key = True
-                system_tenant = db.query(Tenant).filter(Tenant.name == "System").first()
+                system_tenant = db.query(Tenant).filter(
+                    (Tenant.name == "System") | (Tenant.plan == "system")
+                ).first()
                 if system_tenant and system_tenant.openai_api_key:
                     has_system_key = True
             
