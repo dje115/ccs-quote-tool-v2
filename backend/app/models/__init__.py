@@ -13,6 +13,7 @@ from .sales import SalesActivity, SalesNote, ActivityType, ActivityOutcome
 from .sector import Sector
 from .planning import PlanningApplication, PlanningApplicationCampaign, PlanningApplicationKeyword, PlanningApplicationStatus, PlanningCampaignStatus, ApplicationType
 from .ai_prompt import AIPrompt, AIPromptVersion, PromptCategory
+from .ai_provider import AIProvider, ProviderAPIKey, ProviderType
 
 __all__ = [
     "Base",
@@ -25,6 +26,7 @@ __all__ = [
     "SalesActivity", "SalesNote", "ActivityType", "ActivityOutcome",
     "Sector",
     "PlanningApplication", "PlanningApplicationCampaign", "PlanningApplicationKeyword", "PlanningApplicationStatus", "PlanningCampaignStatus", "ApplicationType",
-    "AIPrompt", "AIPromptVersion", "PromptCategory"
+    "AIPrompt", "AIPromptVersion", "PromptCategory",
+    "AIProvider", "ProviderAPIKey", "ProviderType"
 ]
 

@@ -19,6 +19,7 @@ import json
 from app.models.crm import Customer, Contact
 from app.models.sales import SalesActivity, ActivityType, ActivityOutcome
 from app.core.config import settings
+from app.services.ai_provider_service import AIProviderService
 
 
 class ActivityService:
@@ -27,6 +28,7 @@ class ActivityService:
     def __init__(self, db: Session, tenant_id: str):
         self.db = db
         self.tenant_id = tenant_id
+        self.provider_service = AIProviderService(db, tenant_id=tenant_id)
     
     async def create_activity(
         self,
@@ -107,17 +109,10 @@ class ActivityService:
                 SalesActivity.id != activity.id
             ).order_by(desc(SalesActivity.activity_date)).limit(5).all()
             
-            # Get API keys (tenant first, fallback to system)
+            # Check if tenant exists
             tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             if not tenant:
                 print("[ActivityService] Tenant not found")
-                return
-            
-            from app.core.api_keys import get_api_keys
-            api_keys = get_api_keys(self.db, tenant)
-            
-            if not api_keys.openai:
-                print("[ActivityService] No OpenAI API key configured - skipping AI enhancement")
                 return
             
             # Build context for AI
@@ -211,34 +206,38 @@ Respond in JSON format:
                 model = rendered['model']
                 max_tokens = rendered['max_tokens']
             
-            # Call OpenAI API
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_keys.openai}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": system_prompt
-                            },
-                            {
-                                "role": "user",
-                                "content": user_prompt
-                            }
-                        ],
-                        "max_completion_tokens": max_tokens,
-                        "response_format": {"type": "json_object"}
-                    }
-                )
-            
-            if response.status_code == 200:
-                result = response.json()
-                ai_response = json.loads(result['choices'][0]['message']['content'])
+            # Use AIProviderService to generate completion
+            try:
+                if prompt_obj:
+                    # Use database prompt with provider service
+                    provider_response = await self.provider_service.generate(
+                        prompt=prompt_obj,
+                        variables={
+                            "activity_type": activity.activity_type.value.upper(),
+                            "notes": activity.notes,
+                            "customer_context": customer_context,
+                            "tenant_context": tenant_context,
+                            "activity_context": activity_context
+                        },
+                        temperature=rendered.get('temperature', 0.7),
+                        max_tokens=max_tokens,
+                        response_format={"type": "json_object"}
+                    )
+                    ai_response_text = provider_response.content
+                else:
+                    # Use fallback with rendered prompts
+                    provider_response = await self.provider_service.generate_with_rendered_prompts(
+                        prompt=None,  # No prompt object for fallback
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        temperature=0.7,
+                        max_tokens=max_tokens,
+                        response_format={"type": "json_object"}
+                    )
+                    ai_response_text = provider_response.content
+                
+                # Parse JSON response
+                ai_response = json.loads(ai_response_text)
                 
                 # Update activity with AI enhancements
                 activity.notes_cleaned = ai_response.get('cleaned_notes')
@@ -262,13 +261,11 @@ Respond in JSON format:
                         pass
                 
                 print(f"✓ AI enhanced activity notes for {customer.company_name}")
-            else:
-                print(f"✗ OpenAI API error: {response.status_code}")
                 
-        except Exception as e:
-            print(f"[ERROR] Failed to enhance activity with AI: {e}")
-            import traceback
-            traceback.print_exc()
+            except Exception as e:
+                print(f"[ERROR] Failed to enhance activity with AI: {e}")
+                import traceback
+                traceback.print_exc()
     
     async def generate_action_suggestions(self, customer_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         """

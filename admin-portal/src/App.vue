@@ -37,6 +37,10 @@
               <el-icon><Setting /></el-icon>
               <span>System Settings</span>
             </el-menu-item>
+            <el-menu-item index="/ai-prompts">
+              <el-icon><MagicStick /></el-icon>
+              <span>AI Prompts</span>
+            </el-menu-item>
           </el-menu>
         </el-aside>
         <el-main>
@@ -44,12 +48,57 @@
         </el-main>
       </el-container>
     </el-container>
+    <!-- Version Display -->
+    <div style="position: fixed; bottom: 8px; right: 16px; z-index: 1000;">
+      <el-tooltip :content="versionTooltip" placement="top">
+        <span style="font-size: 0.7rem; color: #909399; opacity: 0.6; cursor: help; font-family: monospace;">
+          v{{ versionInfo.version || '2.9.0' }}
+        </span>
+      </el-tooltip>
+    </div>
   </div>
 </template>
 
 <script>
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
+
 export default {
   name: 'App',
+  setup() {
+    const versionInfo = ref({ version: '2.9.0' })
+    const versionTooltip = ref('Version: 2.9.0')
+    
+    const loadVersion = async () => {
+      try {
+        const token = localStorage.getItem('admin_token')
+        if (token) {
+          const response = await axios.get('http://localhost:8000/api/v1/version', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          versionInfo.value = response.data
+          const parts = [
+            `Version: ${response.data.version}`,
+            response.data.build_date && `Build Date: ${response.data.build_date}`,
+            response.data.build_hash && `Build: ${response.data.build_hash.substring(0, 7)}`,
+            response.data.environment && `Environment: ${response.data.environment}`
+          ].filter(Boolean)
+          versionTooltip.value = parts.join('\n')
+        }
+      } catch (error) {
+        console.error('Failed to load version:', error)
+      }
+    }
+    
+    onMounted(() => {
+      loadVersion()
+    })
+    
+    return {
+      versionInfo,
+      versionTooltip
+    }
+  },
   methods: {
     logout() {
       localStorage.removeItem('admin_token')

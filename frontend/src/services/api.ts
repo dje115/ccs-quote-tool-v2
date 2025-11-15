@@ -233,5 +233,31 @@ export const versionAPI = {
   get: () => apiClient.get('/version'),
 };
 
+// AI Prompts API
+export const promptsAPI = {
+  list: (params?: any) => apiClient.get('/prompts/', { params }),
+  get: (id: string) => apiClient.get(`/prompts/${id}`),
+  create: (data: any) => apiClient.post('/prompts/', data),
+  update: (id: string, data: any) => apiClient.put(`/prompts/${id}`, data),
+  delete: (id: string, softDelete: boolean = true) => apiClient.delete(`/prompts/${id}`, { params: { soft_delete: softDelete } }),
+  getVersions: (id: string) => apiClient.get(`/prompts/${id}/versions`),
+  rollback: (id: string, version: number) => apiClient.post(`/prompts/${id}/rollback/${version}`),
+  test: (id: string, variables: any) => apiClient.post(`/prompts/${id}/test`, { variables }),
+  getAvailableProviders: () => apiClient.get('/prompts/available-providers'),
+  getAvailableModels: (providerId: string) => apiClient.get(`/prompts/available-models/${providerId}`),
+};
+
+// Provider Keys API
+export const providerKeysAPI = {
+  listProviders: () => apiClient.get('/provider-keys/providers'),
+  getStatus: () => apiClient.get('/provider-keys/status'),
+  saveKey: (providerId: string, data: any, isSystem: boolean = false) => 
+    apiClient.put(`/provider-keys/${providerId}?is_system=${isSystem}`, data),
+  testKey: (providerId: string, data?: any, isSystem: boolean = false) => 
+    apiClient.post(`/provider-keys/${providerId}/test?is_system=${isSystem}`, data),
+  deleteKey: (providerId: string, isSystem: boolean = false) => 
+    apiClient.delete(`/provider-keys/${providerId}?is_system=${isSystem}`),
+};
+
 
 

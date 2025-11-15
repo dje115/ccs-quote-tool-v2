@@ -220,7 +220,12 @@ class AIPromptService:
         tenant_id: Optional[str] = None,
         created_by: Optional[str] = None,
         variables: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        quote_type: Optional[str] = None,
+        provider_id: Optional[str] = None,
+        provider_model: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
+        use_system_default: bool = True
     ) -> AIPrompt:
         """Create a new prompt"""
         prompt = AIPrompt(
@@ -228,6 +233,7 @@ class AIPromptService:
             name=name,
             category=category,
             description=description,
+            quote_type=quote_type,
             system_prompt=system_prompt,
             user_prompt_template=user_prompt_template,
             model=model,
@@ -238,7 +244,11 @@ class AIPromptService:
             is_system=is_system,
             tenant_id=tenant_id or self.tenant_id,
             created_by=created_by,
-            variables=variables
+            variables=variables,
+            provider_id=provider_id,
+            provider_model=provider_model,
+            provider_settings=provider_settings,
+            use_system_default=use_system_default
         )
         
         self.db.add(prompt)
@@ -265,8 +275,13 @@ class AIPromptService:
         max_tokens: Optional[int] = None,
         variables: Optional[Dict[str, Any]] = None,
         description: Optional[str] = None,
+        quote_type: Optional[str] = None,
         note: Optional[str] = None,
-        updated_by: Optional[str] = None
+        updated_by: Optional[str] = None,
+        provider_id: Optional[str] = None,
+        provider_model: Optional[str] = None,
+        provider_settings: Optional[Dict[str, Any]] = None,
+        use_system_default: Optional[bool] = None
     ) -> AIPrompt:
         """Update prompt (creates new version)"""
         prompt = self.db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
@@ -296,6 +311,16 @@ class AIPromptService:
             prompt.variables = variables
         if description is not None:
             prompt.description = description
+        if quote_type is not None:
+            prompt.quote_type = quote_type
+        if provider_id is not None:
+            prompt.provider_id = provider_id
+        if provider_model is not None:
+            prompt.provider_model = provider_model
+        if provider_settings is not None:
+            prompt.provider_settings = provider_settings
+        if use_system_default is not None:
+            prompt.use_system_default = use_system_default
         
         # Increment version
         prompt.version += 1
@@ -327,6 +352,10 @@ class AIPromptService:
             model=prompt.model,
             temperature=prompt.temperature,
             max_tokens=prompt.max_tokens,
+            provider_id=prompt.provider_id,
+            provider_model=prompt.provider_model,
+            provider_settings=prompt.provider_settings,
+            use_system_default=prompt.use_system_default,
             created_by=created_by
         )
         

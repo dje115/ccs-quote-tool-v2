@@ -29,6 +29,7 @@ class QuoteCreate(BaseModel):
     description: str | None = None
     valid_until: datetime | None = None
     quote_type: str | None = None  # e.g., 'cabling', 'network_build', 'server_build', 'software_dev', 'testing', 'design'
+    auto_analyze: bool = False  # Automatically trigger AI analysis after creation
     # Project details (from v1)
     project_title: str | None = None
     project_description: str | None = None
@@ -184,6 +185,46 @@ async def create_quote(
         db.add(quote)
         db.commit()
         db.refresh(quote)
+        
+        # Optionally trigger AI analysis if requested
+        if quote_data.auto_analyze:
+            try:
+                from app.core.api_keys import get_api_keys
+                from app.services.quote_analysis_service import QuoteAnalysisService
+                from app.models.tenant import Tenant
+                
+                tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+                if tenant:
+                    api_keys = get_api_keys(db, tenant)
+                    if api_keys.openai:
+                        analysis_service = QuoteAnalysisService(
+                            db=db,
+                            tenant_id=current_user.tenant_id,
+                            openai_api_key=api_keys.openai
+                        )
+                        
+                        quote_data_dict = {
+                            'project_title': quote.project_title or quote.title,
+                            'project_description': quote.project_description or quote.description,
+                            'site_address': quote.site_address,
+                            'building_type': quote.building_type,
+                            'building_size': quote.building_size,
+                            'number_of_floors': quote.number_of_floors or 1,
+                            'number_of_rooms': quote.number_of_rooms or 1,
+                            'cabling_type': quote.cabling_type,
+                            'wifi_requirements': quote.wifi_requirements or False,
+                            'cctv_requirements': quote.cctv_requirements or False,
+                            'door_entry_requirements': quote.door_entry_requirements or False,
+                            'special_requirements': quote.special_requirements,
+                            'quote_type': quote.quote_type
+                        }
+                        
+                        # Run analysis in background (don't wait for it)
+                        import asyncio
+                        asyncio.create_task(analysis_service.analyze_requirements(quote_data_dict))
+            except Exception as e:
+                # Don't fail quote creation if analysis fails
+                print(f"[QUOTE CREATION] Error triggering auto-analysis: {e}")
         
         # Publish quote.created event
         from app.core.events import get_event_publisher

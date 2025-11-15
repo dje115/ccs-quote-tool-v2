@@ -36,6 +36,7 @@ import {
 } from '@mui/icons-material';
 import CompanyProfile from '../components/CompanyProfile';
 import AIBusinessIntelligence from '../components/AIBusinessIntelligence';
+import { providerKeysAPI, promptsAPI } from '../services/api';
 
 const Settings: React.FC = () => {
   const [currentTab, setCurrentTab] = useState(0);
@@ -79,6 +80,13 @@ const Settings: React.FC = () => {
     googleMaps: ''
   });
 
+  // Provider API keys
+  const [providerStatus, setProviderStatus] = useState<any[]>([]);
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [savingProviders, setSavingProviders] = useState<Record<string, boolean>>({});
+  const [testingProviders, setTestingProviders] = useState<Record<string, boolean>>({});
+
   // Notification settings
   const [notifications, setNotifications] = useState({
     email_on_new_lead: true,
@@ -91,8 +99,62 @@ const Settings: React.FC = () => {
   useEffect(() => {
     loadApiStatus();
     loadProfileData();
-  }, []);
+    if (currentTab === 1) {
+      loadProviderKeys();
+    }
+  }, [currentTab]);
 
+
+  const loadProviderKeys = async () => {
+    setLoadingProviders(true);
+    try {
+      const response = await providerKeysAPI.getStatus();
+      setProviderStatus(response.data || []);
+      // Initialize provider keys object
+      const keys: Record<string, string> = {};
+      (response.data || []).forEach((status: any) => {
+        keys[status.provider.id] = '';
+      });
+      setProviderKeys(keys);
+    } catch (err: any) {
+      console.error('Failed to load provider keys:', err);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  const saveProviderKey = async (providerId: string) => {
+    setSavingProviders(prev => ({ ...prev, [providerId]: true }));
+    try {
+      await providerKeysAPI.saveKey(providerId, {
+        api_key: providerKeys[providerId] || '',
+        test_on_save: true
+      }, false);
+      setSuccess('Provider API key saved and tested successfully!');
+      await loadProviderKeys();
+    } catch (err: any) {
+      setError('Failed to save provider key: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setSavingProviders(prev => ({ ...prev, [providerId]: false }));
+    }
+  };
+
+  const testProviderKey = async (providerId: string) => {
+    setTestingProviders(prev => ({ ...prev, [providerId]: true }));
+    try {
+      const response = await providerKeysAPI.testKey(providerId, providerKeys[providerId] ? { api_key: providerKeys[providerId] } : undefined, false);
+      if (response.data.success) {
+        setSuccess('Provider API key test successful!');
+      } else {
+        setError('Provider API key test failed: ' + (response.data.error || response.data.message));
+      }
+      await loadProviderKeys();
+    } catch (err: any) {
+      setError('Failed to test provider key: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setTestingProviders(prev => ({ ...prev, [providerId]: false }));
+    }
+  };
 
   const loadApiStatus = async () => {
     try {
@@ -709,6 +771,82 @@ const Settings: React.FC = () => {
                   </Button>
                 </Grid>
               </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* AI Provider API Keys */}
+        <Grid size={{ xs: 12 }}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                <PsychologyIcon color="primary" />
+                <Typography variant="h6">AI Provider API Keys</Typography>
+              </Box>
+
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Configure API keys for AI providers. These keys will be used for your tenant. If not configured, system-wide keys will be used as fallback.
+              </Alert>
+
+              {loadingProviders ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Grid container spacing={2}>
+                  {providerStatus.map((status: any) => (
+                    <Grid size={{ xs: 12, md: 6 }} key={status.provider.id}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Box>
+                              <Typography variant="subtitle1" fontWeight="medium">
+                                {status.provider.name}
+                              </Typography>
+                              <Chip
+                                label={status.tenant_key_valid ? 'Valid' : status.has_tenant_key ? 'Not Tested' : 'Not Configured'}
+                                color={status.tenant_key_valid ? 'success' : status.has_tenant_key ? 'warning' : 'default'}
+                                size="small"
+                                sx={{ mt: 0.5 }}
+                              />
+                            </Box>
+                          </Box>
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label={`${status.provider.name} API Key`}
+                            placeholder={`Enter ${status.provider.name} API key`}
+                            value={providerKeys[status.provider.id] || ''}
+                            onChange={(e) => setProviderKeys(prev => ({ ...prev, [status.provider.id]: e.target.value }))}
+                            size="small"
+                            sx={{ mb: 1 }}
+                          />
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<ScienceIcon />}
+                              onClick={() => testProviderKey(status.provider.id)}
+                              disabled={testingProviders[status.provider.id]}
+                            >
+                              Test
+                            </Button>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<SaveIcon />}
+                              onClick={() => saveProviderKey(status.provider.id)}
+                              disabled={savingProviders[status.provider.id]}
+                            >
+                              Save
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
             </CardContent>
           </Card>
         </Grid>

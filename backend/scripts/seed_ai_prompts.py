@@ -669,6 +669,234 @@ Format as JSON object with:
     else:
         print("⏭️  building_analysis prompt already exists")
     
+    # 10. Lead Generation Prompt
+    lead_generation_prompt_template = """You are a UK business research specialist. 
+Find REAL, VERIFIED UK businesses based on your training data and knowledge. 
+Return ONLY valid JSON matching the schema provided — do not include explanations or text outside the JSON.
+
+---
+
+## CONTEXT:
+Company: {company_name}
+Description: {company_description}
+Services: {services}
+Location: {location}
+Primary Market: {primary_market}
+Installation Provider: {is_installation_provider}
+
+Sector: {sector_name}
+Sector Focus: {sector_description}
+Search Area: {postcode} (within {distance_miles} miles)
+Campaign Type: {prompt_type}
+Maximum Results: {max_results}
+Target Company Size: {company_size_category}
+
+---
+
+## OBJECTIVE
+Generate a list of {max_results} REAL UK businesses in the {sector_name} sector.
+Focus on well-known UK retail chains, independent stores, and e-commerce businesses.
+
+IMPORTANT: You MUST provide actual UK businesses. Do not return an empty results array.
+If you cannot find businesses in the specific area, provide UK businesses from your training data that match the sector.
+
+---
+
+## SEARCH APPROACH
+1. Use your knowledge of UK businesses to find companies in the {sector_name} sector
+2. Focus on businesses that would be located near {postcode} or in the surrounding area
+3. Ensure each company is a real UK business with valid contact information
+4. Use the keywords below to understand the sector focus
+{company_size_filter}
+
+## KEYWORDS TO CONSIDER:
+{example_keywords}
+
+---
+
+## DATA TO RETURN
+For each business, extract:
+- `company_name` (official name)
+- `website` (URL, or null if not verifiable)
+- `description` (short summary of services)
+- `contact_phone` (or null)
+- `contact_email` (or null)
+- `postcode`
+- `sector` (from context)
+- `lead_score` (60–95, based on relevance)
+- `fit_reason` (why this business fits as a customer or partner)
+- `source_url` (where you found it)
+- `quick_telesales_summary` (2-3 sentences for telesales team)
+- `ai_business_intelligence` (comprehensive analysis, 300+ words)
+
+---
+
+## DYNAMIC INSIGHTS TO INCLUDE
+Generate these automatically based on the sector and company data:
+
+**Recommended Customer Type:**  
+{customer_type}
+
+**Recommended Partner Type:**  
+{partner_type}
+
+---
+
+## OUTPUT FORMAT
+Return only valid JSON in this structure:
+{{
+  "query_area": "{postcode} + {distance_miles} miles",
+  "sector": "{sector_name}",
+  "results": [
+    {{
+      "company_name": "string",
+      "website": "string or null",
+      "description": "string",
+      "contact_phone": "string or null",
+      "contact_email": "string or null",
+      "postcode": "string",
+      "lead_score": 60–95,
+      "fit_reason": "string",
+      "source_url": "string",
+      "recommended_customer_type": "{customer_type}",
+      "recommended_partner_type": "{partner_type}",
+      "quick_telesales_summary": "string",
+      "ai_business_intelligence": "string"
+    }}
+  ]
+}}
+
+---
+
+## QUALITY RULES
+- Prioritise *real, verifiable SMEs* over quantity.
+- Skip duplicates and large national chains.
+- Businesses must be **within {distance_miles} miles of {postcode}**.
+- If fewer than {max_results} genuine businesses are found, return only verified ones.
+{company_size_rule}
+- Never include fictional examples or template data.
+"""
+    
+    lead_generation_system = "You are a UK business research specialist with access to live web search. Analyze the provided information and return comprehensive business intelligence for UK companies. Always return valid JSON matching the schema provided."
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.LEAD_GENERATION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Lead Generation - Sector Search",
+            category=PromptCategory.LEAD_GENERATION.value,
+            system_prompt=lead_generation_system,
+            user_prompt_template=lead_generation_prompt_template,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=16000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "company_name": "Your company name",
+                "company_description": "Your company description",
+                "services": "Comma-separated list of your services",
+                "location": "Your company location",
+                "primary_market": "Your primary target market",
+                "is_installation_provider": "Whether you provide installation services (true/false)",
+                "sector_name": "Target sector name",
+                "sector_description": "Description of the target sector",
+                "postcode": "Search postcode",
+                "distance_miles": "Search radius in miles",
+                "prompt_type": "Campaign type (sector_search, company_list, etc.)",
+                "max_results": "Maximum number of results to return",
+                "company_size_category": "Target company size (Small, Medium, Large, Enterprise, or Any Size)",
+                "example_keywords": "Sector-specific keywords",
+                "customer_type": "Recommended customer type",
+                "partner_type": "Recommended partner type",
+                "company_size_filter": "Optional filter instruction for company size",
+                "company_size_rule": "Optional rule about company size prioritization"
+            },
+            description="AI prompt for lead generation campaigns - finding UK businesses by sector and location"
+        )
+        print("✅ Created lead_generation prompt")
+    else:
+        print("⏭️  lead_generation prompt already exists")
+    
+    # 11. Company Profile Analysis Prompt (for tenant's own company)
+    company_profile_prompt_template = """Analyze the following company profile and provide comprehensive business intelligence:
+
+COMPANY NAME: {company_name}
+
+COMPANY WEBSITES:
+{company_websites}
+
+COMPANY DESCRIPTION:
+{company_description}
+
+PRODUCTS & SERVICES:
+{products_services}
+
+UNIQUE SELLING POINTS:
+{unique_selling_points}
+
+TARGET MARKETS:
+{target_markets}
+
+SALES METHODOLOGY:
+{sales_methodology}
+
+ELEVATOR PITCH:
+{elevator_pitch}
+
+Please provide:
+1. Business model analysis
+2. Competitive positioning and strengths
+3. Ideal customer profile (ICP)
+4. Key pain points this company solves
+5. Recommended sales approach and messaging
+6. Cross-selling and upselling opportunities
+7. Common objections and how to handle them
+8. Industry trends and opportunities
+
+Format as JSON with keys: business_model, competitive_position, ideal_customer_profile, 
+pain_points_solved, sales_approach, cross_sell_opportunities, objection_handling, industry_trends
+"""
+    
+    company_profile_system = "You are a business intelligence analyst specializing in analyzing company profiles and providing actionable sales insights. Provide detailed, actionable insights in JSON format."
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.COMPANY_PROFILE_ANALYSIS.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Company Profile Analysis",
+            category=PromptCategory.COMPANY_PROFILE_ANALYSIS.value,
+            system_prompt=company_profile_system,
+            user_prompt_template=company_profile_prompt_template,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=15000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "company_name": "Company name",
+                "company_websites": "Comma-separated list of company websites",
+                "company_description": "Company description",
+                "products_services": "Comma-separated list of products and services",
+                "unique_selling_points": "Comma-separated list of unique selling points",
+                "target_markets": "Comma-separated list of target markets",
+                "sales_methodology": "Sales methodology description",
+                "elevator_pitch": "Company elevator pitch"
+            },
+            description="AI prompt for analyzing tenant's own company profile to generate business intelligence and sales insights"
+        )
+        print("✅ Created company_profile_analysis prompt")
+    else:
+        print("⏭️  company_profile_analysis prompt already exists")
+    
     print("✅ AI prompts seeding complete!")
 
 

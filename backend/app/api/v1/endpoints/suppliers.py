@@ -471,3 +471,90 @@ async def test_pricing(
             detail=f"Error testing pricing: {str(e)}"
         )
 
+
+@router.get("/{supplier_id}/products")
+async def get_supplier_products(
+    supplier_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """Get products from a supplier (from products table and supplier_pricing table)"""
+    try:
+        from app.models.product import Product
+        from app.models.supplier import Supplier, SupplierPricing
+        
+        # Get supplier
+        supplier = db.query(Supplier).filter(
+            Supplier.id == supplier_id,
+            Supplier.tenant_id == current_tenant.id
+        ).first()
+        
+        if not supplier:
+            raise HTTPException(status_code=404, detail="Supplier not found")
+        
+        # Get products linked to this supplier
+        products = db.query(Product).filter(
+            Product.supplier_id == supplier_id,
+            Product.tenant_id == current_tenant.id,
+            Product.is_active == True
+        ).all()
+        
+        # Get cached pricing for this supplier
+        cached_pricing = db.query(SupplierPricing).filter(
+            SupplierPricing.supplier_id == supplier_id,
+            SupplierPricing.is_active == True
+        ).all()
+        
+        # Combine products and pricing
+        result = []
+        
+        # Add products from products table
+        for product in products:
+            result.append({
+                'id': product.id,
+                'name': product.name,
+                'code': product.code,
+                'description': product.description,
+                'category': product.category,
+                'base_price': float(product.base_price) if product.base_price else None,
+                'unit': product.unit,
+                'part_number': product.part_number,
+                'source': 'products_table'
+            })
+        
+        # Add products from cached pricing (if not already in result)
+        existing_names = {p['name'].lower() for p in result}
+        for pricing in cached_pricing:
+            if pricing.product_name.lower() not in existing_names:
+                result.append({
+                    'id': pricing.id,
+                    'name': pricing.product_name,
+                    'code': pricing.product_code,
+                    'description': None,
+                    'category': None,
+                    'base_price': float(pricing.price) if pricing.price else None,
+                    'unit': 'each',
+                    'part_number': pricing.product_code,
+                    'source': 'cached_pricing',
+                    'last_updated': pricing.last_updated.isoformat() if pricing.last_updated else None
+                })
+        
+        return {
+            'supplier': {
+                'id': supplier.id,
+                'name': supplier.name,
+                'website': supplier.website
+            },
+            'products': result,
+            'count': len(result)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting supplier products: {str(e)}"
+        )
+

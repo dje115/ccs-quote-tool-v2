@@ -524,56 +524,48 @@ async def analyze_company_profile(
             db=db
         )
         
-        # Build context for AI analysis
-        context = f"""
-Analyze the following company profile and provide comprehensive business intelligence:
-
-COMPANY NAME: {current_tenant.company_name or current_tenant.name}
-
-COMPANY WEBSITES:
-{', '.join(current_tenant.company_websites or ['None provided - consider crawling these to gather more information'])}
-
-COMPANY DESCRIPTION:
-{current_tenant.company_description or 'Not provided'}
-
-PRODUCTS & SERVICES:
-{', '.join(current_tenant.products_services or [])}
-
-UNIQUE SELLING POINTS:
-{', '.join(current_tenant.unique_selling_points or [])}
-
-TARGET MARKETS:
-{', '.join(current_tenant.target_markets or [])}
-
-SALES METHODOLOGY:
-{current_tenant.sales_methodology or 'Not specified'}
-
-ELEVATOR PITCH:
-{current_tenant.elevator_pitch or 'Not provided'}
-
-Please provide:
-1. Business model analysis
-2. Competitive positioning and strengths
-3. Ideal customer profile (ICP)
-4. Key pain points this company solves
-5. Recommended sales approach and messaging
-6. Cross-selling and upselling opportunities
-7. Common objections and how to handle them
-8. Industry trends and opportunities
-
-Format as JSON with keys: business_model, competitive_position, ideal_customer_profile, 
-pain_points_solved, sales_approach, cross_sell_opportunities, objection_handling, industry_trends
-"""
+        # Get prompt from database
+        from app.services.ai_prompt_service import AIPromptService
+        from app.models.ai_prompt import PromptCategory
+        
+        prompt_service = AIPromptService(db, tenant_id=current_tenant.id)
+        prompt_obj = await prompt_service.get_prompt(
+            category=PromptCategory.COMPANY_PROFILE_ANALYSIS.value,
+            tenant_id=current_tenant.id
+        )
+        
+        if not prompt_obj:
+            raise HTTPException(
+                status_code=400,
+                detail="Company profile analysis prompt not configured. Please configure prompts in the admin section."
+            )
+        
+        # Render prompt with variables
+        rendered = prompt_service.render_prompt(prompt_obj, {
+            "company_name": current_tenant.company_name or current_tenant.name,
+            "company_websites": ', '.join(current_tenant.company_websites or ['None provided - consider crawling these to gather more information']),
+            "company_description": current_tenant.company_description or 'Not provided',
+            "products_services": ', '.join(current_tenant.products_services or []),
+            "unique_selling_points": ', '.join(current_tenant.unique_selling_points or []),
+            "target_markets": ', '.join(current_tenant.target_markets or []),
+            "sales_methodology": current_tenant.sales_methodology or 'Not specified',
+            "elevator_pitch": current_tenant.elevator_pitch or 'Not provided'
+        })
+        
+        user_prompt = rendered['user_prompt']
+        system_prompt = rendered['system_prompt']
+        model = rendered['model']
+        max_tokens = rendered['max_tokens']
         
         # Get AI analysis
         # Use the AI service to get analysis
         response = ai_service.openai_client.chat.completions.create(
-            model="gpt-5-mini",
+            model=model,
             messages=[
-                {"role": "system", "content": "You are a business intelligence analyst. Provide detailed, actionable insights in JSON format."},
-                {"role": "user", "content": context}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
-            max_completion_tokens=15000,
+            max_completion_tokens=max_tokens,
             timeout=180.0,
             response_format={"type": "json_object"}
         )

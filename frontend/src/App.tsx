@@ -35,6 +35,7 @@ import QuoteDetail from './pages/QuoteDetail';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import Suppliers from './pages/Suppliers';
+import PromptManagement from './pages/PromptManagement';
 
 const theme = createTheme({
   palette: {
@@ -231,7 +232,15 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" />}           />
+          <Route
+            path="/prompts"
+            element={
+              <ProtectedRoute>
+                <PromptManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/dashboard" />} />
           </Routes>
         </BrowserRouter>
       </WebSocketProvider>

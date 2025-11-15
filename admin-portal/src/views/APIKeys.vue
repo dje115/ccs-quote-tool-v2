@@ -2,10 +2,11 @@
   <div class="api-keys">
     <h1>Global API Keys</h1>
     
+    <!-- Required Services (Companies House, Google Maps) -->
     <el-card>
       <template #header>
-        <h3>System-wide API Keys</h3>
-        <p>These keys are used as fallbacks when tenant-specific keys are not configured.</p>
+        <h3>Required Services API Keys</h3>
+        <p>These keys are required for core functionality and used as fallbacks when tenant-specific keys are not configured.</p>
       </template>
       
       <el-form
@@ -13,34 +14,6 @@
         :model="apiKeys"
         label-width="200px"
       >
-        <el-form-item label="OpenAI API Key">
-          <div class="api-key-row">
-            <el-input
-              v-model="apiKeys.openai_api_key"
-              type="password"
-              placeholder="Enter OpenAI API key"
-              show-password
-            >
-              <template #append>
-                <el-button @click="testAPI('openai')" :loading="testing.openai">
-                  Test
-                </el-button>
-              </template>
-            </el-input>
-            <el-tag 
-              :type="getStatusColor(apiStatus.openai)" 
-              class="status-tag"
-              size="large"
-            >
-              {{ getStatusText(apiStatus.openai) }}
-            </el-tag>
-          </div>
-          <div class="help-text">
-            Used for AI analysis and lead scoring. Get your key from 
-            <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>
-          </div>
-        </el-form-item>
-        
         <el-form-item label="Companies House API Key">
           <div class="api-key-row">
             <el-input
@@ -121,6 +94,109 @@
       </div>
     </el-card>
     
+    <!-- AI Provider Keys -->
+    <el-card style="margin-top: 20px;">
+      <template #header>
+        <h3>AI Provider API Keys</h3>
+        <p>Configure API keys for multiple AI providers. These keys are used as system defaults and fallbacks for all tenants.</p>
+      </template>
+      
+      <div v-if="loadingProviders" style="text-align: center; padding: 20px;">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span style="margin-left: 10px;">Loading providers...</span>
+      </div>
+      
+      <div v-else>
+        <el-table :data="providerStatus" style="width: 100%">
+          <el-table-column prop="provider.name" label="Provider" width="200">
+            <template #default="{ row }">
+              <div>
+                <strong>{{ row.provider.name }}</strong>
+                <el-tag size="small" :type="row.provider.provider_type === 'on_premise' ? 'info' : 'success'" style="margin-left: 8px;">
+                  {{ row.provider.provider_type === 'on_premise' ? 'On-Premise' : 'Cloud' }}
+                </el-tag>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="API Key" min-width="300">
+            <template #default="{ row }">
+              <el-input
+                v-model="providerKeys[row.provider.id]"
+                type="password"
+                :placeholder="`Enter ${row.provider.name} API key`"
+                show-password
+                size="small"
+              >
+                <template #append>
+                  <el-button 
+                    @click="testProviderKey(row.provider.id)" 
+                    :loading="testingProviders[row.provider.id]"
+                    size="small"
+                  >
+                    Test
+                  </el-button>
+                </template>
+              </el-input>
+            </template>
+          </el-table-column>
+          <el-table-column label="Status" width="150">
+            <template #default="{ row }">
+              <el-tag 
+                :type="getProviderStatusColor(row)" 
+                size="large"
+              >
+                {{ getProviderStatusText(row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="Last Tested" width="180">
+            <template #default="{ row }">
+              <span v-if="row.last_tested">
+                {{ new Date(row.last_tested).toLocaleString() }}
+              </span>
+              <span v-else style="color: #909399;">Never</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Actions" width="120">
+            <template #default="{ row }">
+              <el-button 
+                type="primary" 
+                size="small" 
+                @click="saveProviderKey(row.provider.id)"
+                :loading="savingProviders[row.provider.id]"
+              >
+                Save
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        
+        <div style="margin-top: 20px;">
+          <el-button type="primary" @click="saveAllProviderKeys" :loading="savingAllProviders">
+            Save All Provider Keys
+          </el-button>
+          <el-button @click="loadProviderKeys">
+            Reset
+          </el-button>
+        </div>
+      </div>
+      
+      <!-- Provider Test Results -->
+      <div v-if="providerTestResults.length > 0" class="test-results" style="margin-top: 20px;">
+        <h4>Test Results</h4>
+        <div v-for="result in providerTestResults" :key="result.provider_id" class="test-result">
+          <el-alert
+            :title="`${result.provider_name} API`"
+            :type="result.success ? 'success' : 'error'"
+            :description="result.message || result.error"
+            show-icon
+            :closable="true"
+            @close="providerTestResults = providerTestResults.filter(r => r.provider_id !== result.provider_id)"
+          />
+        </div>
+      </div>
+    </el-card>
+    
     <!-- API Usage Stats -->
     <el-card style="margin-top: 20px;">
       <template #header>
@@ -155,25 +231,37 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { Loading } from '@element-plus/icons-vue'
 
 export default {
   name: 'APIKeys',
+  components: {
+    Loading
+  },
   setup() {
+    const router = useRouter()
     const saving = ref(false)
     const apiKeysFormRef = ref()
     const testResults = ref([])
+    const loadingProviders = ref(false)
+    const savingAllProviders = ref(false)
     
     const apiKeys = reactive({
-      openai_api_key: '',
       companies_house_api_key: '',
       google_maps_api_key: ''
     })
     
     const testing = reactive({
-      openai: false,
       companies_house: false,
       google_maps: false
     })
+    
+    const providerStatus = ref([])
+    const providerKeys = reactive({})
+    const testingProviders = reactive({})
+    const savingProviders = reactive({})
+    const providerTestResults = ref([])
     
     const usageStats = reactive({
       openai_calls: 0,
@@ -182,14 +270,12 @@ export default {
     })
     
     const apiStatus = reactive({
-      openai: 'not_configured', // not_configured, not_tested, working
       companies_house: 'not_configured',
       google_maps: 'not_configured'
     })
     
     const updateAPIStatus = () => {
       // Update status based on whether keys are configured and tested
-      apiStatus.openai = apiKeys.openai_api_key ? 'not_tested' : 'not_configured'
       apiStatus.companies_house = apiKeys.companies_house_api_key ? 'not_tested' : 'not_configured'
       apiStatus.google_maps = apiKeys.google_maps_api_key ? 'not_tested' : 'not_configured'
       
@@ -201,6 +287,167 @@ export default {
           apiStatus[result.api] = 'not_tested'
         }
       })
+    }
+    
+    const loadProviderKeys = async () => {
+      loadingProviders.value = true
+      try {
+        const token = localStorage.getItem('admin_token')
+        const response = await axios.get('http://localhost:8000/api/v1/provider-keys/status', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        providerStatus.value = response.data || []
+        
+        // Load existing keys into providerKeys reactive object
+        providerStatus.value.forEach(status => {
+          // Try to get key from system-level key (we'll need to fetch it separately or show masked)
+          // For now, we'll just show empty and let user enter new key
+          providerKeys[status.provider.id] = ''
+        })
+      } catch (error) {
+        console.error('Failed to load provider keys:', error)
+        if (error.response?.status === 401) {
+          localStorage.removeItem('admin_token')
+          router.push('/login')
+        } else {
+          ElMessage.error('Failed to load provider keys')
+        }
+      } finally {
+        loadingProviders.value = false
+      }
+    }
+    
+    const saveProviderKey = async (providerId) => {
+      savingProviders[providerId] = true
+      try {
+        const token = localStorage.getItem('admin_token')
+        const response = await axios.put(
+          `http://localhost:8000/api/v1/provider-keys/${providerId}?is_system=true`,
+          {
+            api_key: providerKeys[providerId] || '',
+            test_on_save: true
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        
+        ElMessage.success('Provider key saved and tested successfully!')
+        await loadProviderKeys()
+      } catch (error) {
+        console.error('Failed to save provider key:', error)
+        ElMessage.error('Failed to save provider key: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        savingProviders[providerId] = false
+      }
+    }
+    
+    const saveAllProviderKeys = async () => {
+      savingAllProviders.value = true
+      try {
+        const token = localStorage.getItem('admin_token')
+        const promises = Object.keys(providerKeys).map(providerId => {
+          if (providerKeys[providerId]) {
+            return axios.put(
+              `http://localhost:8000/api/v1/provider-keys/${providerId}?is_system=true`,
+              {
+                api_key: providerKeys[providerId],
+                test_on_save: true
+              },
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            )
+          }
+          return Promise.resolve()
+        })
+        
+        await Promise.all(promises)
+        ElMessage.success('All provider keys saved successfully!')
+        await loadProviderKeys()
+      } catch (error) {
+        console.error('Failed to save provider keys:', error)
+        ElMessage.error('Failed to save some provider keys')
+      } finally {
+        savingAllProviders.value = false
+      }
+    }
+    
+    const testProviderKey = async (providerId) => {
+      testingProviders[providerId] = true
+      try {
+        const token = localStorage.getItem('admin_token')
+        const response = await axios.post(
+          `http://localhost:8000/api/v1/provider-keys/${providerId}/test?is_system=true`,
+          providerKeys[providerId] ? { api_key: providerKeys[providerId] } : {},
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        
+        const provider = providerStatus.value.find(s => s.provider.id === providerId)?.provider
+        const providerName = provider?.name || 'Provider'
+        
+        // Remove existing result
+        providerTestResults.value = providerTestResults.value.filter(r => r.provider_id !== providerId)
+        
+        // Add new result
+        providerTestResults.value.push({
+          provider_id: providerId,
+          provider_name: providerName,
+          success: response.data.success,
+          message: response.data.message,
+          error: response.data.error
+        })
+        
+        if (response.data.success) {
+          ElMessage.success(`${providerName} API test successful!`)
+        } else {
+          ElMessage.error(`${providerName} API test failed: ${response.data.error || response.data.message}`)
+        }
+        
+        // Reload to update status
+        await loadProviderKeys()
+      } catch (error) {
+        const provider = providerStatus.value.find(s => s.provider.id === providerId)?.provider
+        const providerName = provider?.name || 'Provider'
+        
+        providerTestResults.value = providerTestResults.value.filter(r => r.provider_id !== providerId)
+        providerTestResults.value.push({
+          provider_id: providerId,
+          provider_name: providerName,
+          success: false,
+          error: error.response?.data?.detail || error.response?.data?.message || 'Test failed'
+        })
+        
+        ElMessage.error(`${providerName} API test failed`)
+      } finally {
+        testingProviders[providerId] = false
+      }
+    }
+    
+    const getProviderStatusColor = (status) => {
+      if (status.system_key_valid) return 'success'
+      if (status.has_system_key) return 'warning'
+      return 'danger'
+    }
+    
+    const getProviderStatusText = (status) => {
+      if (status.system_key_valid) return 'Valid'
+      if (status.has_system_key) return 'Not Tested'
+      return 'Not Configured'
     }
     
     const getStatusColor = (status) => {
@@ -346,6 +593,7 @@ export default {
     
     onMounted(() => {
       loadAPIKeys()
+      loadProviderKeys()
       loadUsageStats()
     })
     
@@ -361,7 +609,20 @@ export default {
       getStatusText,
       loadAPIKeys,
       saveAPIKeys,
-      testAPI
+      testAPI,
+      loadingProviders,
+      providerStatus,
+      providerKeys,
+      testingProviders,
+      savingProviders,
+      savingAllProviders,
+      providerTestResults,
+      loadProviderKeys,
+      saveProviderKey,
+      saveAllProviderKeys,
+      testProviderKey,
+      getProviderStatusColor,
+      getProviderStatusText
     }
   }
 }

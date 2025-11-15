@@ -15,14 +15,18 @@ from sqlalchemy.orm import Session
 from app.models import Tenant, Sector, Lead
 from app.services.ai_analysis_service import AIAnalysisService
 from app.services.companies_house_service import CompaniesHouseService
+from app.services.ai_prompt_service import AIPromptService
+from app.models.ai_prompt import PromptCategory
 from app.core.config import settings
+from app.services.ai_provider_service import AIProviderService
 
 
 class LeadGenerationService:
     def __init__(self, db: Session, tenant_id: int):
         self.db = db
         self.tenant_id = tenant_id
-        self.ai_service = AIAnalysisService(tenant_id=str(tenant_id), db=db)
+        self.provider_service = AIProviderService(db, tenant_id=str(tenant_id))
+        self.ai_service = AIAnalysisService(tenant_id=str(tenant_id), db=db)  # Keep for backward compatibility
         self.companies_house_service = CompaniesHouseService(api_key=self._get_api_keys()['companies_house_api_key'])
         
         # Initialize Google Maps client
@@ -122,78 +126,93 @@ class LeadGenerationService:
             
             print(f"🔍 Executing comprehensive AI analysis with web search for {len(company_names)} companies...")
             
-            # Build prompt for analyzing the company list (similar to dynamic search but with provided companies)
-            prompt = self._build_company_list_prompt(campaign_data, tenant_context, sector_data, company_names)
-            print(f"✅ Prompt built successfully, length: {len(prompt)}")
+            # Get prompt from database
+            print(f"🔍 Getting lead generation prompt from database...")
+            prompt_service = AIPromptService(self.db, tenant_id=str(self.tenant_id))
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.LEAD_GENERATION.value,
+                tenant_id=str(self.tenant_id)
+            )
             
-            print(f"🔍 About to call OpenAI API for company list analysis...")
+            if not prompt_obj:
+                raise Exception("Lead generation prompt not configured. Please configure prompts in the admin section.")
             
-            # Check if OpenAI client is properly initialized
-            if not hasattr(self.ai_service, 'openai_client') or self.ai_service.openai_client is None:
-                raise Exception("OpenAI client not initialized")
-            print(f"✅ OpenAI client is initialized")
+            # Generate dynamic customer/partner types
+            customer_type = self._generate_customer_type(tenant_context, sector_data)
+            partner_type = self._generate_partner_type(tenant_context, sector_data)
             
-            # Call OpenAI using responses.create() with web search (same pattern as dynamic search)
+            # Build company names list for the prompt
+            company_names_list = "\n".join([f"- {name}" for name in company_names])
+            
+            # Render prompt with variables (for company list analysis)
+            rendered = prompt_service.render_prompt(prompt_obj, {
+                "company_name": tenant_context.get('company_name', ''),
+                "company_description": tenant_context.get('company_description', ''),
+                "services": ', '.join(tenant_context.get('services', [])[:5]),
+                "location": tenant_context.get('location', ''),
+                "primary_market": tenant_context.get('primary_market', ''),
+                "is_installation_provider": str(tenant_context.get('is_installation_provider', False)),
+                "sector_name": sector_data.get('sector_name', ''),
+                "sector_description": sector_data.get('sector_description', ''),
+                "postcode": campaign_data.get('postcode', 'UK'),
+                "distance_miles": str(campaign_data.get('distance_miles', 50)),
+                "prompt_type": "company_list",
+                "max_results": str(len(company_names)),
+                "company_size_category": campaign_data.get('company_size_category', 'Any Size'),
+                "example_keywords": sector_data.get('example_keywords', 'Industry-specific keywords'),
+                "customer_type": customer_type,
+                "partner_type": partner_type,
+                "company_size_filter": "",
+                "company_size_rule": ""
+            })
+            
+            # Modify prompt for company list - add company names
+            prompt = rendered['user_prompt']
+            # Insert company names list into prompt (replace placeholder or append)
+            prompt = prompt.replace("{company_names_list}", company_names_list)
+            # If no placeholder, append company names
+            if "{company_names_list}" not in rendered['user_prompt']:
+                prompt = f"{prompt}\n\n## COMPANIES TO ANALYZE:\n{company_names_list}"
+            
+            system_prompt = rendered['system_prompt']
+            print(f"✅ Prompt retrieved from database, length: {len(prompt)}")
+            
+            print(f"🔍 About to call AI provider for company list analysis...")
+            
+            # Use AIProviderService with web search support
             try:
-                # Build input string (responses.create format)
-                system_message = f"You are a UK business research specialist with access to live web search. Analyze the provided list of {len(company_names)} companies and return comprehensive business intelligence for each. Use online sources to verify and enhance company information. Return ONLY valid JSON matching the schema provided."
-                input_string = f"{system_message}\n\n{prompt}"
+                # Enhance system prompt with web search instruction
+                enhanced_system_prompt = f"{system_prompt}\n\nAnalyze the provided list of {len(company_names)} companies and return comprehensive business intelligence for each. Use online sources to verify and enhance company information."
                 
-                response = self.ai_service.openai_client.responses.create(
-                    model="gpt-5-mini",
-                    input=input_string,
+                # Generate completion with web search tools
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=prompt_obj,
+                    system_prompt=enhanced_system_prompt,
+                    user_prompt=prompt,
+                    use_responses_api=True,  # Use responses API for web search
                     tools=[{"type": "web_search_preview"}],
                     tool_choice="auto"
                 )
-                print(f"✅ OpenAI API call completed for company list, processing response...")
+                
+                print(f"✅ AI provider call completed for company list, processing response...")
+                
+                # Extract response content
+                result_text = provider_response.content
+                sources = provider_response.sources or []
+                
+                if not result_text:
+                    print(f"❌ No response content extracted")
+                    return []
+                
+                print(f"✅ AI response extracted, length: {len(result_text)}")
+                print(f"🔍 First 500 chars: {result_text[:500]}...")
+                
             except Exception as api_error:
-                print(f"❌ OpenAI API call failed: {api_error}")
+                print(f"❌ AI provider call failed: {api_error}")
                 print(f"❌ Error type: {type(api_error).__name__}")
                 import traceback
                 traceback.print_exc()
                 raise api_error
-            
-            # Parse response from responses.create() API (same pattern as dynamic search)
-            print(f"✅ AI search completed, processing response...")
-            
-            # Extract response content using exact format from dynamic search
-            result_text = None
-            sources = []
-            
-            # First, get the main summary from output_text (primary method)
-            if hasattr(response, 'output_text') and response.output_text:
-                result_text = response.output_text.strip()
-                print(f"🔍 Using output_text: {len(result_text)} chars")
-            elif hasattr(response, 'choices') and len(response.choices) > 0:
-                result_text = response.choices[0].message.content.strip()
-                print(f"🔍 Using choices[0].message.content (fallback): {len(result_text)} chars")
-            
-            # Extract structured web results as per dynamic search pattern
-            if hasattr(response, 'output') and isinstance(response.output, list):
-                print(f"🔍 Processing structured output with {len(response.output)} items")
-                for item in response.output:
-                    if isinstance(item, dict) and "content" in item:
-                        for block in item["content"]:
-                            if block.get("type") == "output_text" and not result_text:
-                                result_text = block.get("text", "").strip()
-                                print(f"🔍 Found text in structured output: {len(result_text)} chars")
-                            elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
-                                # Extract web search results
-                                web_results = block.get("results", [])
-                                print(f"🔍 Found {len(web_results)} web search results")
-                                for r in web_results:
-                                    sources.append({
-                                        "title": r.get("title", "Untitled"),
-                                        "url": r.get("url", ""),
-                                        "snippet": r.get("snippet", "")
-                                    })
-            
-            if not result_text:
-                print(f"❌ No response content extracted")
-                return []
-            
-            print(f"✅ AI response extracted, length: {len(result_text)}")
-            print(f"🔍 First 500 chars: {result_text[:500]}...")
             
             # Parse JSON response with robust error handling (same as dynamic search)
             search_results = None
@@ -301,101 +320,92 @@ class LeadGenerationService:
             sector_data = self._get_sector_data(campaign_data.get('sector_name'))
             print(f"✅ Sector data retrieved: {sector_data.get('sector_name', 'Unknown')}")
             
-            # Build comprehensive prompt
-            print(f"🔍 Building comprehensive prompt...")
-            prompt = self._build_comprehensive_prompt(campaign_data, tenant_context, sector_data)
-            print(f"✅ Prompt built successfully, length: {len(prompt)}")
+            # Get prompt from database
+            print(f"🔍 Getting lead generation prompt from database...")
+            prompt_service = AIPromptService(self.db, tenant_id=str(self.tenant_id))
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.LEAD_GENERATION.value,
+                tenant_id=str(self.tenant_id)
+            )
             
-            print(f"🔍 About to call OpenAI API...")
+            if not prompt_obj:
+                raise Exception("Lead generation prompt not configured. Please configure prompts in the admin section.")
             
-            # Check if OpenAI client is properly initialized
-            if not hasattr(self.ai_service, 'openai_client') or self.ai_service.openai_client is None:
-                raise Exception("OpenAI client not initialized")
-            print(f"✅ OpenAI client is initialized")
+            # Generate dynamic customer/partner types
+            customer_type = self._generate_customer_type(tenant_context, sector_data)
+            partner_type = self._generate_partner_type(tenant_context, sector_data)
             
-            # Call OpenAI using responses.create() with web search (working format from ai_analysis_service)
-            print(f"🔍 Calling OpenAI API with responses.create() and web search...")
+            # Build company size filter/rule text
+            company_size_filter = ""
+            company_size_rule = "- Prioritize SMEs and small-to-medium enterprises over large corporations."
+            if campaign_data.get('company_size_category'):
+                size_desc = self._get_company_size_description(campaign_data.get('company_size_category'))
+                company_size_filter = f"5. Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({size_desc})"
+                company_size_rule = f"- Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({size_desc})"
+            
+            # Render prompt with variables
+            rendered = prompt_service.render_prompt(prompt_obj, {
+                "company_name": tenant_context.get('company_name', ''),
+                "company_description": tenant_context.get('company_description', ''),
+                "services": ', '.join(tenant_context.get('services', [])[:5]),
+                "location": tenant_context.get('location', ''),
+                "primary_market": tenant_context.get('primary_market', ''),
+                "is_installation_provider": str(tenant_context.get('is_installation_provider', False)),
+                "sector_name": sector_data.get('sector_name', ''),
+                "sector_description": sector_data.get('sector_description', ''),
+                "postcode": campaign_data.get('postcode', 'UK'),
+                "distance_miles": str(campaign_data.get('distance_miles', 50)),
+                "prompt_type": campaign_data.get('prompt_type', 'sector_search'),
+                "max_results": str(campaign_data.get('max_results', 20)),
+                "company_size_category": campaign_data.get('company_size_category', 'Any Size'),
+                "example_keywords": sector_data.get('example_keywords', 'Industry-specific keywords'),
+                "customer_type": customer_type,
+                "partner_type": partner_type,
+                "company_size_filter": company_size_filter,
+                "company_size_rule": company_size_rule
+            })
+            
+            prompt = rendered['user_prompt']
+            system_prompt = rendered['system_prompt']
+            print(f"✅ Prompt retrieved from database, length: {len(prompt)}")
+            
+            print(f"🔍 About to call AI provider with web search...")
+            
+            # Use AIProviderService with web search support
             try:
-                # Build input string (responses.create format from user example)
                 max_results = campaign_data.get('max_results', 20)
-                system_message = f"You are a UK business research specialist with access to live web search. Use online sources to find REAL, VERIFIED UK businesses. Focus on finding the top {max_results} most relevant results. Return ONLY valid JSON matching the schema provided."
-                input_string = f"{system_message}\n\n{prompt}"
+                # Enhance system prompt with web search instruction
+                enhanced_system_prompt = f"{system_prompt}\n\nUse online sources to find REAL, VERIFIED UK businesses. Focus on finding the top {max_results} most relevant results."
                 
-                response = self.ai_service.openai_client.responses.create(
-                    model="gpt-5-mini",
-                    input=input_string,
+                # Generate completion with web search tools
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=prompt_obj,
+                    system_prompt=enhanced_system_prompt,
+                    user_prompt=prompt,
+                    use_responses_api=True,  # Use responses API for web search
                     tools=[{"type": "web_search_preview"}],
                     tool_choice="auto"
                 )
-                print(f"✅ OpenAI API call completed, processing response...")
+                
+                print(f"✅ AI provider call completed, processing response...")
+                
+                # Extract response content
+                result_text = provider_response.content
+                sources = provider_response.sources or []
+                
+                if not result_text:
+                    print(f"❌ No response content extracted")
+                    return []
+                
+                print(f"✅ AI response extracted, length: {len(result_text)}")
+                print(f"🔍 First 500 chars: {result_text[:500]}...")
+                
             except Exception as api_error:
-                print(f"❌ OpenAI API call failed: {api_error}")
+                print(f"❌ AI provider call failed: {api_error}")
                 print(f"❌ Error type: {type(api_error).__name__}")
                 import traceback
                 traceback.print_exc()
                 raise api_error
-            
-            # Parse response from responses.create() API
-            print(f"✅ AI search completed, processing response...")
-            print(f"🔍 Response type: {type(response)}")
-            print(f"🔍 Response attributes: {dir(response)}")
-            
-            # Extract response content using exact format from user example
-            result_text = None
-            sources = []
-            
-            # First, get the main summary from output_text (primary method from user example)
-            if hasattr(response, 'output_text') and response.output_text:
-                result_text = response.output_text.strip()
-                print(f"🔍 Using output_text (responses.create format): {len(result_text)} chars")
-            elif hasattr(response, 'choices') and len(response.choices) > 0:
-                result_text = response.choices[0].message.content.strip()
-                print(f"🔍 Using choices[0].message.content (fallback): {len(result_text)} chars")
-            
-            # Extract structured web results as per user example
-            if hasattr(response, 'output') and isinstance(response.output, list):
-                print(f"🔍 Processing structured output with {len(response.output)} items")
-                for item in response.output:
-                    if isinstance(item, dict) and "content" in item:
-                        for block in item["content"]:
-                            if block.get("type") == "output_text" and not result_text:
-                                # Use this if we haven't found text yet
-                                result_text = block.get("text", "").strip()
-                                print(f"🔍 Found text in structured output: {len(result_text)} chars")
-                            elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
-                                # Extract web search results as per user example, limiting to max_results
-                                web_results = block.get("results", [])
-                                max_results = campaign_data.get('max_results', 20)  # Default to 20 if not set
-                                print(f"🔍 Found {len(web_results)} web search results, limiting to {max_results}")
-                                for r in web_results[:max_results]:  # Limit results like in user example
-                                    sources.append({
-                                        "title": r.get("title", "Untitled"),
-                                        "url": r.get("url", ""),
-                                        "snippet": r.get("snippet", "")
-                                    })
-                
-                # If we still don't have text, try fallback
-                if not result_text:
-                    result_text = '\n'.join(str(item) for item in response.output).strip()
-                    print(f"🔍 Using output list join (fallback): {len(result_text)} chars")
-            elif hasattr(response, 'output'):
-                result_text = str(response.output).strip()
-                print(f"🔍 Using output string: {len(result_text)} chars")
-            
-            if not result_text:
-                result_text = str(response).strip()
-                print(f"🔍 Using str(response) fallback: {len(result_text)} chars")
-            
-            if not result_text:
-                print(f"❌ No response content extracted")
-                return []
-            
-            print(f"✅ AI response extracted, length: {len(result_text)}")
-            print(f"🔍 Web sources found: {len(sources)}")
-            if sources:
-                for i, source in enumerate(sources[:3]):  # Show first 3 sources
-                    print(f"🔍 Source {i+1}: {source.get('title', 'No title')}")
-            print(f"🔍 First 500 chars: {result_text[:500]}...")
             
             # Parse JSON response with robust error handling
             search_results = None

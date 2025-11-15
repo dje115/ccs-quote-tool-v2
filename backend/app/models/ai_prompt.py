@@ -27,6 +27,7 @@ class PromptCategory(str, enum.Enum):
     QUOTE_ANALYSIS = "quote_analysis"
     PRODUCT_SEARCH = "product_search"
     BUILDING_ANALYSIS = "building_analysis"
+    COMPANY_PROFILE_ANALYSIS = "company_profile_analysis"
 
 
 class AIPrompt(Base, TimestampMixin):
@@ -45,10 +46,16 @@ class AIPrompt(Base, TimestampMixin):
     system_prompt = Column(Text, nullable=False)
     user_prompt_template = Column(Text, nullable=False)
     
-    # Model configuration
+    # Model configuration (legacy - kept for backward compatibility)
     model = Column(String(50), default="gpt-5-mini", nullable=False)
     temperature = Column(Float, default=0.7, nullable=False)
     max_tokens = Column(Integer, default=8000, nullable=False)
+    
+    # Provider configuration (new multi-provider support)
+    provider_id = Column(String(36), ForeignKey("ai_providers.id"), nullable=True, index=True)
+    provider_model = Column(String(100), nullable=True)  # Specific model name for the provider
+    provider_settings = Column(JSON, nullable=True)  # Provider-specific settings (temperature, max_tokens, top_p, etc.)
+    use_system_default = Column(Boolean, default=True, nullable=False)  # If true, uses system default provider; if false, uses prompt-specific provider
     
     # Versioning and status
     version = Column(Integer, default=1, nullable=False)
@@ -66,6 +73,7 @@ class AIPrompt(Base, TimestampMixin):
     tenant = relationship("Tenant", backref="ai_prompts")
     creator = relationship("User", backref="created_prompts")
     versions = relationship("AIPromptVersion", back_populates="prompt", cascade="all, delete-orphan")
+    provider = relationship("AIProvider", backref="prompts")
     
     def __repr__(self):
         return f"<AIPrompt {self.name} ({self.category}) v{self.version}>"
@@ -95,6 +103,12 @@ class AIPromptVersion(Base, TimestampMixin):
     model = Column(String(50), nullable=False)
     temperature = Column(Float, nullable=False)
     max_tokens = Column(Integer, nullable=False)
+    
+    # Provider configuration snapshot
+    provider_id = Column(String(36), nullable=True)
+    provider_model = Column(String(100), nullable=True)
+    provider_settings = Column(JSON, nullable=True)
+    use_system_default = Column(Boolean, default=True, nullable=False)
     
     # Who created this version
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True)

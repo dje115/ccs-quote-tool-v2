@@ -29,7 +29,8 @@ import {
   Group as GroupIcon,
   Business as CompetitorsIcon,
   Architecture as ArchitectureIcon,
-  LocalShipping as LocalShippingIcon
+  LocalShipping as LocalShippingIcon,
+  Psychology as PsychologyIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -120,8 +121,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: t('navigation.planning'), icon: <ArchitectureIcon />, path: '/planning-applications' },
     { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
-    { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
-    { text: t('navigation.competitors'), icon: <CompetitorsIcon />, path: '/competitors' },
+        { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
+        { text: t('navigation.competitors'), icon: <CompetitorsIcon />, path: '/competitors' },
+        { text: 'AI Prompts', icon: <PsychologyIcon />, path: '/prompts', adminOnly: true },
     { text: t('navigation.users'), icon: <GroupIcon />, path: '/users' },
     { text: t('navigation.settings'), icon: <SettingsIcon />, path: '/settings' },
   ];
@@ -135,17 +137,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </Toolbar>
       <Divider />
       <List>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-            >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+        {menuItems.map((item) => {
+          // Check if item requires admin access
+          const user = JSON.parse(localStorage.getItem('user') || '{}');
+          const isAdmin = user.role === 'super_admin' || user.role === 'admin' || user.role === 'tenant_admin';
+          if ((item as any).adminOnly && !isAdmin) {
+            return null;
+          }
+          
+          return (
+            <ListItem key={item.text} disablePadding>
+              <ListItemButton
+                selected={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+              >
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
       <Divider />
       <List>

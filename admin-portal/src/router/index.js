@@ -5,6 +5,7 @@ import Tenants from '../views/Tenants.vue'
 import Users from '../views/Users.vue'
 import APIKeys from '../views/APIKeys.vue'
 import Settings from '../views/Settings.vue'
+import AIPrompts from '../views/AIPrompts.vue'
 
 const routes = [
   {
@@ -44,6 +45,12 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: Settings,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/ai-prompts',
+    name: 'AIPrompts',
+    component: AIPrompts,
     meta: { requiresAuth: true }
   }
 ]
