@@ -799,7 +799,16 @@ export default {
       saveAllProviderKeys,
       testProviderKey,
       getProviderStatusColor,
-      getProviderStatusText
+      getProviderStatusText,
+      formatErrorMessage,
+      settingsDialogVisible,
+      editingProvider,
+      savingSettings,
+      providerSettingsForm,
+      supportedModelsText,
+      defaultSettingsText,
+      editProviderSettings,
+      saveProviderSettings
     }
   }
 }
