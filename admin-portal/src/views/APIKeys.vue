@@ -157,7 +157,7 @@
               <span v-else style="color: #909399;">Never</span>
             </template>
           </el-table-column>
-          <el-table-column label="Actions" width="120">
+          <el-table-column label="Actions" width="200">
             <template #default="{ row }">
               <el-button 
                 type="primary" 
@@ -166,6 +166,13 @@
                 :loading="savingProviders[row.provider.id]"
               >
                 Save
+              </el-button>
+              <el-button 
+                type="info" 
+                size="small" 
+                @click="editProviderSettings(row.provider)"
+              >
+                Settings
               </el-button>
             </template>
           </el-table-column>
@@ -224,6 +231,60 @@
         </el-col>
       </el-row>
     </el-card>
+    
+    <!-- Provider Settings Dialog -->
+    <el-dialog
+      v-model="settingsDialogVisible"
+      :title="`Edit Settings: ${editingProvider?.name || ''}`"
+      width="600px"
+    >
+      <el-form :model="providerSettingsForm" label-width="150px">
+        <el-form-item label="Base URL">
+          <el-input
+            v-model="providerSettingsForm.base_url"
+            placeholder="e.g., https://api.openai.com/v1"
+          />
+          <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+            API endpoint URL. Leave empty for default.
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="Supported Models">
+          <el-input
+            v-model="supportedModelsText"
+            type="textarea"
+            :rows="4"
+            placeholder="Enter models separated by commas or newlines"
+          />
+          <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+            List of supported model names (one per line or comma-separated)
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="Default Settings">
+          <el-input
+            v-model="defaultSettingsText"
+            type="textarea"
+            :rows="6"
+            placeholder='{"temperature": 0.7, "max_tokens": 8000, "top_p": 1.0}'
+          />
+          <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+            JSON object with default settings (temperature, max_tokens, top_p, etc.)
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="Active">
+          <el-switch v-model="providerSettingsForm.is_active" />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="settingsDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" @click="saveProviderSettings" :loading="savingSettings">
+          Save Settings
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -262,6 +323,19 @@ export default {
     const testingProviders = reactive({})
     const savingProviders = reactive({})
     const providerTestResults = ref([])
+    
+    // Provider settings dialog
+    const settingsDialogVisible = ref(false)
+    const editingProvider = ref(null)
+    const savingSettings = ref(false)
+    const providerSettingsForm = reactive({
+      base_url: '',
+      supported_models: [],
+      default_settings: {},
+      is_active: true
+    })
+    const supportedModelsText = ref('')
+    const defaultSettingsText = ref('')
     
     const usageStats = reactive({
       openai_calls: 0,
@@ -484,6 +558,73 @@ export default {
         return JSON.stringify(error)
       }
       return String(error)
+    }
+    
+    const editProviderSettings = (provider) => {
+      editingProvider.value = provider
+      providerSettingsForm.base_url = provider.base_url || ''
+      providerSettingsForm.supported_models = provider.supported_models || []
+      providerSettingsForm.default_settings = provider.default_settings || {}
+      providerSettingsForm.is_active = provider.is_active !== false
+      
+      // Convert arrays/objects to text for editing
+      supportedModelsText.value = Array.isArray(provider.supported_models) 
+        ? provider.supported_models.join('\n')
+        : ''
+      defaultSettingsText.value = provider.default_settings
+        ? JSON.stringify(provider.default_settings, null, 2)
+        : '{}'
+      
+      settingsDialogVisible.value = true
+    }
+    
+    const saveProviderSettings = async () => {
+      savingSettings.value = true
+      try {
+        // Parse supported models from text
+        const models = supportedModelsText.value
+          .split(/[,\n]/)
+          .map(m => m.trim())
+          .filter(m => m.length > 0)
+        
+        // Parse default settings from JSON
+        let defaultSettings = {}
+        try {
+          defaultSettings = JSON.parse(defaultSettingsText.value)
+        } catch (e) {
+          ElMessage.error('Invalid JSON in Default Settings')
+          savingSettings.value = false
+          return
+        }
+        
+        const token = localStorage.getItem('admin_token')
+        const response = await axios.put(
+          `http://localhost:8000/api/v1/provider-keys/providers/${editingProvider.value.id}/settings`,
+          {
+            base_url: providerSettingsForm.base_url || null,
+            supported_models: models,
+            default_settings: defaultSettings,
+            is_active: providerSettingsForm.is_active
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        
+        ElMessage.success('Provider settings saved successfully!')
+        settingsDialogVisible.value = false
+        
+        // Reload providers to show updated settings
+        await loadProviderKeys()
+      } catch (error) {
+        console.error('Failed to save provider settings:', error)
+        ElMessage.error('Failed to save provider settings: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        savingSettings.value = false
+      }
     }
     
     const getStatusColor = (status) => {

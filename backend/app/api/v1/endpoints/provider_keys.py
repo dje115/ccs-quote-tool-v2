@@ -60,6 +60,14 @@ class ProviderKeyTestResponse(BaseModel):
     model: Optional[str] = None
 
 
+class ProviderSettingsUpdate(BaseModel):
+    """Request to update provider settings"""
+    base_url: Optional[str] = None
+    supported_models: Optional[List[str]] = None
+    default_settings: Optional[dict] = None
+    is_active: Optional[bool] = None
+
+
 @router.get("/providers", response_model=List[ProviderResponse])
 async def list_providers(
     current_user: User = Depends(get_current_user),
@@ -321,6 +329,66 @@ async def save_provider_key(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error saving provider key: {str(e)}"
+        )
+
+
+@router.put("/providers/{provider_id}/settings", response_model=ProviderResponse)
+async def update_provider_settings(
+    provider_id: str,
+    settings: ProviderSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update provider settings (base_url, supported_models, default_settings) - Admin only"""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    try:
+        from app.services.ai_provider_service import AIProviderService
+        from datetime import datetime, timezone
+        
+        provider = db.query(AIProvider).filter(AIProvider.id == provider_id).first()
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Provider not found"
+            )
+        
+        # Update fields if provided
+        if settings.base_url is not None:
+            provider.base_url = settings.base_url
+        if settings.supported_models is not None:
+            provider.supported_models = settings.supported_models
+        if settings.default_settings is not None:
+            provider.default_settings = settings.default_settings
+        if settings.is_active is not None:
+            provider.is_active = settings.is_active
+        
+        provider.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(provider)
+        
+        return ProviderResponse(
+            id=provider.id,
+            name=provider.name,
+            slug=provider.slug,
+            provider_type=provider.provider_type,
+            base_url=provider.base_url,
+            supported_models=provider.supported_models,
+            default_settings=provider.default_settings,
+            is_active=provider.is_active
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating provider settings: {str(e)}"
         )
 
 
