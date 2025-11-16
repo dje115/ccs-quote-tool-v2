@@ -132,20 +132,22 @@ async def test_openai_api(
                 message="OpenAI API key not configured. Please add your API key in Settings."
             )
         
-        # Test with a simple request - using proven v1 approach
+        # Test with a simple request - using AIProviderService for proper model handling
         try:
-            client = OpenAI(api_key=openai_api_key)
+            from app.services.ai_provider_service import AIProviderService
             
-            response = client.chat.completions.create(
+            provider_service = AIProviderService(db, tenant_id=current_user.tenant_id)
+            
+            # Use generate_with_rendered_prompts to handle model-specific parameters
+            response = await provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt="You are a helpful assistant.",
+                user_prompt="Say 'Connection successful'",
                 model="gpt-5",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": "Say 'Connection successful'"}
-                ],
-                max_completion_tokens=50
+                max_tokens=50
             )
             
-            result = response.choices[0].message.content
+            result = response.content
             
             return APITestResponse(
                 success=True,
@@ -557,20 +559,22 @@ async def analyze_company_profile(
         model = rendered['model']
         max_tokens = rendered['max_tokens']
         
-        # Get AI analysis
-        # Use the AI service to get analysis
-        response = ai_service.openai_client.chat.completions.create(
+        # Get AI analysis using AIProviderService for proper model handling
+        from app.services.ai_provider_service import AIProviderService
+        
+        provider_service = AIProviderService(db, tenant_id=current_tenant.id)
+        
+        response = await provider_service.generate_with_rendered_prompts(
+            prompt=prompt_obj,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_completion_tokens=max_tokens,
+            max_tokens=max_tokens,
             timeout=180.0,
             response_format={"type": "json_object"}
         )
         
-        analysis_text = response.choices[0].message.content
+        analysis_text = response.content
         
         # Parse JSON response
         import json
@@ -851,18 +855,22 @@ Format your response as JSON with these keys:
 If information is missing or unclear, make reasonable inferences based on the company name and industry.
 """
         
-        response = ai_service.openai_client.chat.completions.create(
+        # Use AIProviderService for proper model handling
+        from app.services.ai_provider_service import AIProviderService
+        
+        provider_service = AIProviderService(db, tenant_id=current_tenant.id)
+        
+        response = await provider_service.generate_with_rendered_prompts(
+            prompt=None,
+            system_prompt="You are a business intelligence analyst specializing in company research and data extraction. Provide detailed, accurate information in JSON format.",
+            user_prompt=analysis_prompt,
             model="gpt-5-mini",
-            messages=[
-                {"role": "system", "content": "You are a business intelligence analyst specializing in company research and data extraction. Provide detailed, accurate information in JSON format."},
-                {"role": "user", "content": analysis_prompt}
-            ],
-            max_completion_tokens=20000,
+            max_tokens=20000,
             timeout=240.0,
             response_format={"type": "json_object"}
         )
         
-        result_text = response.choices[0].message.content
+        result_text = response.content
         import json
         result = json.loads(result_text)
         

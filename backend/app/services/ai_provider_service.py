@@ -33,11 +33,23 @@ class AIProviderService:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Normalize parameters based on model-specific requirements
+        Normalize AI model parameters based on provider and model-specific requirements
+        
+        This ensures that parameters are adjusted according to each model's capabilities:
+        - Some models don't support custom temperature (must use default)
+        - Some models have token limits
+        - Different providers use different parameter names
+        - Temperature ranges are validated per provider
+        
+        Supported Providers:
+        - OpenAI: Handles o1, o3, GPT-5 models (no custom temp), GPT-4/3.5 (token limits)
+        - Anthropic: Handles Claude 3/3.5 models (token limits, temp 0.0-1.0)
+        - Google: Handles Gemini models (token limits, temp 0.0-2.0)
+        - Other: Generic validation (temp 0.0-2.0)
         
         Args:
-            model: Model name (e.g., "o1-mini", "gpt-4", "claude-3-opus")
-            provider_slug: Provider slug (e.g., "openai", "anthropic")
+            model: Model name (e.g., "o1-mini", "gpt-4", "claude-3-opus", "gemini-pro")
+            provider_slug: Provider slug (e.g., "openai", "anthropic", "google")
             temperature: Requested temperature value
             max_tokens: Requested max tokens
             **kwargs: Additional parameters
@@ -52,47 +64,107 @@ class AIProviderService:
             "changes": []
         }
         
-        # OpenAI models that don't support custom temperature
-        openai_no_temp_models = [
-            "o1", "o1-mini", "o1-preview", "o1-2024-09-12",
-            "o3", "o3-mini"  # Future-proofing
-        ]
-        
-        # Anthropic Claude models with specific requirements
-        claude_models = ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
-                        "claude-3-5-sonnet", "claude-3-5-opus"]
-        
         model_lower = model.lower()
         
-        # Handle OpenAI models without temperature support
-        if provider_slug == "openai" and model_lower in [m.lower() for m in openai_no_temp_models]:
-            if temperature != 1.0:
-                normalized["skip_temperature"] = True
-                normalized["changes"].append(f"Model {model} only supports temperature=1, skipping temperature parameter")
+        # ===== OPENAI MODELS =====
+        if provider_slug == "openai" or provider_slug == "openai_compatible":
+            # OpenAI models that don't support custom temperature
+            openai_no_temp_models = [
+                "o1", "o1-mini", "o1-preview", "o1-2024-09-12",
+                "o3", "o3-mini",  # Future-proofing
+                "gpt-5-mini", "gpt-5", "gpt-5-turbo"  # GPT-5 models only support default temperature=1
+            ]
+            
+            # Check if model doesn't support custom temperature
+            if model_lower in [m.lower() for m in openai_no_temp_models]:
+                if temperature != 1.0:
+                    normalized["skip_temperature"] = True
+                    normalized["changes"].append(f"Model {model} only supports temperature=1, skipping temperature parameter")
+            
+            # OpenAI o1 models have different token limits
+            if model_lower.startswith("o1"):
+                # o1 models have a max output of 16,384 tokens
+                if max_tokens > 16384:
+                    normalized["max_tokens"] = 16384
+                    normalized["changes"].append(f"Model {model} max_tokens capped at 16,384")
+            
+            # OpenAI GPT-4 and GPT-3.5 models typically support up to 16,384 tokens
+            elif model_lower.startswith("gpt-4") or model_lower.startswith("gpt-3.5"):
+                if max_tokens > 16384:
+                    normalized["max_tokens"] = 16384
+                    normalized["changes"].append(f"Model {model} max_tokens capped at 16,384")
+            
+            # Validate temperature range for OpenAI (0.0-2.0)
+            if not normalized["skip_temperature"]:
+                if temperature < 0.0:
+                    normalized["temperature"] = 0.0
+                    normalized["changes"].append(f"Temperature clamped to minimum 0.0")
+                elif temperature > 2.0:
+                    normalized["temperature"] = 2.0
+                    normalized["changes"].append(f"Temperature clamped to maximum 2.0")
         
-        # Handle max_tokens limits for specific models
-        # OpenAI o1 models have different token limits
-        if provider_slug == "openai" and model_lower.startswith("o1"):
-            # o1 models have a max output of 16,384 tokens
-            if max_tokens > 16384:
-                normalized["max_tokens"] = 16384
-                normalized["changes"].append(f"Model {model} max_tokens capped at 16,384")
+        # ===== ANTHROPIC CLAUDE MODELS =====
+        elif provider_slug == "anthropic":
+            claude_models = ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
+                            "claude-3-5-sonnet", "claude-3-5-opus", "claude-3-5-haiku"]
+            
+            # Anthropic Claude models have max output token limits
+            if any(model_lower.startswith(c.lower()) for c in claude_models):
+                # Claude 3.5 models and opus/sonnet have max output of 8,192 tokens
+                if "3.5" in model_lower or "opus" in model_lower or "sonnet" in model_lower:
+                    max_output = 8192
+                else:
+                    max_output = 4096  # Claude 3 haiku
+                
+                if max_tokens > max_output:
+                    normalized["max_tokens"] = max_output
+                    normalized["changes"].append(f"Model {model} max_tokens capped at {max_output}")
+            
+            # Validate temperature range for Anthropic (0.0-1.0)
+            if temperature < 0.0:
+                normalized["temperature"] = 0.0
+                normalized["changes"].append(f"Temperature clamped to minimum 0.0")
+            elif temperature > 1.0:
+                normalized["temperature"] = 1.0
+                normalized["changes"].append(f"Temperature clamped to maximum 1.0 (Anthropic limit)")
         
-        # Anthropic Claude models have max output token limits
-        if provider_slug == "anthropic" and any(model_lower.startswith(c.lower()) for c in claude_models):
-            # Claude 3 models have max output of 4,096 tokens (some up to 8,192)
-            if "opus" in model_lower or "sonnet" in model_lower:
-                max_output = 8192
+        # ===== GOOGLE GEMINI MODELS =====
+        elif provider_slug == "google":
+            # Google Gemini models have max_output_tokens limits (handled by provider, but we validate here)
+            # Gemini Pro: 8,192 tokens, Gemini 1.5 Pro: 8,192 tokens, Gemini 2.0: up to 32,768 tokens
+            if "2.0" in model_lower or "flash-exp" in model_lower:
+                max_output = 32768  # Gemini 2.0 supports up to 32K tokens
+            elif "1.5" in model_lower:
+                max_output = 8192  # Gemini 1.5 models
             else:
-                max_output = 4096
+                max_output = 8192  # Default for other Gemini models
             
             if max_tokens > max_output:
                 normalized["max_tokens"] = max_output
                 normalized["changes"].append(f"Model {model} max_tokens capped at {max_output}")
+            
+            # Validate temperature range for Google (0.0-2.0)
+            if temperature < 0.0:
+                normalized["temperature"] = 0.0
+                normalized["changes"].append(f"Temperature clamped to minimum 0.0")
+            elif temperature > 2.0:
+                normalized["temperature"] = 2.0
+                normalized["changes"].append(f"Temperature clamped to maximum 2.0")
+        
+        # ===== OTHER PROVIDERS =====
+        else:
+            # Generic validation for other providers
+            # Most providers support temperature 0.0-2.0
+            if temperature < 0.0:
+                normalized["temperature"] = 0.0
+                normalized["changes"].append(f"Temperature clamped to minimum 0.0")
+            elif temperature > 2.0:
+                normalized["temperature"] = 2.0
+                normalized["changes"].append(f"Temperature clamped to maximum 2.0")
         
         # Log changes if any
         if normalized["changes"]:
-            print(f"[AIProviderService] Model parameter normalization for {model}:")
+            print(f"[AIProviderService] Model parameter normalization for {provider_slug}/{model}:")
             for change in normalized["changes"]:
                 print(f"  - {change}")
         

@@ -164,9 +164,26 @@ const CustomerDetail: React.FC = () => {
   const handleOpenAiAnalysisDialog = () => {
     // Set defaults based on existing data
     // Default to OFF (false) if data exists, ON (true) if no data
-    const hasFinancialData = customer?.companies_house_data && Object.keys(customer.companies_house_data).length > 0;
-    const hasAddressData = customer?.google_maps_data && customer.google_maps_data.locations && customer.google_maps_data.locations.length > 0;
+    const hasFinancialData = customer?.companies_house_data && 
+      typeof customer.companies_house_data === 'object' && 
+      Object.keys(customer.companies_house_data).length > 0;
     
+    const hasAddressData = customer?.google_maps_data && 
+      typeof customer.google_maps_data === 'object' &&
+      customer.google_maps_data.locations && 
+      Array.isArray(customer.google_maps_data.locations) &&
+      customer.google_maps_data.locations.length > 0;
+    
+    // Debug logging
+    console.log('AI Analysis Dialog - Data Check:', {
+      hasFinancialData,
+      hasAddressData,
+      companiesHouseData: customer?.companies_house_data,
+      googleMapsData: customer?.google_maps_data,
+      locationsCount: customer?.google_maps_data?.locations?.length
+    });
+    
+    // Set checkboxes: false (unchecked) when data exists, true (checked) when no data
     setUpdateFinancialData(!hasFinancialData);
     setUpdateAddresses(!hasAddressData);
     setAiAnalysisDialogOpen(true);
@@ -438,54 +455,138 @@ const CustomerDetail: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Select which data sources to update. Unchecked options will skip API calls to save quota.
+            Choose which data sources to include in the AI analysis. Uncheck any section to exclude it and save API quota.
           </Typography>
           
-          <FormControlLabel
-            control={
+          {/* Financial Data Section */}
+          <Card 
+            variant="outlined" 
+            sx={{ 
+              mb: 2, 
+              p: 2,
+              border: updateFinancialData ? '2px solid' : '1px solid',
+              borderColor: updateFinancialData ? 'primary.main' : 'divider',
+              backgroundColor: updateFinancialData ? 'action.selected' : 'background.paper',
+              cursor: 'pointer',
+              '&:hover': {
+                backgroundColor: 'action.hover'
+              }
+            }}
+            onClick={() => setUpdateFinancialData(!updateFinancialData)}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
               <Checkbox
                 checked={updateFinancialData}
-                onChange={(e) => setUpdateFinancialData(e.target.checked)}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  setUpdateFinancialData(e.target.checked);
+                }}
                 color="primary"
+                sx={{ 
+                  '& .MuiSvgIcon-root': { 
+                    fontSize: 32 
+                  },
+                  mt: -0.5
+                }}
               />
-            }
-            label={
-              <Box>
-                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                  Update Financial Data (Companies House)
-                </Typography>
+              <Box sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Financial Data (Companies House)
+                  </Typography>
+                  <Chip 
+                    label={updateFinancialData ? "INCLUDED" : "EXCLUDED"} 
+                    color={updateFinancialData ? "primary" : "default"}
+                    size="small"
+                    sx={{ fontWeight: 600 }}
+                  />
+                </Box>
                 <Typography variant="body2" color="text.secondary">
-                  {customer?.companies_house_data && Object.keys(customer.companies_house_data).length > 0
-                    ? 'Financial data exists - will be refreshed if checked'
-                    : 'No financial data - will be fetched if checked'}
+                  {customer?.companies_house_data && 
+                   typeof customer.companies_house_data === 'object' &&
+                   Object.keys(customer.companies_house_data).length > 0
+                    ? `✓ Financial data exists (${Object.keys(customer.companies_house_data).length} fields) - ${updateFinancialData ? 'will be refreshed' : 'will be skipped'}`
+                    : `⚠ No financial data - ${updateFinancialData ? 'will be fetched' : 'will be skipped'}`}
                 </Typography>
               </Box>
-            }
-            sx={{ mb: 2, display: 'block' }}
-          />
+            </Box>
+          </Card>
           
-          <FormControlLabel
-            control={
+          {/* Address Data Section */}
+          <Card 
+            variant="outlined" 
+            sx={{ 
+              mb: 2, 
+              p: 2,
+              border: updateAddresses ? '2px solid' : '1px solid',
+              borderColor: updateAddresses ? 'primary.main' : 'divider',
+              backgroundColor: updateAddresses ? 'action.selected' : 'background.paper',
+              cursor: 'pointer',
+              '&:hover': {
+                backgroundColor: 'action.hover'
+              }
+            }}
+            onClick={() => setUpdateAddresses(!updateAddresses)}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
               <Checkbox
                 checked={updateAddresses}
-                onChange={(e) => setUpdateAddresses(e.target.checked)}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  setUpdateAddresses(e.target.checked);
+                }}
                 color="primary"
+                sx={{ 
+                  '& .MuiSvgIcon-root': { 
+                    fontSize: 32 
+                  },
+                  mt: -0.5
+                }}
               />
-            }
-            label={
-              <Box>
-                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                  Update Addresses (Google Maps)
-                </Typography>
+              <Box sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Address Data (Google Maps)
+                  </Typography>
+                  <Chip 
+                    label={updateAddresses ? "INCLUDED" : "EXCLUDED"} 
+                    color={updateAddresses ? "primary" : "default"}
+                    size="small"
+                    sx={{ fontWeight: 600 }}
+                  />
+                </Box>
                 <Typography variant="body2" color="text.secondary">
-                  {customer?.google_maps_data?.locations && customer.google_maps_data.locations.length > 0
-                    ? `${customer.google_maps_data.locations.length} location(s) exist - will be refreshed if checked`
-                    : 'No address data - will be fetched if checked'}
+                  {customer?.google_maps_data && 
+                   typeof customer.google_maps_data === 'object' &&
+                   customer.google_maps_data.locations && 
+                   Array.isArray(customer.google_maps_data.locations) &&
+                   customer.google_maps_data.locations.length > 0
+                    ? `✓ ${customer.google_maps_data.locations.length} location(s) exist - ${updateAddresses ? 'will be refreshed' : 'will be skipped'}`
+                    : `⚠ No address data - ${updateAddresses ? 'will be fetched' : 'will be skipped'}`}
                 </Typography>
               </Box>
-            }
-            sx={{ display: 'block' }}
-          />
+            </Box>
+          </Card>
+          
+          {/* Summary Box */}
+          <Alert 
+            severity="info" 
+            sx={{ mt: 2 }}
+            icon={false}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+              Summary:
+            </Typography>
+            <Typography variant="body2">
+              {updateFinancialData && updateAddresses 
+                ? 'Both data sources will be updated'
+                : updateFinancialData 
+                  ? 'Only Financial Data will be updated (Addresses excluded)'
+                  : updateAddresses
+                    ? 'Only Address Data will be updated (Financial Data excluded)'
+                    : '⚠️ No data sources selected - only AI analysis will run'}
+            </Typography>
+          </Alert>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseAiAnalysisDialog} color="inherit">

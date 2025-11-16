@@ -190,34 +190,25 @@ Respond in this exact JSON format:
     }}
 }}"""
         
-        print(f"🤖 Calling OpenAI API (gpt-5-mini)...")
+        print(f"🤖 Calling AI Provider Service (gpt-5-mini)...")
         
-        # Call OpenAI API
+        # Use AIProviderService for proper model handling
         async def generate_suggestions():
-            async with httpx.AsyncClient(timeout=240.0) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_keys.openai}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "gpt-5-mini",
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": "You are a sales strategy AI that provides actionable customer engagement suggestions. Always respond with valid JSON."
-                            },
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ],
-                        "max_completion_tokens": 20000,
-                        "response_format": {"type": "json_object"}
-                    }
-                )
-                return response
+            from app.services.ai_provider_service import AIProviderService
+            
+            provider_service = AIProviderService(db, tenant_id=tenant_id)
+            
+            response = await provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt="You are a sales strategy AI that provides actionable customer engagement suggestions. Always respond with valid JSON.",
+                user_prompt=prompt,
+                model="gpt-5-mini",
+                max_tokens=20000,
+                timeout=240.0,
+                response_format={"type": "json_object"}
+            )
+            
+            return response
         
         # Run async function in sync context
         import asyncio
@@ -227,11 +218,10 @@ Respond in this exact JSON format:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
         
-        response = loop.run_until_complete(generate_suggestions())
+        provider_response = loop.run_until_complete(generate_suggestions())
         
-        if response.status_code == 200:
-            result = response.json()
-            suggestions = json.loads(result['choices'][0]['message']['content'])
+        if provider_response and provider_response.content:
+            suggestions = json.loads(provider_response.content)
             generated_at = datetime.now(timezone.utc)
             
             # Cache the suggestions in the database

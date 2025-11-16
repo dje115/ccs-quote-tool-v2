@@ -287,9 +287,13 @@ class OpenAIProvider(AIProvider):
                     # Remove max_tokens if present to avoid confusion
                     completion_kwargs.pop("max_tokens", None)
                 
-                # Some OpenAI models (like o1, o1-mini) only support temperature=1
+                # Some OpenAI models (like o1, o1-mini, gpt-5-mini) only support temperature=1
                 # Check if model doesn't support custom temperature or skip_temperature flag is set
-                models_without_temperature = ["o1", "o1-mini", "o1-preview", "o1-2024-09-12", "o3", "o3-mini"]
+                models_without_temperature = [
+                    "o1", "o1-mini", "o1-preview", "o1-2024-09-12", 
+                    "o3", "o3-mini",
+                    "gpt-5-mini", "gpt-5", "gpt-5-turbo"  # GPT-5 models only support default temperature=1
+                ]
                 skip_temperature = kwargs.get("skip_temperature", False) or model.lower() in [m.lower() for m in models_without_temperature]
                 
                 if skip_temperature:
