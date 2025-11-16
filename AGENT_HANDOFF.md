@@ -116,10 +116,45 @@
 
 ## Next Steps for New Agent
 
-1. Read this document
-2. Check the current code in `CustomerDetail.tsx` around line 164-173
-3. Test the dialog by clicking "AI Analysis" button
-4. If checkboxes aren't visible or defaulting incorrectly, debug the logic
-5. Rebuild Docker containers manually
-6. Test end-to-end functionality
+### Immediate Tasks (Priority Order)
+
+1. **Fix the AI Analysis Dialog Issue:**
+   - Read this document fully
+   - Check the current code in `CustomerDetail.tsx` around line 164-173
+   - Test the dialog by clicking "AI Analysis" button on "Stephen Sanderson Transport Ltd" (has 7 addresses)
+   - Verify checkboxes are visible and defaulting correctly:
+     - Should default to OFF (unchecked) when data exists
+     - Should default to ON (checked) when no data exists
+   - If checkboxes aren't visible or defaulting incorrectly, debug the logic
+   - Rebuild Docker containers: `docker-compose down && docker-compose build frontend && docker-compose up -d`
+   - Test end-to-end functionality
+
+2. **Continue with TODO List:**
+   - See `TODO.md` for the complete implementation plan
+   - The TODO list contains all remaining tasks from the "World-Class CRM & Quoting System - Complete Implementation Plan"
+   - Focus on completing tasks in order of priority (Phase 0 → Phase 1 → Phase 2, etc.)
+   - Mark tasks as `in_progress` when starting, `completed` when done
+
+3. **After Fixing Dialog:**
+   - Continue with the next highest priority task from TODO.md
+   - Most likely next tasks are in Phase 1 (Infrastructure Foundations) or Phase 2 (Product & Pricing Intelligence)
+
+### TODO List Reference
+
+**Location:** `TODO.md`
+
+**Current Status:** The TODO list contains the complete implementation plan with:
+- Phase 0: Critical Bug Fixes (mostly completed)
+- Phase 1: Infrastructure Foundations (partially completed)
+- Phase 2: Product & Pricing Intelligence
+- Phase 3: World-Class Quoting & CRM
+- Phase 4: Support Contracts & Renewals
+- Phase 5: AI Customer Service & Reporting
+- Phase 6: Best-of-Breed Features
+
+**How to Use:**
+- Open `TODO.md` to see all pending tasks
+- Tasks are marked with status: `pending`, `in_progress`, `completed`, `cancelled`
+- Work through tasks in priority order
+- Update status as you work: mark `in_progress` when starting, `completed` when done
 
