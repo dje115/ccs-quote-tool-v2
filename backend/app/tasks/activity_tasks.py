@@ -358,14 +358,6 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             db=db
         )
         
-        # Run async analysis in sync context
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
         # Publish progress event - starting analysis
         event_publisher.publish_ai_analysis_progress(
             tenant_id=tenant_id,
@@ -374,8 +366,13 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             progress={"step": "starting", "message": "Beginning AI analysis"}
         )
         
-        # Run the analysis
-        analysis_result = loop.run_until_complete(
+        # Run async analysis in sync context
+        # Use asyncio.run() which properly creates and manages a new event loop
+        # This is safer than get_event_loop() which can fail in Celery workers
+        import asyncio
+        
+        # Run the analysis using asyncio.run() which creates a fresh event loop
+        analysis_result = asyncio.run(
             ai_service.analyze_company(
                 company_name=customer.company_name,
                 company_number=customer.company_registration,
