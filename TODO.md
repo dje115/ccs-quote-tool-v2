@@ -1,9 +1,11 @@
 # CCS Quote Tool v2 - TODO List
 ## Comprehensive Task List for Development
 
-**Last Updated**: Current Date  
-**Current Version**: 2.2.0  
+**Last Updated**: 2025-01-XX  
+**Current Version**: 2.21.0  
 **Target Version**: 2.3.0+
+
+**Implementation Plan Review**: See `IMPLEMENTATION_PLAN_REVIEW.md` and `IMPLEMENTATION_STATUS_COMPREHENSIVE.md` for comprehensive status of all phases (0-6).
 
 **Note**: This TODO list has been enhanced with comprehensive helpdesk/customer service features including per-tenant email provider support (Google Workspace, Microsoft 365, IMAP/POP3, cloud services), WhatsApp Business API integration, and PSA/RMM platform integrations. See `PHASE_5_HELPDESK_DETAILED.md` and `HELPDESK_EMAIL_WHATSAPP_INTEGRATIONS.md` for detailed implementation plans.
 
@@ -11,52 +13,112 @@
 
 ## 🎯 **HIGH PRIORITY - Next Sprint (v2.3.0)**
 
+### **0. Phase 0: Critical Bug Fixes** ✅
+**Status**: 100% Complete  
+**Priority**: Critical (All Fixed)  
+**Verified**: 2025-01-XX
+
+#### Bug Fixes (All Complete):
+- [x] P0.1: Fix pricing_import_service.py - openai_api_key assignment ✅
+- [x] P0.2: Fix activity_service.py - Import order ✅
+- [x] P0.3: Fix building_analysis_service.py - Missing imports ✅
+- [x] P0.4: Fix ai_providers.py - Blocking async calls ✅
+- [x] P0.5: Fix dashboard.py - Missing is_deleted filters (7 locations) ✅
+- [x] P0.6: Fix admin.py - Incomplete return statement ✅
+- [x] P0.7: Add regression tests ✅
+
+**Note**: All Phase 0 critical bugs have been verified as fixed. See `IMPLEMENTATION_STATUS_COMPREHENSIVE.md` for details.
+
+---
+
 ### **1. Database-Driven AI Prompts System** 🔥
-**Status**: Not Started  
+**Status**: 90% Complete (Remaining: Remove hardcoded fallbacks)  
 **Priority**: Critical  
-**Estimated Effort**: 3-5 days
+**Estimated Effort**: 3-5 days (0.5 days remaining)
 
 #### Backend Tasks:
-- [ ] Create `ai_prompts` table in database
-  - Fields: id, name, category, prompt_text, model, temperature, max_tokens, version, is_active, tenant_id, created_at, updated_at
-  - Categories: customer_analysis, lead_generation, financial_analysis, competitor_analysis, website_analysis
-- [ ] Create SQLAlchemy model for `AIPrompt`
-- [ ] Create API endpoints for prompt management:
+- [x] Create `ai_prompts` table in database ✅
+  - Fields: id, name, category, system_prompt, user_prompt_template, model, temperature, max_tokens, version, is_active, tenant_id, provider_id, provider_model, provider_settings, created_at, updated_at
+  - Categories: customer_analysis, lead_generation, financial_analysis, competitor_analysis, activity_enhancement, action_suggestions, translation, quote_analysis, product_search, building_analysis, company_profile_analysis
+  - Migration file: `backend/migrations/add_ai_prompts_tables.sql`
+- [x] Create SQLAlchemy model for `AIPrompt` ✅
+  - Model file: `backend/app/models/ai_prompt.py`
+  - Includes `AIPrompt` and `AIPromptVersion` models
+  - Provider integration support added
+- [x] Create API endpoints for prompt management ✅
   - `GET /api/v1/prompts/` - List all prompts (with filtering by category)
   - `GET /api/v1/prompts/{id}` - Get specific prompt
   - `POST /api/v1/prompts/` - Create new prompt
   - `PUT /api/v1/prompts/{id}` - Update prompt
   - `DELETE /api/v1/prompts/{id}` - Delete prompt
   - `POST /api/v1/prompts/{id}/test` - Test prompt with sample data
-- [ ] Migrate existing prompts from code to database:
-  - `AIAnalysisService._perform_ai_analysis()` comprehensive prompt
-  - `AIAnalysisService._calculate_lead_score()` prompt
-  - Website analysis prompt
-  - LinkedIn analysis prompt
-  - Financial analysis prompt
-- [ ] Update `AIAnalysisService` to fetch prompts from database
-- [ ] Add prompt versioning system
-- [ ] Add prompt rollback functionality
-- [ ] Add tenant-specific prompt overrides
+  - `GET /api/v1/prompts/{id}/versions` - Get version history
+  - `POST /api/v1/prompts/{id}/rollback/{version}` - Rollback to version
+  - `GET /api/v1/prompts/available-providers` - Get available AI providers
+  - `GET /api/v1/prompts/available-models/{provider_id}` - Get available models for provider
+  - Endpoint file: `backend/app/api/v1/endpoints/ai_prompts.py`
+- [x] Migrate existing prompts from code to database ✅
+  - `AIAnalysisService._perform_ai_analysis()` comprehensive prompt → `customer_analysis`
+  - `AIAnalysisService._search_competitors_gpt5()` prompt → `competitor_analysis`
+  - `ActivityService.enhance_activity_with_ai()` prompt → `activity_enhancement`
+  - `ActivityService.generate_action_suggestions()` prompt → `action_suggestions`
+  - `TranslationService.translate()` prompt → `translation`
+  - `QuoteAnalysisService` prompt → `quote_analysis` (with quote_type support)
+  - `ProductSearchService` prompt → `product_search`
+  - `BuildingAnalysisService` prompt → `building_analysis`
+  - `LeadGenerationService` prompts → `lead_generation`
+- [x] Update `AIAnalysisService` to fetch prompts from database ✅
+  - Uses `AIPromptService` with fallback to hardcoded prompts (needs fallback removal)
+- [x] Add prompt versioning system ✅
+  - `ai_prompt_versions` table created
+  - Version tracking on updates
+- [x] Add prompt rollback functionality ✅
+  - Rollback endpoint implemented
+  - Version history retrieval
+- [x] Add tenant-specific prompt overrides ✅
+  - Tenant-specific prompts override system prompts
+  - Proper RLS policies in place
 
 #### Frontend Tasks:
-- [ ] Create Admin Portal "AI Prompts" page:
+- [x] Create Admin Portal "AI Prompts" page ✅
   - List all prompts with category filter
   - Search and filter functionality
   - Inline editing with syntax highlighting
   - Test prompt with sample data
   - View prompt history/versions
   - Create/duplicate prompts
-- [ ] Add prompt editor component (Monaco or CodeMirror)
-- [ ] Add prompt testing dialog with sample data input
-- [ ] Add prompt variable documentation/hints
+  - File: `admin-portal/src/views/AIPrompts.vue`
+- [x] Add prompt editor component (Monaco or CodeMirror) ✅
+  - Editor component included in admin portal
+- [x] Add prompt testing dialog with sample data input ✅
+  - Testing functionality implemented
+- [x] Add prompt variable documentation/hints ✅
+  - Variable documentation in UI
 - [ ] Create CRM Settings section for tenant prompt customization
+  - Low priority - can be done later
 
 #### Migration Tasks:
-- [ ] Create Alembic migration for `ai_prompts` table
-- [ ] Create seed script to populate initial prompts
+- [x] Create migration for `ai_prompts` table ✅
+  - SQL migration file: `backend/migrations/add_ai_prompts_tables.sql`
+  - Additional migrations for provider system and quote_type support
+- [x] Create seed script to populate initial prompts ✅
+  - Seed script: `backend/scripts/seed_ai_prompts.py`
+  - Extracts prompts from existing code
 - [ ] Test migration on development database
-- [ ] Document prompt variable system
+  - Needs verification
+- [x] Document prompt variable system ✅
+  - Documentation: `AI_PROMPTS_SYSTEM.md` and `AI_PROMPTS_PRINCIPLE.md`
+
+#### Remaining Work:
+- [ ] Remove hardcoded fallback prompts from services:
+  - `ai_analysis_service.py` - Remove fallback prompts (lines 379-864, 715-864)
+  - `activity_service.py` - Remove fallback prompts (lines 157-159, 457-459)
+  - `translation_service.py` - Remove fallback prompt
+- [ ] Migrate remaining hardcoded prompts to database:
+  - `pricing_import_service.py` - Migrate hardcoded prompts
+  - `lead_generation_service.py` - Verify all prompts migrated
+- [ ] Verify database migration has been applied
+- [ ] Verify prompts have been seeded in database
 
 ---
 
