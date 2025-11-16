@@ -154,7 +154,13 @@ async def get_customer_activities(
         
         activity_type_enum = None
         if activity_type:
-            activity_type_enum = ActivityType[activity_type.upper()]
+            try:
+                activity_type_enum = ActivityType[activity_type.upper()]
+            except KeyError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid activity type: {activity_type}"
+                )
         
         activities = service.get_activities(
             customer_id=customer_id,
@@ -162,10 +168,15 @@ async def get_customer_activities(
             limit=limit
         )
         
-        return activities
+        # Convert SQLAlchemy models to Pydantic models
+        return [ActivityResponse.model_validate(activity) for activity in activities]
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ERROR] Failed to get activities: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get activities: {str(e)}"

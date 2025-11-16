@@ -114,6 +114,36 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
 
+  // Define loadActivities BEFORE useEffect that uses it
+  const loadActivities = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await activityAPI.getCustomerActivities(customerId);
+      setActivities(response.data || []);
+    } catch (error) {
+      console.error('Error loading activities:', error);
+      setError('Failed to load activities');
+    } finally {
+      setLoading(false);
+    }
+  }, [customerId]);
+
+  // Define loadSuggestions BEFORE useEffect that uses it
+  const loadSuggestions = useCallback(async () => {
+    try {
+      setSuggestionsLoading(true);
+      // Load cached suggestions (fast - from database)
+      const response = await activityAPI.getActionSuggestions(customerId, false);
+      if (response.data.success && response.data.suggestions) {
+        setSuggestions(response.data.suggestions);
+      }
+    } catch (error) {
+      console.error('Error loading suggestions:', error);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [customerId]);
+
   useEffect(() => {
     loadActivities();
     loadSuggestions();
@@ -137,34 +167,6 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
       unsubscribe();
     };
   }, [isConnected, customerId, subscribe, loadSuggestions]);
-
-  const loadActivities = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await activityAPI.getCustomerActivities(customerId);
-      setActivities(response.data || []);
-    } catch (error) {
-      console.error('Error loading activities:', error);
-      setError('Failed to load activities');
-    } finally {
-      setLoading(false);
-    }
-  }, [customerId]);
-
-  const loadSuggestions = useCallback(async () => {
-    try {
-      setSuggestionsLoading(true);
-      // Load cached suggestions (fast - from database)
-      const response = await activityAPI.getActionSuggestions(customerId, false);
-      if (response.data.success && response.data.suggestions) {
-        setSuggestions(response.data.suggestions);
-      }
-    } catch (error) {
-      console.error('Error loading suggestions:', error);
-    } finally {
-      setSuggestionsLoading(false);
-    }
-  }, [customerId]);
 
   const refreshSuggestionsBackground = async () => {
     try {

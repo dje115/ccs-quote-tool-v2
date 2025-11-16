@@ -81,6 +81,9 @@ const CustomerDetail: React.FC = () => {
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
   const [aiAnalysisError, setAiAnalysisError] = useState<string | null>(null);
   const [aiAnalysisSuccess, setAiAnalysisSuccess] = useState<string | null>(null);
+  const [aiAnalysisDialogOpen, setAiAnalysisDialogOpen] = useState(false);
+  const [updateFinancialData, setUpdateFinancialData] = useState(false);
+  const [updateAddresses, setUpdateAddresses] = useState(false);
   const [currentTab, setCurrentTab] = useState(() => {
     // Restore tab from localStorage on component mount
     const savedTab = localStorage.getItem('customerDetailTab');
@@ -121,7 +124,7 @@ const CustomerDetail: React.FC = () => {
   
   // Subscribe to WebSocket events
   useEffect(() => {
-    if (!id || !customer || !isConnected) return;
+    if (!id || !isConnected) return;
 
     // Subscribe to ai_analysis.completed for this customer
     const unsubscribeCompleted = subscribe('ai_analysis.completed', (event) => {
@@ -156,16 +159,35 @@ const CustomerDetail: React.FC = () => {
       unsubscribeFailed();
       unsubscribeUpdated();
     };
-  }, [id, customer, isConnected, subscribe, loadCustomerData]);
+  }, [id, isConnected, subscribe, loadCustomerData]); // Removed 'customer' from dependencies to prevent unnecessary re-subscriptions
+
+  const handleOpenAiAnalysisDialog = () => {
+    // Set defaults based on existing data
+    // Default to OFF (false) if data exists, ON (true) if no data
+    const hasFinancialData = customer?.companies_house_data && Object.keys(customer.companies_house_data).length > 0;
+    const hasAddressData = customer?.google_maps_data && customer.google_maps_data.locations && customer.google_maps_data.locations.length > 0;
+    
+    setUpdateFinancialData(!hasFinancialData);
+    setUpdateAddresses(!hasAddressData);
+    setAiAnalysisDialogOpen(true);
+  };
+
+  const handleCloseAiAnalysisDialog = () => {
+    setAiAnalysisDialogOpen(false);
+  };
 
   const runAiAnalysis = async () => {
     try {
       setAiAnalysisLoading(true);
       setAiAnalysisError(null);
       setAiAnalysisSuccess(null);
+      setAiAnalysisDialogOpen(false);
 
-      // Queue the background task
-      const response = await customerAPI.runAiAnalysis(id!);
+      // Queue the background task with options
+      const response = await customerAPI.runAiAnalysis(id!, {
+        update_financial_data: updateFinancialData,
+        update_addresses: updateAddresses
+      });
       
       if (response.data.success) {
         setAiAnalysisSuccess('AI analysis running in background. You can navigate away - it will continue processing.');
@@ -386,7 +408,7 @@ const CustomerDetail: React.FC = () => {
           color="primary"
           startIcon={(aiAnalysisLoading || customer?.ai_analysis_status === 'running' || customer?.ai_analysis_status === 'queued') ? 
             <CircularProgress size={20} color="inherit" /> : <AiIcon />}
-          onClick={runAiAnalysis}
+          onClick={handleOpenAiAnalysisDialog}
           disabled={aiAnalysisLoading || customer?.ai_analysis_status === 'running' || customer?.ai_analysis_status === 'queued'}
         >
           {customer?.ai_analysis_status === 'running' ? 'Running...' : 
@@ -401,6 +423,86 @@ const CustomerDetail: React.FC = () => {
           Edit
         </Button>
       </Box>
+      {/* AI Analysis Options Dialog */}
+      <Dialog 
+        open={aiAnalysisDialogOpen} 
+        onClose={handleCloseAiAnalysisDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AiIcon />
+            <Typography variant="h6">AI Analysis Options</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Select which data sources to update. Unchecked options will skip API calls to save quota.
+          </Typography>
+          
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={updateFinancialData}
+                onChange={(e) => setUpdateFinancialData(e.target.checked)}
+                color="primary"
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  Update Financial Data (Companies House)
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {customer?.companies_house_data && Object.keys(customer.companies_house_data).length > 0
+                    ? 'Financial data exists - will be refreshed if checked'
+                    : 'No financial data - will be fetched if checked'}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 2, display: 'block' }}
+          />
+          
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={updateAddresses}
+                onChange={(e) => setUpdateAddresses(e.target.checked)}
+                color="primary"
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  Update Addresses (Google Maps)
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {customer?.google_maps_data?.locations && customer.google_maps_data.locations.length > 0
+                    ? `${customer.google_maps_data.locations.length} location(s) exist - will be refreshed if checked`
+                    : 'No address data - will be fetched if checked'}
+                </Typography>
+              </Box>
+            }
+            sx={{ display: 'block' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAiAnalysisDialog} color="inherit">
+            Cancel
+          </Button>
+          <Button 
+            onClick={runAiAnalysis} 
+            variant="contained" 
+            color="primary"
+            disabled={aiAnalysisLoading}
+            startIcon={aiAnalysisLoading ? <CircularProgress size={20} /> : <AiIcon />}
+          >
+            {aiAnalysisLoading ? 'Starting...' : 'Run Analysis'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* AI Analysis Alerts */}
       {aiAnalysisError && (
         <Alert severity="error" onClose={() => setAiAnalysisError(null)} sx={{ mb: 2 }}>
