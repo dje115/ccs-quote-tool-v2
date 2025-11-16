@@ -29,13 +29,35 @@ class PricingConfigService:
         engineers: int = 2,
         hours_per_day: int = 8,
         includes_travel: bool = False,
+        engineer_grades: Optional[List[str]] = None,
+        overtime_multiplier: Optional[Decimal] = None,
+        travel_uplift_percentage: Optional[Decimal] = None,
+        included_hours: Optional[int] = None,
         description: Optional[str] = None,
         code: Optional[str] = None,
         priority: int = 0,
         valid_from: Optional[datetime] = None,
         valid_until: Optional[datetime] = None
     ) -> TenantPricingConfig:
-        """Create a day rate configuration"""
+        """
+        Create a day rate configuration with enhanced features
+        
+        Args:
+            name: Rate name (e.g., "Standard Day Rate", "Senior Engineer Day Rate")
+            base_rate: Base rate per day
+            engineers: Number of engineers (default: 2)
+            hours_per_day: Standard hours per day (default: 8)
+            includes_travel: Whether travel is included in base rate
+            engineer_grades: List of engineer grades (e.g., ["junior", "senior", "specialist"])
+            overtime_multiplier: Multiplier for overtime hours (e.g., 1.5 for time-and-a-half)
+            travel_uplift_percentage: Percentage uplift for travel (e.g., 15.0 for 15%)
+            included_hours: Hours included in base rate before overtime applies
+            description: Optional description
+            code: Optional short code
+            priority: Priority for selection (higher = selected first)
+            valid_from: Start date for this rate
+            valid_until: End date for this rate
+        """
         config = TenantPricingConfig(
             id=str(uuid.uuid4()),
             tenant_id=self.tenant_id,
@@ -48,7 +70,11 @@ class PricingConfigService:
             config_data={
                 "engineers": engineers,
                 "hours_per_day": hours_per_day,
-                "includes_travel": includes_travel
+                "includes_travel": includes_travel,
+                "engineer_grades": engineer_grades or ["standard"],
+                "overtime_multiplier": float(overtime_multiplier) if overtime_multiplier else None,
+                "travel_uplift_percentage": float(travel_uplift_percentage) if travel_uplift_percentage else None,
+                "included_hours": included_hours or hours_per_day
             },
             priority=priority,
             valid_from=valid_from,
@@ -256,4 +282,140 @@ class PricingConfigService:
                 PricingBundleItem.is_deleted == False
             )
         ).order_by(PricingBundleItem.display_order).all()
+    
+    def calculate_day_rate(
+        self,
+        config_id: Optional[str] = None,
+        hours: Optional[int] = None,
+        engineer_grade: Optional[str] = None,
+        include_travel: bool = False,
+        overtime_hours: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Calculate day rate with engineer grades, overtime, and travel uplift
+        
+        Args:
+            config_id: Specific day rate config ID (if None, uses highest priority active config)
+            hours: Number of hours (if None, uses hours_per_day from config)
+            engineer_grade: Engineer grade (junior, standard, senior, specialist)
+            include_travel: Whether to include travel uplift
+            overtime_hours: Number of overtime hours
+        
+        Returns:
+            Dictionary with calculated rate breakdown
+        """
+        # Get day rate config
+        if config_id:
+            config = self.get_config(config_id)
+        else:
+            # Get highest priority active day rate
+            config = self.db.query(TenantPricingConfig).filter(
+                and_(
+                    TenantPricingConfig.tenant_id == self.tenant_id,
+                    TenantPricingConfig.config_type == PricingConfigType.DAY_RATE.value,
+                    TenantPricingConfig.is_active == True,
+                    TenantPricingConfig.is_deleted == False
+                )
+            ).order_by(TenantPricingConfig.priority.desc()).first()
+        
+        if not config or not config.config_data:
+            # Fallback to default
+            base_rate = Decimal('300.00')
+            hours_per_day = 8
+            overtime_multiplier = Decimal('1.5')
+            travel_uplift = Decimal('0.15')
+        else:
+            base_rate = config.base_rate or Decimal('300.00')
+            config_data = config.config_data
+            hours_per_day = config_data.get('hours_per_day', 8)
+            overtime_multiplier = Decimal(str(config_data.get('overtime_multiplier', 1.5)))
+            travel_uplift = Decimal(str(config_data.get('travel_uplift_percentage', 15.0))) / Decimal('100.0')
+            included_hours = config_data.get('included_hours', hours_per_day)
+        
+        # Use provided hours or default
+        work_hours = hours or hours_per_day
+        
+        # Calculate base cost
+        if work_hours <= hours_per_day:
+            # Standard day rate
+            base_cost = base_rate
+            overtime_cost = Decimal('0.00')
+        else:
+            # Calculate standard hours + overtime
+            standard_hours = min(work_hours, included_hours)
+            overtime_hours_actual = max(0, work_hours - included_hours)
+            
+            # Base cost for standard hours
+            base_cost = base_rate * (Decimal(str(standard_hours)) / Decimal(str(hours_per_day)))
+            
+            # Overtime cost
+            hourly_rate = base_rate / Decimal(str(hours_per_day))
+            overtime_cost = hourly_rate * Decimal(str(overtime_hours_actual)) * overtime_multiplier
+        
+        # Apply engineer grade multiplier
+        grade_multipliers = {
+            'junior': Decimal('0.75'),
+            'standard': Decimal('1.0'),
+            'senior': Decimal('1.25'),
+            'specialist': Decimal('1.5')
+        }
+        grade_multiplier = grade_multipliers.get(engineer_grade or 'standard', Decimal('1.0'))
+        base_cost = base_cost * grade_multiplier
+        
+        # Apply travel uplift if requested
+        travel_cost = Decimal('0.00')
+        if include_travel:
+            travel_cost = base_cost * travel_uplift
+        
+        total_cost = base_cost + overtime_cost + travel_cost
+        
+        return {
+            'base_rate': float(base_rate),
+            'base_cost': float(base_cost),
+            'overtime_cost': float(overtime_cost),
+            'travel_cost': float(travel_cost),
+            'total_cost': float(total_cost),
+            'hours': work_hours,
+            'standard_hours': min(work_hours, included_hours),
+            'overtime_hours': max(0, work_hours - included_hours),
+            'engineer_grade': engineer_grade or 'standard',
+            'grade_multiplier': float(grade_multiplier),
+            'overtime_multiplier': float(overtime_multiplier),
+            'travel_uplift_percentage': float(travel_uplift * Decimal('100.0'))
+        }
+    
+    def get_day_rate_info(self) -> str:
+        """Get day rate information as formatted string for AI prompts"""
+        try:
+            configs = self.db.query(TenantPricingConfig).filter(
+                and_(
+                    TenantPricingConfig.tenant_id == self.tenant_id,
+                    TenantPricingConfig.config_type == PricingConfigType.DAY_RATE.value,
+                    TenantPricingConfig.is_active == True,
+                    TenantPricingConfig.is_deleted == False
+                )
+            ).order_by(TenantPricingConfig.priority.desc()).all()
+            
+            if not configs:
+                return "**Labour Rate:** £300 per pair of engineers per day (8-hour day)\n**CRITICAL: £300 is the TOTAL cost for BOTH engineers working together for one day**"
+            
+            info_lines = ["**Labour Rates:**"]
+            for config in configs[:3]:  # Show top 3 rates
+                config_data = config.config_data or {}
+                engineers = config_data.get('engineers', 2)
+                hours = config_data.get('hours_per_day', 8)
+                rate = config.base_rate or Decimal('300.00')
+                
+                info_lines.append(f"- {config.name}: £{rate} for {engineers} engineer(s) for {hours} hours")
+                
+                if config_data.get('overtime_multiplier'):
+                    info_lines.append(f"  - Overtime: {config_data.get('overtime_multiplier', 1.5)}x hourly rate")
+                if config_data.get('travel_uplift_percentage'):
+                    info_lines.append(f"  - Travel uplift: {config_data.get('travel_uplift_percentage', 15)}%")
+            
+            return "\n".join(info_lines)
+            
+        except Exception as e:
+            logger.error(f"Error getting day rate info: {e}")
+            return "**Labour Rate:** £300 per pair of engineers per day (8-hour day)"
 
