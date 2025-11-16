@@ -7,13 +7,15 @@ import json
 import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
-from openai import OpenAI
 import httpx
 
 from app.core.config import settings
 from app.services.companies_house_service import CompaniesHouseService
 from app.services.google_maps_service import GoogleMapsService
 from app.services.web_scraping_service import WebScrapingService
+from app.services.ai_provider_service import AIProviderService
+from app.services.ai_prompt_service import AIPromptService
+from app.models.ai_prompt import PromptCategory
 
 
 class AIAnalysisService:
@@ -31,18 +33,19 @@ class AIAnalysisService:
         # Use provided API keys or resolve from database with fallback
         if openai_api_key and companies_house_api_key and google_maps_api_key:
             # API keys provided directly (e.g., from endpoints that already resolved them)
-            self.openai_api_key = openai_api_key
+            self.openai_api_key = openai_api_key  # Kept for backward compatibility
             self.companies_house_api_key = companies_house_api_key
             self.google_maps_api_key = google_maps_api_key
         else:
             # Resolve API keys from database with tenant → system fallback
             self._resolve_api_keys_from_db()
         
-        self.openai_client = None
+        # Initialize AI provider service
+        self.provider_service = AIProviderService(db, tenant_id=tenant_id) if db else None
+        
         self.companies_house_service = CompaniesHouseService(api_key=self.companies_house_api_key)
         self.google_maps_service = GoogleMapsService(api_key=self.google_maps_api_key)
         self.web_scraping_service = WebScrapingService()
-        self._initialize_client()
     
     def _resolve_api_keys_from_db(self):
         """Resolve API keys from database with tenant → system fallback"""
@@ -82,16 +85,6 @@ class AIAnalysisService:
             self.companies_house_api_key = settings.COMPANIES_HOUSE_API_KEY
             self.google_maps_api_key = settings.GOOGLE_MAPS_API_KEY
     
-    def _initialize_client(self):
-        """Initialize OpenAI client"""
-        try:
-            if self.openai_api_key:
-                self.openai_client = OpenAI(
-                    api_key=self.openai_api_key,
-                    timeout=300.0
-                )
-        except Exception as e:
-            print(f"[ERROR] Error initializing AI analysis client: {e}")
     
     def _build_dynamic_system_prompt(self, analysis_type: str = "general") -> str:
         """
@@ -136,21 +129,29 @@ class AIAnalysisService:
     async def _discover_website(self, company_name: str) -> str:
         """Use AI with web search to discover company website (same as campaign method)"""
         try:
-            if not self.openai_client:
+            if not self.provider_service:
                 return None
             
-            print(f"[WEBSITE DISCOVERY] Using Responses API with web search for: {company_name}")
+            print(f"[WEBSITE DISCOVERY] Using AI provider with web search for: {company_name}")
             
-            # Use Responses API with web search (same as working dynamic search format)
+            if not self.provider_service:
+                return None
+            
+            # Use AIProviderService with web search support
             system_message = "You are a helpful assistant that finds company websites. Respond only with the URL or NOT_FOUND."
-            input_string = f"{system_message}\n\nFind the official website URL for the company: {company_name}\n\nPlease respond with ONLY the website URL (e.g., https://example.com) or \"NOT_FOUND\" if you cannot find it.\nDo not include any explanation, just the URL or NOT_FOUND."
+            user_message = f"Find the official website URL for the company: {company_name}\n\nPlease respond with ONLY the website URL (e.g., https://example.com) or \"NOT_FOUND\" if you cannot find it.\nDo not include any explanation, just the URL or NOT_FOUND."
             
-            response = self.openai_client.responses.create(
-                model="gpt-5-mini",
-                input=input_string,
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt=system_message,
+                user_prompt=user_message,
+                use_responses_api=True,
                 tools=[{"type": "web_search_preview"}],
                 tool_choice="auto"
             )
+            
+            # Extract website from response
+            response = provider_response.raw_response
             
             # Extract website from response (handle both responses.create and chat.completions formats)
             website = None
@@ -174,16 +175,21 @@ class AIAnalysisService:
                                 web_results = block.get("results", [])
                                 print(f"[WEBSITE DISCOVERY] Found {len(web_results)} web search results")
             
-            # Fallback to other formats
-            elif hasattr(response, 'choices') and len(response.choices) > 0:
-                website = response.choices[0].message.content.strip()
-                print(f"[WEBSITE DISCOVERY] Using choices fallback: {website[:100]}...")
-            elif hasattr(response, 'output'):
-                website = response.output.strip()
-                print(f"[WEBSITE DISCOVERY] Using output fallback: {website[:100]}...")
+            # Extract website from provider response content
+            if provider_response.content:
+                website = provider_response.content.strip()
+                print(f"[WEBSITE DISCOVERY] Using provider response content: {website[:100]}...")
             else:
-                website = str(response).strip()
-                print(f"[WEBSITE DISCOVERY] Using string fallback: {website[:100]}...")
+                # Fallback: try to extract from raw_response if available
+                if hasattr(response, 'choices') and len(response.choices) > 0:
+                    website = response.choices[0].message.content.strip()
+                    print(f"[WEBSITE DISCOVERY] Using choices fallback: {website[:100]}...")
+                elif hasattr(response, 'output'):
+                    website = response.output.strip()
+                    print(f"[WEBSITE DISCOVERY] Using output fallback: {website[:100]}...")
+                else:
+                    website = str(response).strip() if response else None
+                    print(f"[WEBSITE DISCOVERY] Using string fallback: {website[:100] if website else 'None'}...")
             
             if website and website != "NOT_FOUND" and ("http://" in website or "https://" in website):
                 # Clean up the URL
@@ -409,18 +415,33 @@ Better 3 verified than 10 unverified.
                 model = rendered['model']
                 max_tokens = rendered['max_tokens']
             
-            # Call GPT-5 with web search enabled for competitor discovery
-            response = self.openai_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": competitor_prompt}
-                ],
-                max_completion_tokens=max_tokens,
-                timeout=180.0
-            )
+            # Use AIProviderService for competitor discovery
+            if not self.provider_service:
+                return []
             
-            result_text = response.choices[0].message.content
+            if prompt_obj:
+                provider_response = await self.provider_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        "company_name": company_name,
+                        "business_sector": business_sector,
+                        "company_size": company_size,
+                        "locations_text": locations_text,
+                        "postcode_text": postcode_text,
+                        "turnover": turnover,
+                        "employees": employees
+                    },
+                    max_tokens=max_tokens
+                )
+            else:
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=None,
+                    system_prompt=system_prompt,
+                    user_prompt=competitor_prompt,
+                    max_tokens=max_tokens
+                )
+            
+            result_text = provider_response.content
             print(f"[COMPETITORS] GPT-5 response:\n{result_text[:500]}")
             
             # Parse competitor names (one per line)
@@ -466,7 +487,7 @@ Better 3 verified than 10 unverified.
     
     async def _perform_ai_analysis(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Perform AI analysis on company data"""
-        if not self.openai_client:
+        if not self.provider_service:
             return {"error": "AI service not available"}
         
         try:
@@ -804,21 +825,33 @@ Better 3 verified than 10 unverified.
             
             prompt = user_prompt
             
-            print(f"[AI] Making GPT-5-mini API call for customer analysis...")
+            print(f"[AI] Making AI provider call for customer analysis...")
             print(f"[AI] System prompt: {system_prompt[:100]}...")
             
-            response = self.openai_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                max_completion_tokens=max_tokens,
-                timeout=180.0
-            )
+            if not self.provider_service:
+                raise Exception("AI provider service not available")
             
-            print(f"[AI] GPT-5-mini API call successful, processing response...")
-            result_text = response.choices[0].message.content
+            if prompt_obj:
+                # Use database prompt
+                provider_response = await self.provider_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        "tenant_context": tenant_context,
+                        "company_info": company_info
+                    },
+                    max_tokens=max_tokens
+                )
+            else:
+                # Use fallback prompts
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=None,
+                    system_prompt=system_prompt,
+                    user_prompt=prompt,
+                    max_tokens=max_tokens
+                )
+            
+            print(f"[AI] AI provider call successful, processing response...")
+            result_text = provider_response.content
             
             # Parse JSON response
             # Remove markdown code blocks if present
@@ -939,19 +972,18 @@ Better 3 verified than 10 unverified.
             Be concise and professional. Keep the total response under 400 words.
             """
             
-            # Call OpenAI with more tokens for contact extraction
-            # Note: gpt-5-mini doesn't support temperature parameter
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {"role": "system", "content": "You are a business intelligence analyst specializing in UK companies. Extract contact information and provide actionable business insights."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_completion_tokens=10000,  # High token limit for comprehensive analysis
-                timeout=120.0  # 2 minute timeout for API call
+            # Use AIProviderService for light analysis
+            if not self.provider_service:
+                raise Exception("AI provider service not available")
+            
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt="You are a business intelligence analyst specializing in UK companies. Extract contact information and provide actionable business insights.",
+                user_prompt=prompt,
+                max_tokens=10000  # High token limit for comprehensive analysis
             )
             
-            analysis_text = response.choices[0].message.content
+            analysis_text = provider_response.content
             print(f"[AI ANALYSIS LIGHT] Generated {len(analysis_text) if analysis_text else 0} characters")
             
             # Return simplified analysis
@@ -1024,7 +1056,7 @@ Better 3 verified than 10 unverified.
                 return {"error": "No financial data available"}
             
             # AI analysis of financial health
-            if self.openai_client:
+            if self.provider_service:
                 financial_analysis = await self._analyze_financial_health(financial_data)
                 return {
                     "success": True,
@@ -1071,16 +1103,17 @@ Better 3 verified than 10 unverified.
             - financial_concerns: Potential financial concerns
             """
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=10000
+            if not self.provider_service:
+                raise Exception("AI provider service not available")
+            
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=10000
             )
             
-            ai_response = response.choices[0].message.content
+            ai_response = provider_response.content
             
             # Try to extract JSON
             try:
@@ -1099,7 +1132,7 @@ Better 3 verified than 10 unverified.
     
     async def generate_lead_strategy(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate lead engagement strategy"""
-        if not self.openai_client:
+        if not self.provider_service:
             return {"error": "AI service not available"}
         
         try:
@@ -1130,16 +1163,17 @@ Better 3 verified than 10 unverified.
             - success_indicators: Signs of a successful engagement
             """
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=10000
+            if not self.provider_service:
+                raise Exception("AI provider service not available")
+            
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=10000
             )
             
-            ai_response = response.choices[0].message.content
+            ai_response = provider_response.content
             
             # Try to extract JSON
             try:
@@ -1158,7 +1192,7 @@ Better 3 verified than 10 unverified.
     
     async def score_lead(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """Score lead quality using AI"""
-        if not self.openai_client:
+        if not self.provider_service:
             return {"error": "AI service not available"}
         
         try:
@@ -1188,16 +1222,17 @@ Better 3 verified than 10 unverified.
             - priority_level: High/Medium/Low priority
             """
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=10000
+            if not self.provider_service:
+                raise Exception("AI provider service not available")
+            
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=10000
             )
             
-            ai_response = response.choices[0].message.content
+            ai_response = provider_response.content
             
             # Try to extract JSON
             try:
@@ -1262,7 +1297,7 @@ Better 3 verified than 10 unverified.
         IMPORTANT: Uses GPT-5-mini model for AI responses.
         Returns empty string if OpenAI client is not initialized or API call fails.
         """
-        if not self.openai_client:
+        if not self.provider_service:
             error_msg = "AI service is currently unavailable. Please check your API configuration."
             print(f"[ERROR] {error_msg}")
             return error_msg
@@ -1271,46 +1306,28 @@ Better 3 verified than 10 unverified.
             system_prompt = """You are a CRM analytics assistant. Analyze the provided data and answer user questions 
             clearly and concisely. Provide actionable insights and recommendations based on the data."""
             
-            print(f"[DEBUG] Calling OpenAI API with model: gpt-5-mini")
-            print(f"[DEBUG] Context length: {len(context)} characters")
+            print(f"[DEBUG] Calling AI provider with context length: {len(context)} characters")
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": context}
-                ],
-                max_completion_tokens=10000,  # High token limit for comprehensive responses
-                timeout=120.0  # Extended timeout for GPT-5-mini
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt=system_prompt,
+                user_prompt=context,
+                max_tokens=10000  # High token limit for comprehensive responses
             )
             
-            print(f"[DEBUG] Raw OpenAI response object: {response}")
-            print(f"[DEBUG] Response type: {type(response)}")
-            print(f"[DEBUG] Response attributes: {dir(response)}")
+            print(f"[DEBUG] AI provider response received")
             
-            if hasattr(response, 'choices') and len(response.choices) > 0:
-                print(f"[DEBUG] Number of choices: {len(response.choices)}")
-                print(f"[DEBUG] First choice: {response.choices[0]}")
-                print(f"[DEBUG] First choice type: {type(response.choices[0])}")
+            if provider_response and provider_response.content:
+                answer = provider_response.content
+                print(f"[DEBUG] Answer length: {len(answer)} characters")
                 
-                if hasattr(response.choices[0], 'message'):
-                    print(f"[DEBUG] Message: {response.choices[0].message}")
-                    print(f"[DEBUG] Message content: {response.choices[0].message.content}")
-                    answer = response.choices[0].message.content
-                else:
-                    print(f"[ERROR] No 'message' attribute in choice!")
-                    answer = None
+                if not answer or not answer.strip():
+                    return "I received your question but couldn't generate a response. Please try again."
+                
+                return answer.strip()
             else:
-                print(f"[ERROR] No 'choices' in response!")
-                answer = None
-            
-            print(f"[DEBUG] Final answer: {answer}")
-            print(f"[DEBUG] Answer length: {len(answer) if answer else 0} characters")
-            
-            if not answer or not answer.strip():
+                print(f"[ERROR] No content in provider response!")
                 return "I received your question but couldn't generate a response. Please try again."
-            
-            return answer.strip()
             
         except Exception as e:
             error_msg = f"I'm unable to provide an answer at this time. Error: {str(e)}"

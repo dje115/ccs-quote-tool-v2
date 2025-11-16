@@ -108,7 +108,8 @@ async def get_dashboard(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.LEAD
+                    Customer.status == CustomerStatus.LEAD,
+                    Customer.is_deleted == False
                 )
             )
         ).scalar() or 0
@@ -117,7 +118,8 @@ async def get_dashboard(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.PROSPECT
+                    Customer.status == CustomerStatus.PROSPECT,
+                    Customer.is_deleted == False
                 )
             )
         ).scalar() or 0
@@ -126,7 +128,8 @@ async def get_dashboard(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.OPPORTUNITY
+                    Customer.status == CustomerStatus.OPPORTUNITY,
+                    Customer.is_deleted == False
                 )
             )
         ).scalar() or 0
@@ -135,7 +138,8 @@ async def get_dashboard(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.CUSTOMER
+                    Customer.status == CustomerStatus.CUSTOMER,
+                    Customer.is_deleted == False
                 )
             )
         ).scalar() or 0
@@ -144,7 +148,8 @@ async def get_dashboard(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.COLD_LEAD
+                    Customer.status == CustomerStatus.COLD_LEAD,
+                    Customer.is_deleted == False
                 )
             )
         ).scalar() or 0
@@ -153,6 +158,7 @@ async def get_dashboard(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
+                    Customer.is_deleted == False,
                     or_(
                         Customer.status == CustomerStatus.INACTIVE,
                         Customer.status == CustomerStatus.LOST
@@ -163,13 +169,19 @@ async def get_dashboard(
         
         # Quote stats
         total_quotes = db.execute(
-            select(func.count(Quote.id)).where(Quote.tenant_id == tenant_id)
+            select(func.count(Quote.id)).where(
+                and_(
+                    Quote.tenant_id == tenant_id,
+                    Quote.is_deleted == False
+                )
+            )
         ).scalar() or 0
         
         quotes_pending = db.execute(
             select(func.count(Quote.id)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
+                    Quote.is_deleted == False,
                     or_(
                         Quote.status == QuoteStatus.DRAFT,
                         Quote.status == QuoteStatus.SENT
@@ -182,7 +194,8 @@ async def get_dashboard(
             select(func.count(Quote.id)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
-                    Quote.status == QuoteStatus.ACCEPTED
+                    Quote.status == QuoteStatus.ACCEPTED,
+                    Quote.is_deleted == False
                 )
             )
         ).scalar() or 0
@@ -192,7 +205,8 @@ async def get_dashboard(
             select(func.sum(Quote.total_amount)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
-                    Quote.status == QuoteStatus.ACCEPTED
+                    Quote.status == QuoteStatus.ACCEPTED,
+                    Quote.is_deleted == False
                 )
             )
         ).scalar()
@@ -236,7 +250,10 @@ async def get_dashboard(
         # Recent activity (last 10 items)
         recent_customers = db.execute(
             select(Customer).where(
-                Customer.tenant_id == tenant_id
+                and_(
+                    Customer.tenant_id == tenant_id,
+                    Customer.is_deleted == False
+                )
             ).order_by(Customer.created_at.desc()).limit(5)
         ).scalars().all()
         
@@ -276,6 +293,7 @@ async def get_dashboard(
                     and_(
                         Customer.tenant_id == tenant_id,
                         Customer.status == CustomerStatus.CUSTOMER,
+                        Customer.is_deleted == False,
                         Customer.created_at >= month_start,
                         Customer.created_at <= month_end
                     )
@@ -287,6 +305,7 @@ async def get_dashboard(
                     and_(
                         Quote.tenant_id == tenant_id,
                         Quote.status == QuoteStatus.ACCEPTED,
+                        Quote.is_deleted == False,
                         Quote.created_at >= month_start,
                         Quote.created_at <= month_end
                     )
@@ -367,6 +386,7 @@ async def get_dashboard(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
+                    Customer.is_deleted == False,
                     Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT, CustomerStatus.OPPORTUNITY])
                 )
             ).order_by(Customer.lead_score.desc()).limit(10)

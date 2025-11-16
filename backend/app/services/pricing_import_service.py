@@ -14,8 +14,7 @@ import httpx
 from io import BytesIO
 
 from app.models.product import Product
-from app.core.api_keys import get_api_keys
-from app.models.tenant import Tenant
+from app.services.ai_provider_service import AIProviderService
 
 
 class PricingImportService:
@@ -24,14 +23,8 @@ class PricingImportService:
     def __init__(self, db: Session, tenant_id: str, openai_api_key: Optional[str] = None):
         self.db = db
         self.tenant_id = tenant_id
-        self.openai_api_key = openai_api_key
-        
-        # Resolve API keys if not provided
-        if not self.openai_api_key:
-            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            if tenant:
-                api_keys = get_api_keys(self.db, tenant)
-                self.openai_api_key = api_keys.openai
+        self.openai_api_key = openai_api_key  # Store for backward compatibility checks
+        self.provider_service = AIProviderService(db, tenant_id=tenant_id)
     
     async def import_pricing_from_file(
         self,
@@ -224,37 +217,24 @@ Example output format:
   }}
 ]"""
             
-            # Call OpenAI API
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.openai_api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "gpt-5-mini",
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": "You are an expert at extracting and standardizing product pricing data from various file formats. Always return valid JSON arrays."
-                            },
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ],
-                        "max_completion_tokens": 8000,
-                        "temperature": 0.3
-                    }
+            # Use AIProviderService
+            try:
+                system_prompt = "You are an expert at extracting and standardizing product pricing data from various file formats. Always return valid JSON arrays."
+                
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=None,
+                    system_prompt=system_prompt,
+                    user_prompt=prompt,
+                    max_tokens=8000,
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
                 )
-            
-            if response.status_code != 200:
+                
+                response_text = provider_response.content
+            except Exception as e:
+                print(f"[PRICING IMPORT] AI extraction failed: {e}, falling back to standard extraction")
                 # Fallback to standard extraction
                 return self._extract_standard_format(df)
-            
-            result = response.json()
-            response_text = result['choices'][0]['message']['content']
             
             # Parse JSON response
             try:

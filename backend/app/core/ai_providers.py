@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Union
 import httpx
 import json
+import asyncio
 from openai import OpenAI
 from datetime import datetime
 
@@ -102,11 +103,15 @@ class OpenAIProvider(AIProvider):
             if use_responses_api or (tools and len(tools) > 0):
                 input_string = f"{system_prompt}\n\n{user_prompt}"
                 
-                response = self.client.responses.create(
-                    model=model,
-                    input=input_string,
-                    tools=tools or [],
-                    tool_choice=kwargs.get("tool_choice", "auto")
+                # Wrap synchronous call in executor to avoid blocking event loop
+                response = await asyncio.run_in_executor(
+                    None,
+                    lambda: self.client.responses.create(
+                        model=model,
+                        input=input_string,
+                        tools=tools or [],
+                        tool_choice=kwargs.get("tool_choice", "auto")
+                    )
                 )
                 
                 # Extract content from responses.create() format
@@ -145,15 +150,30 @@ class OpenAIProvider(AIProvider):
             
             # Use standard chat.completions.create() API
             else:
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    max_completion_tokens=max_tokens,
-                    temperature=temperature,
-                    **kwargs
+                # Handle max_completion_tokens vs max_tokens
+                # OpenAI uses max_completion_tokens, but we accept max_tokens for consistency
+                completion_kwargs = kwargs.copy()
+                if "max_completion_tokens" in completion_kwargs:
+                    # Use the explicit max_completion_tokens if provided
+                    pass
+                else:
+                    # Map max_tokens to max_completion_tokens for OpenAI
+                    completion_kwargs["max_completion_tokens"] = max_tokens
+                    # Remove max_tokens if present to avoid confusion
+                    completion_kwargs.pop("max_tokens", None)
+                
+                # Wrap synchronous call in executor to avoid blocking event loop
+                response = await asyncio.run_in_executor(
+                    None,
+                    lambda: self.client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=temperature,
+                        **completion_kwargs
+                    )
                 )
                 
                 content = response.choices[0].message.content
@@ -231,7 +251,10 @@ class GoogleProvider(AIProvider):
         max_tokens: int = 8000,
         **kwargs
     ) -> AIProviderResponse:
-        """Generate completion using Google Gemini API"""
+        """Generate completion using Google Gemini API
+        
+        Google's Generative AI SDK supports async methods natively.
+        """
         
         if not self.client:
             raise Exception("Google client not initialized")
@@ -252,7 +275,7 @@ class GoogleProvider(AIProvider):
             # Get model
             gemini_model = genai.GenerativeModel(model)
             
-            # Generate content
+            # Generate content (Google SDK has native async support)
             response = await gemini_model.generate_content_async(
                 full_prompt,
                 generation_config=generation_config
@@ -331,17 +354,22 @@ class AnthropicProvider(AIProvider):
         
         try:
             from anthropic import Anthropic
+            import asyncio
             
-            # Anthropic uses messages format
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_prompt,
-                messages=[
-                    {"role": "user", "content": user_prompt}
-                ],
-                **kwargs
+            # Anthropic SDK is synchronous, so we run it in executor
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    **kwargs
+                )
             )
             
             content = response.content[0].text
@@ -367,10 +395,15 @@ class AnthropicProvider(AIProvider):
             if not self.client:
                 return {"success": False, "error": "Client not initialized"}
             
-            response = self.client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=10,
-                messages=[{"role": "user", "content": "Test"}]
+            import asyncio
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=10,
+                    messages=[{"role": "user", "content": "Test"}]
+                )
             )
             
             return {
@@ -514,15 +547,25 @@ class OpenAICompatibleProvider(AIProvider):
             raise Exception("OpenAI-compatible client not initialized")
         
         try:
+            # Handle max_completion_tokens vs max_tokens (OpenAI-compatible API)
+            completion_kwargs = kwargs.copy()
+            if "max_completion_tokens" in completion_kwargs:
+                # Use the explicit max_completion_tokens if provided
+                pass
+            else:
+                # Map max_tokens to max_completion_tokens for OpenAI-compatible API
+                completion_kwargs["max_completion_tokens"] = max_tokens
+                # Remove max_tokens if present to avoid confusion
+                completion_kwargs.pop("max_tokens", None)
+            
             response = self.client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_completion_tokens=max_tokens,
                 temperature=temperature,
-                **kwargs
+                **completion_kwargs
             )
             
             content = response.choices[0].message.content
@@ -568,13 +611,474 @@ class OpenAICompatibleProvider(AIProvider):
         return ["custom-model-1", "custom-model-2"]
 
 
+class CohereProvider(AIProvider):
+    """Cohere provider implementation
+    
+    According to Cohere API docs (https://docs.cohere.com/):
+    - Uses Cohere SDK with chat() method
+    - Also supports OpenAI-compatible API via compatibility endpoint
+    """
+    
+    def _initialize_client(self):
+        """Initialize Cohere client"""
+        try:
+            import cohere
+            self.client = cohere.Client(api_key=self.api_key)
+        except ImportError:
+            print("[Cohere Provider] cohere package not installed")
+            self.client = None
+        except Exception as e:
+            print(f"[Cohere Provider] Error initializing client: {e}")
+            self.client = None
+    
+    async def generate_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int = 8000,
+        **kwargs
+    ) -> AIProviderResponse:
+        """Generate completion using Cohere Chat API
+        
+        Cohere chat API format:
+        - message: The user message (system prompt is typically included in the message)
+        - chat_history: Optional conversation history
+        - preamble: System-level instructions (equivalent to system prompt)
+        """
+        
+        if not self.client:
+            raise Exception("Cohere client not initialized")
+        
+        try:
+            import asyncio
+            import cohere
+            
+            # Cohere chat API supports system prompts via 'preamble' parameter
+            # Combine system and user prompts, or use preamble for system
+            # According to Cohere docs, preamble is for system-level instructions
+            
+            # Cohere SDK is synchronous, so we run it in executor
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat(
+                    model=model,
+                    message=user_prompt,
+                    preamble=system_prompt if system_prompt else None,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+            )
+            
+            content = response.text
+            # Cohere response includes usage in meta.billed_units
+            usage = {}
+            if hasattr(response, 'meta') and hasattr(response.meta, 'billed_units'):
+                billed_units = response.meta.billed_units
+                usage = {
+                    "input_tokens": getattr(billed_units, 'input_tokens', 0),
+                    "output_tokens": getattr(billed_units, 'output_tokens', 0)
+                }
+            
+            return AIProviderResponse(
+                content=content,
+                model=model,
+                usage=usage,
+                raw_response=response
+            )
+        
+        except Exception as e:
+            print(f"[Cohere Provider] Error generating completion: {e}")
+            raise
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test Cohere API connection"""
+        try:
+            if not self.client:
+                return {"success": False, "error": "Client not initialized"}
+            
+            import asyncio
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat(
+                    model="command",
+                    message="Test",
+                    max_tokens=10
+                )
+            )
+            
+            return {
+                "success": True,
+                "message": "Cohere API connection successful",
+                "model": "command"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_supported_models(self) -> List[str]:
+        """Get supported Cohere models"""
+        return ["command", "command-light", "command-r", "command-r-plus"]
+
+
+class MistralProvider(AIProvider):
+    """Mistral AI provider implementation
+    
+    According to Mistral API docs (https://docs.mistral.ai/api):
+    - Uses mistral.chat.complete() method
+    - Supports messages array with role and content
+    - SDK is synchronous, wrapped in executor for async compatibility
+    """
+    
+    def _initialize_client(self):
+        """Initialize Mistral client"""
+        try:
+            from mistralai import Mistral
+            # Mistral SDK can be used as context manager, but we'll use it directly
+            self.client = Mistral(api_key=self.api_key)
+        except ImportError:
+            print("[Mistral Provider] mistralai package not installed")
+            self.client = None
+        except Exception as e:
+            print(f"[Mistral Provider] Error initializing client: {e}")
+            self.client = None
+    
+    async def generate_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int = 8000,
+        **kwargs
+    ) -> AIProviderResponse:
+        """Generate completion using Mistral Chat API
+        
+        Mistral API format (https://docs.mistral.ai/api):
+        - messages: Array of message objects with role and content
+        - model: Model ID (e.g., "mistral-small-latest", "mistral-large-latest")
+        - temperature: Sampling temperature (0.0-1.0, recommended 0.0-0.7)
+        - max_tokens: Maximum tokens to generate
+        """
+        
+        if not self.client:
+            raise Exception("Mistral client not initialized")
+        
+        try:
+            from mistralai import Mistral
+            import asyncio
+            
+            # Build messages array - Mistral supports system messages
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": user_prompt})
+            
+            # Mistral SDK is synchronous, so we run it in executor
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat.complete(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+            )
+            
+            # Extract content from response
+            content = response.choices[0].message.content
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            }
+            
+            return AIProviderResponse(
+                content=content,
+                model=model,
+                usage=usage,
+                raw_response=response
+            )
+        
+        except Exception as e:
+            print(f"[Mistral Provider] Error generating completion: {e}")
+            raise
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test Mistral API connection"""
+        try:
+            if not self.client:
+                return {"success": False, "error": "Client not initialized"}
+            
+            import asyncio
+            loop = asyncio.get_event_loop()
+            # Use a common model name for testing
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat.complete(
+                    model="mistral-small-latest",
+                    messages=[{"role": "user", "content": "Test"}],
+                    max_tokens=10
+                )
+            )
+            
+            return {
+                "success": True,
+                "message": "Mistral API connection successful",
+                "model": "mistral-small-latest"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_supported_models(self) -> List[str]:
+        """Get supported Mistral models
+        
+        According to Mistral docs, common models include:
+        - mistral-tiny-latest, mistral-small-latest
+        - mistral-medium-latest, mistral-large-latest
+        - pixtral-12b (multimodal)
+        """
+        return [
+            "mistral-tiny-latest",
+            "mistral-small-latest",
+            "mistral-medium-latest",
+            "mistral-large-latest",
+            "pixtral-12b"
+        ]
+
+
+class DeepSeekProvider(AIProvider):
+    """DeepSeek provider implementation (uses OpenAI-compatible API)"""
+    
+    def _initialize_client(self):
+        """Initialize DeepSeek client (OpenAI-compatible)
+        
+        According to DeepSeek API docs:
+        - base_url: https://api.deepseek.com (or https://api.deepseek.com/v1 for compatibility)
+        - Uses OpenAI-compatible API format
+        """
+        try:
+            # Use base_url from config, or default to https://api.deepseek.com
+            # The /v1 suffix is optional for OpenAI compatibility
+            base_url = self.base_url or "https://api.deepseek.com"
+            # Ensure it ends with /v1 for OpenAI SDK compatibility
+            if not base_url.endswith('/v1'):
+                if base_url.endswith('/'):
+                    base_url = base_url + 'v1'
+                else:
+                    base_url = base_url + '/v1'
+            
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=base_url,
+                timeout=300.0
+            )
+        except Exception as e:
+            print(f"[DeepSeek Provider] Error initializing client: {e}")
+            self.client = None
+    
+    async def generate_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int = 8000,
+        **kwargs
+    ) -> AIProviderResponse:
+        """Generate completion using DeepSeek API (OpenAI-compatible)"""
+        
+        if not self.client:
+            raise Exception("DeepSeek client not initialized")
+        
+        try:
+            # Handle max_completion_tokens vs max_tokens (OpenAI-compatible API)
+            completion_kwargs = kwargs.copy()
+            if "max_completion_tokens" in completion_kwargs:
+                # Use the explicit max_completion_tokens if provided
+                pass
+            else:
+                # Map max_tokens to max_completion_tokens for OpenAI-compatible API
+                completion_kwargs["max_completion_tokens"] = max_tokens
+                # Remove max_tokens if present to avoid confusion
+                completion_kwargs.pop("max_tokens", None)
+            
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature,
+                **completion_kwargs
+            )
+            
+            content = response.choices[0].message.content
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0,
+                "completion_tokens": response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0,
+                "total_tokens": response.usage.total_tokens if hasattr(response.usage, 'total_tokens') else 0
+            }
+            
+            return AIProviderResponse(
+                content=content,
+                model=model,
+                usage=usage,
+                raw_response=response
+            )
+        
+        except Exception as e:
+            print(f"[DeepSeek Provider] Error generating completion: {e}")
+            raise
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test DeepSeek API connection"""
+        try:
+            if not self.client:
+                return {"success": False, "error": "Client not initialized"}
+            
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": "Test"}],
+                max_completion_tokens=10
+            )
+            
+            return {
+                "success": True,
+                "message": "DeepSeek API connection successful",
+                "model": "deepseek-chat"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_supported_models(self) -> List[str]:
+        """Get supported DeepSeek models"""
+        return ["deepseek-chat", "deepseek-coder"]
+
+
+class GrokProvider(AIProvider):
+    """Grok (xAI) provider implementation (uses OpenAI-compatible API)"""
+    
+    def _initialize_client(self):
+        """Initialize Grok client (OpenAI-compatible)"""
+        try:
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url or "https://api.x.ai/v1",
+                timeout=300.0
+            )
+        except Exception as e:
+            print(f"[Grok Provider] Error initializing client: {e}")
+            self.client = None
+    
+    async def generate_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int = 8000,
+        **kwargs
+    ) -> AIProviderResponse:
+        """Generate completion using Grok API (OpenAI-compatible)"""
+        
+        if not self.client:
+            raise Exception("Grok client not initialized")
+        
+        try:
+            # Handle max_completion_tokens vs max_tokens (OpenAI-compatible API)
+            completion_kwargs = kwargs.copy()
+            if "max_completion_tokens" in completion_kwargs:
+                # Use the explicit max_completion_tokens if provided
+                pass
+            else:
+                # Map max_tokens to max_completion_tokens for OpenAI-compatible API
+                completion_kwargs["max_completion_tokens"] = max_tokens
+                # Remove max_tokens if present to avoid confusion
+                completion_kwargs.pop("max_tokens", None)
+            
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature,
+                **completion_kwargs
+            )
+            
+            content = response.choices[0].message.content
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0,
+                "completion_tokens": response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0,
+                "total_tokens": response.usage.total_tokens if hasattr(response.usage, 'total_tokens') else 0
+            }
+            
+            return AIProviderResponse(
+                content=content,
+                model=model,
+                usage=usage,
+                raw_response=response
+            )
+        
+        except Exception as e:
+            print(f"[Grok Provider] Error generating completion: {e}")
+            raise
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test Grok API connection"""
+        try:
+            if not self.client:
+                return {"success": False, "error": "Client not initialized"}
+            
+            response = self.client.chat.completions.create(
+                model="grok-beta",
+                messages=[{"role": "user", "content": "Test"}],
+                max_completion_tokens=10
+            )
+            
+            return {
+                "success": True,
+                "message": "Grok API connection successful",
+                "model": "grok-beta"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_supported_models(self) -> List[str]:
+        """Get supported Grok models"""
+        return ["grok-beta", "grok-2"]
+
+
 # Provider Registry
 PROVIDER_REGISTRY = {
     "openai": OpenAIProvider,
     "google": GoogleProvider,
     "anthropic": AnthropicProvider,
+    "cohere": CohereProvider,
+    "mistral": MistralProvider,
+    "deepseek": DeepSeekProvider,
+    "grok": GrokProvider,
     "ollama": OllamaProvider,
-    "openai-compatible": OpenAICompatibleProvider,
+    "openai_compatible": OpenAICompatibleProvider,
+    "openai-compatible": OpenAICompatibleProvider,  # Alias
 }
 
 

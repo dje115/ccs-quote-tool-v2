@@ -31,6 +31,11 @@ aiohttp==3.11.11
 
 # AI & OpenAI
 openai==2.1.0  # v2.x includes Responses API with web_search tool
+google-generativeai>=0.3.0  # Google Gemini SDK
+anthropic>=0.34.0  # Anthropic Claude SDK
+cohere>=5.0.0  # Cohere SDK
+mistralai>=1.0.0  # Mistral AI SDK
+# xai>=0.1.0  # xAI (Grok) SDK - Commented out due to pandas conflict, using OpenAI-compatible instead
 
 # Data Processing
 beautifulsoup4==4.12.3
@@ -76,3 +81,6 @@ reportlab>=4.0.0
 # Excel/CSV processing
 pandas>=2.2.0
 openpyxl>=3.1.0
+
+# Object Storage (MinIO/S3)
+minio>=7.2.0

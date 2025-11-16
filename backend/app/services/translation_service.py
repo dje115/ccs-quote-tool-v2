@@ -5,10 +5,9 @@ AI-powered translation service for multilingual support
 
 import json
 from typing import Dict, Optional
-import openai
 from sqlalchemy.orm import Session
-from app.core.config import settings
 from app.services.ai_prompt_service import AIPromptService
+from app.services.ai_provider_service import AIProviderService
 from app.models.ai_prompt import PromptCategory
 
 
@@ -18,78 +17,48 @@ class TranslationService:
     def __init__(self, db: Optional[Session] = None, tenant_id: Optional[str] = None):
         self.db = db
         self.tenant_id = tenant_id
-        self.openai_client = None
-        self._initialize_client()
-    
-    def _initialize_client(self):
-        """Initialize OpenAI client"""
-        try:
-            if settings.OPENAI_API_KEY:
-                self.openai_client = openai.OpenAI(
-                    api_key=settings.OPENAI_API_KEY,
-                    timeout=60
-                )
-        except Exception as e:
-            print(f"[ERROR] Error initializing translation client: {e}")
+        self.provider_service = AIProviderService(db, tenant_id=tenant_id) if db else None
     
     async def translate(self, text: str, target_language: str, source_language: str = "en") -> Dict[str, str]:
-        """Translate text using GPT-5"""
-        if not self.openai_client:
+        """Translate text using AI provider"""
+        if not self.provider_service or not self.db:
             return {'success': False, 'error': 'Translation service not available'}
         
         try:
-            # Try to get prompt from database
-            user_prompt = None
-            system_prompt = None
-            model = "gpt-5-mini"
-            max_tokens = 2000
+            # Get prompt from database
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.TRANSLATION.value,
+                tenant_id=self.tenant_id
+            )
             
-            if self.db:
-                try:
-                    prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
-                    prompt_obj = await prompt_service.get_prompt(
-                        category=PromptCategory.TRANSLATION.value,
-                        tenant_id=self.tenant_id
-                    )
-                    
-                    if prompt_obj:
-                        rendered = prompt_service.render_prompt(prompt_obj, {
-                            "source_language": source_language,
-                            "target_language": target_language,
-                            "text": text
-                        })
-                        user_prompt = rendered['user_prompt']
-                        system_prompt = rendered['system_prompt']
-                        model = rendered['model']
-                        max_tokens = rendered['max_tokens']
-                except Exception as e:
-                    print(f"[TRANSLATION] Error fetching prompt from database: {e}")
-            
-            # Fallback to hardcoded prompt
-            if not user_prompt:
+            if prompt_obj:
+                # Use database prompt with AIProviderService
+                provider_response = await self.provider_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        "source_language": source_language,
+                        "target_language": target_language,
+                        "text": text
+                    }
+                )
+                translated_text = provider_response.content.strip()
+            else:
+                # Fallback: use generate_with_rendered_prompts
+                system_prompt = "You are a professional translator. Translate accurately and naturally."
                 user_prompt = f"""Translate the following text from {source_language} to {target_language}.
 Return ONLY the translated text, no explanations.
 
 Text to translate:
 {text}"""
-                system_prompt = "You are a professional translator. Translate accurately and naturally."
-            
-            response = self.openai_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "content": user_prompt
-                    }
-                ],
-                max_completion_tokens=max_tokens
-            )
-            
-            translated_text = response.choices[0].message.content.strip()
+                
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=None,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    max_tokens=2000
+                )
+                translated_text = provider_response.content.strip()
             
             return {
                 'success': True,
@@ -99,30 +68,28 @@ Text to translate:
             }
             
         except Exception as e:
+            print(f"[TRANSLATION] Error: {e}")
+            import traceback
+            traceback.print_exc()
             return {'success': False, 'error': str(e)}
     
     async def detect_language(self, text: str) -> Dict[str, str]:
         """Detect language of text"""
-        if not self.openai_client:
+        if not self.provider_service or not self.db:
             return {'success': False, 'error': 'Translation service not available'}
         
         try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-5-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a language detection expert. Return ONLY the ISO 639-1 language code (e.g., 'en', 'es', 'fr')."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"What language is this text in?\n\n{text[:500]}"
-                    }
-                ],
-                max_completion_tokens=10
+            system_prompt = "You are a language detection expert. Return ONLY the ISO 639-1 language code (e.g., 'en', 'es', 'fr')."
+            user_prompt = f"What language is this text in?\n\n{text[:500]}"
+            
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=10
             )
             
-            language_code = response.choices[0].message.content.strip().lower()
+            language_code = provider_response.content.strip().lower()
             
             return {
                 'success': True,
@@ -130,6 +97,7 @@ Text to translate:
             }
             
         except Exception as e:
+            print(f"[TRANSLATION] Language detection error: {e}")
             return {'success': False, 'error': str(e)}
 
 

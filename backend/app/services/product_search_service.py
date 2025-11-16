@@ -11,8 +11,7 @@ import httpx
 
 from app.models.ai_prompt import PromptCategory
 from app.services.ai_prompt_service import AIPromptService
-from app.core.api_keys import get_api_keys
-from app.models.tenant import Tenant
+from app.services.ai_provider_service import AIProviderService
 
 
 class ProductSearchService:
@@ -21,14 +20,7 @@ class ProductSearchService:
     def __init__(self, db: Session, tenant_id: str, openai_api_key: Optional[str] = None):
         self.db = db
         self.tenant_id = tenant_id
-        self.openai_api_key = openai_api_key
-        
-        # Resolve API keys if not provided
-        if not self.openai_api_key:
-            tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            if tenant:
-                api_keys = get_api_keys(self.db, tenant)
-                self.openai_api_key = api_keys.openai
+        self.provider_service = AIProviderService(db, tenant_id=tenant_id)
     
     async def search_products(
         self,
@@ -62,35 +54,16 @@ class ProductSearchService:
                 "query": query
             })
             
-            user_prompt = rendered['user_prompt']
-            system_prompt = rendered['system_prompt']
-            model = rendered['model']
-            max_tokens = rendered['max_tokens']
+            # Use AIProviderService
+            provider_response = await self.provider_service.generate(
+                prompt=prompt_obj,
+                variables={
+                    "category": category or "general",
+                    "query": query
+                }
+            )
             
-            # Call OpenAI API
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.openai_api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        "max_completion_tokens": max_tokens,
-                        "temperature": 0.7
-                    }
-                )
-            
-            if response.status_code != 200:
-                return []
-            
-            result = response.json()
-            response_text = result['choices'][0]['message']['content']
+            response_text = provider_response.content
             
             # Try to parse JSON response
             try:

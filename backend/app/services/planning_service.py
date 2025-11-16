@@ -10,10 +10,10 @@ import re
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
-from openai import OpenAI
 
 from app.models import Tenant, PlanningApplication, PlanningApplicationCampaign, PlanningApplicationKeyword, ApplicationType, PlanningApplicationStatus, PlanningCampaignStatus, Lead, LeadSource, LeadStatus
 from app.services.ai_analysis_service import AIAnalysisService
+from app.services.ai_provider_service import AIProviderService
 from app.core.config import settings
 
 
@@ -46,29 +46,7 @@ class PlanningApplicationService:
         self.db = db
         self.tenant_id = tenant_id
         self.ai_service = AIAnalysisService(tenant_id=tenant_id, db=db)
-        self.openai_client = None
-        self._init_openai_client()
-
-    def _init_openai_client(self):
-        """Initialize OpenAI client with tenant or system API key"""
-        try:
-            tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
-            api_key = tenant.openai_api_key if tenant and tenant.openai_api_key else None
-            
-            if not api_key:
-                # Fallback to system tenant
-                system_tenant = self.db.query(Tenant).filter(
-                    (Tenant.name == "System") | (Tenant.plan == "system")
-                ).first()
-                api_key = system_tenant.openai_api_key if system_tenant else None
-            
-            if api_key:
-                self.openai_client = OpenAI(api_key=api_key)
-            else:
-                raise Exception("No OpenAI API key found")
-        except Exception as e:
-            print(f"⚠️ Error initializing OpenAI client: {e}")
-            raise
+        self.provider_service = AIProviderService(db, tenant_id=tenant_id)
 
     async def fetch_planning_data(self, campaign: PlanningApplicationCampaign, days_back: int = None) -> List[Dict[str, Any]]:
         """Fetch planning application data from the specified portal"""
@@ -402,10 +380,9 @@ class PlanningApplicationService:
     async def analyze_applications_with_ai(self, applications: List[Dict[str, Any]], tenant_id: str, max_analysis: int = 20) -> List[Dict[str, Any]]:
         """Analyze planning applications using AI"""
         print(f"🔍 analyze_applications_with_ai called with {len(applications)} applications")
-        print(f"🔍 OpenAI client available: {self.openai_client is not None}")
         
-        if not applications or not self.openai_client:
-            print(f"⚠️ Skipping AI analysis - apps: {len(applications)}, client: {self.openai_client is not None}")
+        if not applications:
+            print(f"⚠️ Skipping AI analysis - no applications")
             return applications
         
         # Sort by relevance score and take top N
@@ -422,17 +399,20 @@ class PlanningApplicationService:
         try:
             # Prepare prompt for AI analysis
             prompt = self._build_ai_analysis_prompt(apps_to_analyze, tenant_context)
-            print(f"🤖 Calling OpenAI API with {len(apps_to_analyze)} applications...")
+            print(f"🤖 Calling AI provider with {len(apps_to_analyze)} applications...")
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
+            # Use AIProviderService
+            provider_response = await self.provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt="You are an expert at analyzing planning applications and matching them to business opportunities. Always return valid JSON arrays.",
+                user_prompt=prompt,
                 temperature=0.4,
-                max_completion_tokens=4000
+                max_tokens=4000,
+                response_format={"type": "json_object"}
             )
             
-            print(f"✅ OpenAI API response received")
-            ai_results = json.loads(response.choices[0].message.content.strip())
+            print(f"✅ AI provider response received")
+            ai_results = json.loads(provider_response.content.strip())
             print(f"✅ Parsed {len(ai_results)} AI analysis results")
             
             # Apply AI results to applications
@@ -446,6 +426,8 @@ class PlanningApplicationService:
         
         except Exception as e:
             print(f"⚠️ Error in AI analysis: {e}")
+            import traceback
+            traceback.print_exc()
         
         return applications
 

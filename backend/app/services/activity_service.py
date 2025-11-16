@@ -18,6 +18,8 @@ import json
 
 from app.models.crm import Customer, Contact
 from app.models.sales import SalesActivity, ActivityType, ActivityOutcome
+from app.models.tenant import Tenant
+from app.core.api_keys import get_api_keys
 from app.core.config import settings
 from app.services.ai_provider_service import AIProviderService
 
@@ -131,10 +133,6 @@ Lead Score: {customer.lead_score or 'N/A'}
             
             if customer.description:
                 customer_context += f"Description: {customer.description}\n"
-            
-            # Get tenant profile for context
-            from app.models.tenant import Tenant
-            tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             
             tenant_context = ""
             if tenant:
@@ -534,51 +532,49 @@ Respond in JSON:
                 model = rendered['model']
                 max_tokens = rendered['max_tokens']
             
-            # Call OpenAI (use longer timeout for complex analysis)
-            async with httpx.AsyncClient(timeout=240.0) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_keys.openai}",
-                        "Content-Type": "application/json"
+            # Use AIProviderService
+            if prompt_obj:
+                provider_response = await self.provider_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        "company_name": customer.company_name,
+                        "status": customer.status.value,
+                        "lead_score": str(customer.lead_score or 'N/A'),
+                        "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
+                        "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
+                        "activity_summary": activity_summary,
+                        "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
+                        "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
+                        "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
+                        "tenant_context": tenant_context
                     },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": system_prompt
-                            },
-                            {
-                                "role": "user",
-                                "content": user_prompt
-                            }
-                        ],
-                        "max_completion_tokens": max_tokens,
-                        "response_format": {"type": "json_object"}
-                    }
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"}
+                )
+            else:
+                provider_response = await self.provider_service.generate_with_rendered_prompts(
+                    prompt=None,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"}
                 )
             
-            if response.status_code == 200:
-                result = response.json()
-                suggestions = json.loads(result['choices'][0]['message']['content'])
-                generated_at = datetime.now(timezone.utc)
-                
-                # Cache the suggestions in the database
-                customer.ai_suggestions = suggestions
-                customer.ai_suggestions_date = generated_at
-                self.db.commit()
-                print(f"✓ Cached suggestions for customer {customer_id}")
-                
-                return {
-                    'success': True,
-                    'suggestions': suggestions,
-                    'generated_at': generated_at.isoformat(),
-                    'cached': False
-                }
-            else:
-                print(f"✗ OpenAI API error: {response.status_code}")
-                return {'success': False, 'error': 'API error'}
+            suggestions = json.loads(provider_response.content)
+            generated_at = datetime.now(timezone.utc)
+            
+            # Cache the suggestions in the database
+            customer.ai_suggestions = suggestions
+            customer.ai_suggestions_date = generated_at
+            self.db.commit()
+            print(f"✓ Cached suggestions for customer {customer_id}")
+            
+            return {
+                'success': True,
+                'suggestions': suggestions,
+                'generated_at': generated_at.isoformat(),
+                'cached': False
+            }
                 
         except Exception as e:
             print(f"[ERROR] Failed to generate action suggestions: {e}")

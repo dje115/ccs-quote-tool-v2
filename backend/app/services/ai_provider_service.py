@@ -178,7 +178,11 @@ class AIProviderService:
             
             # Merge with kwargs
             temperature = kwargs.get("temperature", temperature)
-            max_tokens = kwargs.get("max_tokens", max_tokens)
+            # Handle max_completion_tokens (OpenAI) vs max_tokens (other providers)
+            if "max_completion_tokens" in kwargs:
+                max_tokens = kwargs["max_completion_tokens"]
+            elif "max_tokens" in kwargs:
+                max_tokens = kwargs["max_tokens"]
             
             # Render prompts if variables provided
             system_prompt = prompt.system_prompt
@@ -194,16 +198,27 @@ class AIProviderService:
             use_responses_api = kwargs.get("use_responses_api", False)
             tools = kwargs.get("tools", None)
             
+            # Prepare kwargs for provider (filter out handled parameters)
+            provider_kwargs = {k: v for k, v in kwargs.items() if k not in [
+                "use_responses_api", "tools", "temperature", "max_tokens", "max_completion_tokens"
+            ]}
+            
+            # For OpenAI, pass max_completion_tokens; for others, use max_tokens
+            if provider_model.slug == "openai" or provider_model.slug == "deepseek" or provider_model.slug == "grok" or provider_model.slug == "openai_compatible":
+                provider_kwargs["max_completion_tokens"] = max_tokens
+            else:
+                provider_kwargs["max_tokens"] = max_tokens
+            
             # Generate completion
             response = await provider_instance.generate_completion(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=model,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=max_tokens,  # Base parameter (will be overridden by provider_kwargs for OpenAI)
                 use_responses_api=use_responses_api,
                 tools=tools,
-                **{k: v for k, v in kwargs.items() if k not in ["use_responses_api", "tools", "temperature", "max_tokens"]}
+                **provider_kwargs
             )
             
             return response
@@ -258,7 +273,7 @@ class AIProviderService:
     
     async def generate_with_rendered_prompts(
         self,
-        prompt: AIPrompt,
+        prompt: Optional[AIPrompt],
         system_prompt: str,
         user_prompt: str,
         **kwargs
@@ -271,17 +286,21 @@ class AIProviderService:
         consistency context, etc.)
         
         Args:
-            prompt: AIPrompt object (for provider configuration)
+            prompt: AIPrompt object (for provider configuration) or None to use system default
             system_prompt: Pre-rendered system prompt
             user_prompt: Pre-rendered user prompt
-            **kwargs: Additional provider-specific settings
+            **kwargs: Additional provider-specific settings (model, temperature, max_tokens, etc.)
         
         Returns:
             AIProviderResponse with standardized format
         """
         try:
             # Resolve provider
-            provider_model = self._resolve_provider_for_prompt(prompt)
+            if prompt:
+                provider_model = self._resolve_provider_for_prompt(prompt)
+            else:
+                # Use system default provider when prompt is None
+                provider_model = self._get_system_default_provider()
             
             if not provider_model:
                 raise Exception("No provider available")
@@ -298,8 +317,10 @@ class AIProviderService:
             if not provider_instance:
                 raise Exception(f"Failed to create provider instance for {provider_model.slug}")
             
-            # Get model name
-            model = prompt.provider_model or prompt.model
+            # Get model name (from kwargs, prompt, or provider default)
+            model = kwargs.get("model")
+            if not model and prompt:
+                model = prompt.provider_model or prompt.model
             if not model:
                 supported_models = provider_model.supported_models or []
                 if supported_models:
@@ -307,14 +328,39 @@ class AIProviderService:
                 else:
                     model = provider_instance.get_supported_models()[0] if provider_instance.get_supported_models() else "default"
             
-            # Get settings
-            settings = prompt.provider_settings or {}
-            temperature = kwargs.get("temperature", settings.get("temperature", prompt.temperature))
-            max_tokens = kwargs.get("max_tokens", settings.get("max_tokens", prompt.max_tokens))
+            # Get settings (from kwargs, prompt, or defaults)
+            if prompt:
+                settings = prompt.provider_settings or {}
+                default_temperature = settings.get("temperature", prompt.temperature)
+                default_max_tokens = settings.get("max_tokens", prompt.max_tokens)
+            else:
+                settings = {}
+                default_temperature = 0.7
+                default_max_tokens = 8000
+            
+            temperature = kwargs.get("temperature", default_temperature)
+            # Handle max_completion_tokens (OpenAI) vs max_tokens (other providers)
+            if "max_completion_tokens" in kwargs:
+                max_tokens = kwargs["max_completion_tokens"]
+            elif "max_tokens" in kwargs:
+                max_tokens = kwargs["max_tokens"]
+            else:
+                max_tokens = default_max_tokens
             
             # Check if we need to use responses API (for OpenAI with web search)
             use_responses_api = kwargs.get("use_responses_api", False)
             tools = kwargs.get("tools", None)
+            
+            # Prepare kwargs for provider (filter out handled parameters)
+            provider_kwargs = {k: v for k, v in kwargs.items() if k not in [
+                "use_responses_api", "tools", "temperature", "max_tokens", "max_completion_tokens"
+            ]}
+            
+            # For OpenAI, pass max_completion_tokens; for others, use max_tokens
+            if provider_model.slug == "openai" or provider_model.slug == "deepseek" or provider_model.slug == "grok" or provider_model.slug == "openai_compatible":
+                provider_kwargs["max_completion_tokens"] = max_tokens
+            else:
+                provider_kwargs["max_tokens"] = max_tokens
             
             # Generate completion with pre-rendered prompts
             response = await provider_instance.generate_completion(
@@ -322,10 +368,10 @@ class AIProviderService:
                 user_prompt=user_prompt,
                 model=model,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=max_tokens,  # Base parameter (will be overridden by provider_kwargs for OpenAI)
                 use_responses_api=use_responses_api,
                 tools=tools,
-                **{k: v for k, v in kwargs.items() if k not in ["use_responses_api", "tools", "temperature", "max_tokens"]}
+                **provider_kwargs
             )
             
             return response

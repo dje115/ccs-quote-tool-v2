@@ -48,11 +48,13 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_API_KEY: Optional[str] = Field(default=None, env="GOOGLE_MAPS_API_KEY")
     
     # Email
-    SMTP_HOST: Optional[str] = Field(default=None, env="SMTP_HOST")
-    SMTP_PORT: int = Field(default=587, env="SMTP_PORT")
+    SMTP_HOST: Optional[str] = Field(default="mailhog", env="SMTP_HOST")  # Default to MailHog in development
+    SMTP_PORT: int = Field(default=1025, env="SMTP_PORT")  # MailHog SMTP port
     SMTP_USERNAME: Optional[str] = Field(default=None, env="SMTP_USERNAME")
     SMTP_PASSWORD: Optional[str] = Field(default=None, env="SMTP_PASSWORD")
-    SMTP_TLS: bool = Field(default=True, env="SMTP_TLS")
+    SMTP_TLS: bool = Field(default=False, env="SMTP_TLS")  # MailHog doesn't use TLS
+    SMTP_FROM_EMAIL: str = Field(default="noreply@ccs.com", env="SMTP_FROM_EMAIL")
+    SMTP_FROM_NAME: str = Field(default="CCS Quote Tool", env="SMTP_FROM_NAME")
     
     # File Storage
     UPLOAD_DIR: str = Field(default="uploads", env="UPLOAD_DIR")
