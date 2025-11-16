@@ -46,8 +46,8 @@ docker-compose up -d
 - **Admin Portal:** http://localhost:3011
 - **Backend API:** http://localhost:8001
 - **API Documentation:** http://localhost:8001/docs
-- **MailHog Web UI:** http://localhost:3005 (Email testing - all emails captured here)
-- **MinIO Console:** http://localhost:9090 (Object storage management)
+- **MailHog Web UI:** http://localhost:3006 (Email testing - all emails captured here)
+- **MinIO Console:** http://localhost:9092 (Object storage management)
 
 **Production Mode (using docker-compose.prod.yml):**
 - **Frontend (CRM):** http://localhost:3000
@@ -386,10 +386,10 @@ volumes:
 | Backend | 8000 | 8000 | FastAPI REST API |
 | PostgreSQL | 5432 | 5432 | Database |
 | Redis | 6379 | 6379 | Cache |
-| MailHog SMTP | 1025 | 1025 | Email testing (SMTP) |
-| MailHog Web UI | 3005 | 3005 | Email testing (Web interface) |
-| MinIO API | 9000 | 9000 | Object storage API |
-| MinIO Console | 9090 | 9090 | Object storage management |
+| MailHog SMTP | 1026 | 1025 | Email testing (SMTP) - changed from 1025 to avoid conflicts |
+| MailHog Web UI | 3006 | 8025 | Email testing (Web interface) - changed from 3005 to avoid conflicts |
+| MinIO API | 9002 | 9000 | Object storage API - changed from 9000 to avoid conflicts |
+| MinIO Console | 9092 | 9001 | Object storage management - changed from 9090 to avoid conflicts |
 
 ## 🆘 Getting Help
 

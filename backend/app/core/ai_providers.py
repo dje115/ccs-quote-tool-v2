@@ -296,6 +296,9 @@ class OpenAIProvider(AIProvider):
                 ]
                 skip_temperature = kwargs.get("skip_temperature", False) or model.lower() in [m.lower() for m in models_without_temperature]
                 
+                # Remove skip_temperature from completion_kwargs before passing to OpenAI API
+                filtered_completion_kwargs = {k: v for k, v in completion_kwargs.items() if k != "skip_temperature"}
+                
                 if skip_temperature:
                     # Skip temperature parameter for these models (they use default=1)
                     print(f"[OpenAI Provider] Model {model} doesn't support custom temperature, using default (1)")
@@ -305,7 +308,7 @@ class OpenAIProvider(AIProvider):
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
                         ],
-                        **completion_kwargs
+                        **filtered_completion_kwargs
                     }
                 else:
                     # Include temperature for models that support it
@@ -316,7 +319,7 @@ class OpenAIProvider(AIProvider):
                             {"role": "user", "content": user_prompt}
                         ],
                         "temperature": temperature,
-                        **completion_kwargs
+                        **filtered_completion_kwargs
                     }
                 
                 # Wrap synchronous call in executor to avoid blocking event loop

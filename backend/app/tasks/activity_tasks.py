@@ -373,7 +373,8 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
                 known_facts=customer.known_facts,
                 excluded_addresses=customer.excluded_addresses or [],
                 update_financial_data=update_financial_data,
-                update_addresses=update_addresses
+                update_addresses=update_addresses,
+                customer_id=customer_id  # Pass customer_id for MinIO storage
             )
         )
         
@@ -388,6 +389,22 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
             if update_financial_data:
                 companies_house_data = analysis_result.get('source_data', {}).get('companies_house')
                 if companies_house_data:
+                    # Ensure accounts_documents are included in the stored data
+                    if isinstance(customer.companies_house_data, dict):
+                        # Merge with existing data, preserving accounts_documents
+                        existing_docs = customer.companies_house_data.get('accounts_documents', [])
+                        if 'accounts_documents' in companies_house_data:
+                            # Merge documents, avoiding duplicates
+                            new_docs = companies_house_data.get('accounts_documents', [])
+                            existing_paths = {doc.get('minio_path') for doc in existing_docs if doc.get('minio_path')}
+                            for doc in new_docs:
+                                if doc.get('minio_path') not in existing_paths:
+                                    existing_docs.append(doc)
+                            companies_house_data['accounts_documents'] = existing_docs
+                        else:
+                            # Preserve existing documents if new data doesn't have them
+                            companies_house_data['accounts_documents'] = existing_docs
+                    
                     customer.companies_house_data = companies_house_data
             
             # Only update Google Maps data if it was fetched

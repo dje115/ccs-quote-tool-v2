@@ -21,8 +21,8 @@ Write-Host "Access points:" -ForegroundColor Yellow
 Write-Host "  Frontend:      http://localhost:3000" -ForegroundColor White
 Write-Host "  Admin Portal:  http://localhost:3010" -ForegroundColor White
 Write-Host "  Backend API:   http://localhost:8000" -ForegroundColor White
-Write-Host "  MailHog UI:    http://localhost:3005" -ForegroundColor White
-Write-Host "  MinIO Console: http://localhost:9090" -ForegroundColor White
+Write-Host "  MailHog UI:    http://localhost:3006" -ForegroundColor White
+Write-Host "  MinIO Console: http://localhost:9092" -ForegroundColor White
 Write-Host ""
 
 docker-compose -f docker-compose.dev.yml up -d

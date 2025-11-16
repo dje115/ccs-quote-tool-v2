@@ -32,7 +32,7 @@ i18n
     resources,
     fallbackLng: 'en',
     lng: localStorage.getItem('i18nextLng') || 'en', // Use saved preference or default to English
-    debug: process.env.NODE_ENV === 'development',
+    debug: (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') || (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'development'),
     
     interpolation: {
       escapeValue: false, // React already does escaping

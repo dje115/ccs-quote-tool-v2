@@ -16,6 +16,8 @@ from app.core.api_keys import get_api_keys
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
 from app.models.tenant import User, Tenant
 from app.services.ai_analysis_service import AIAnalysisService
+from app.services.storage_service import get_storage_service
+from fastapi.responses import Response, StreamingResponse
 
 router = APIRouter()
 
@@ -605,4 +607,250 @@ def include_address(
         raise HTTPException(
             status_code=500,
             detail=f"Error including address: {str(e)}"
+        )
+
+
+@router.get("/{customer_id}/accounts-documents")
+async def list_accounts_documents(
+    customer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    List all accounts documents stored in MinIO for a customer
+    
+    SECURITY: Tenant isolation enforced via:
+    1. Database query filters by customer.tenant_id == current_user.tenant_id
+    2. Only documents belonging to the authenticated tenant are returned
+    3. MinIO paths include tenant_id: accounts/{tenant_id}/{customer_id}/...
+    """
+    try:
+        # SECURITY: Database query enforces tenant isolation
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not customer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer not found"
+            )
+        
+        # Get accounts documents from companies_house_data
+        accounts_documents = []
+        if customer.companies_house_data and isinstance(customer.companies_house_data, dict):
+            accounts_documents = customer.companies_house_data.get('accounts_documents', [])
+        
+        # SECURITY: Filter out any documents that don't match tenant_id (defense in depth)
+        tenant_id = current_user.tenant_id
+        filtered_documents = []
+        for doc in accounts_documents:
+            minio_path = doc.get('minio_path', '')
+            if minio_path.startswith(f"accounts/{tenant_id}/"):
+                filtered_documents.append(doc)
+            else:
+                # Log potential security issue (document path doesn't match tenant)
+                print(f"[SECURITY WARNING] Document path {minio_path} doesn't match tenant {tenant_id}")
+        
+        return {
+            'customer_id': customer_id,
+            'customer_name': customer.company_name,
+            'accounts_documents': filtered_documents,
+            'count': len(filtered_documents)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving accounts documents: {str(e)}"
+        )
+
+
+@router.get("/{customer_id}/accounts-documents/{transaction_id}/view")
+async def view_accounts_document(
+    customer_id: str,
+    transaction_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    View/download a specific accounts document from MinIO
+    
+    SECURITY: Tenant isolation enforced via:
+    1. Database query filters by customer.tenant_id == current_user.tenant_id
+    2. MinIO path validation ensures path starts with accounts/{tenant_id}/
+    3. Only documents belonging to the authenticated tenant can be accessed
+    """
+    try:
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not customer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer not found"
+            )
+        
+        # Find the document in companies_house_data
+        accounts_documents = []
+        if customer.companies_house_data and isinstance(customer.companies_house_data, dict):
+            accounts_documents = customer.companies_house_data.get('accounts_documents', [])
+        
+        # Find the document by transaction_id
+        document_info = None
+        for doc in accounts_documents:
+            if doc.get('transaction_id') == transaction_id:
+                document_info = doc
+                break
+        
+        if not document_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Accounts document with transaction_id {transaction_id} not found"
+            )
+        
+        # Get the document from MinIO
+        storage_service = get_storage_service()
+        minio_path = document_info.get('minio_path')
+        
+        if not minio_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MinIO path not found for this document"
+            )
+        
+        # SECURITY: Verify tenant isolation - ensure path starts with tenant_id
+        expected_tenant_prefix = f"accounts/{current_user.tenant_id}/"
+        if not minio_path.startswith(expected_tenant_prefix):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Tenant isolation violation"
+            )
+        
+        try:
+            file_data = await storage_service.download_file(minio_path)
+            content_type = document_info.get('content_type', 'application/xhtml+xml')
+            
+            # Return the file as a response
+            return Response(
+                content=file_data,
+                media_type=content_type,
+                headers={
+                    'Content-Disposition': f'inline; filename="{transaction_id}.xhtml"',
+                    'X-Content-Type-Options': 'nosniff'
+                }
+            )
+        except Exception as storage_error:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error retrieving document from MinIO: {str(storage_error)}"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error viewing accounts document: {str(e)}"
+        )
+
+
+@router.get("/{customer_id}/accounts-documents/{transaction_id}/download-url")
+async def get_accounts_document_url(
+    customer_id: str,
+    transaction_id: str,
+    expires_hours: int = Query(default=24, ge=1, le=168),  # 1 hour to 7 days
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get a presigned URL to download/view an accounts document (for external sharing)
+    
+    SECURITY: Tenant isolation enforced via:
+    1. Database query filters by customer.tenant_id == current_user.tenant_id
+    2. MinIO path validation ensures path starts with accounts/{tenant_id}/
+    3. Presigned URLs are time-limited (1-168 hours)
+    4. Only documents belonging to the authenticated tenant can be accessed
+    """
+    try:
+        from datetime import timedelta
+        
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not customer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer not found"
+            )
+        
+        # Find the document in companies_house_data
+        accounts_documents = []
+        if customer.companies_house_data and isinstance(customer.companies_house_data, dict):
+            accounts_documents = customer.companies_house_data.get('accounts_documents', [])
+        
+        # Find the document by transaction_id
+        document_info = None
+        for doc in accounts_documents:
+            if doc.get('transaction_id') == transaction_id:
+                document_info = doc
+                break
+        
+        if not document_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Accounts document with transaction_id {transaction_id} not found"
+            )
+        
+        # Generate presigned URL
+        storage_service = get_storage_service()
+        minio_path = document_info.get('minio_path')
+        
+        if not minio_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="MinIO path not found for this document"
+            )
+        
+        # SECURITY: Verify tenant isolation - ensure path starts with tenant_id
+        expected_tenant_prefix = f"accounts/{current_user.tenant_id}/"
+        if not minio_path.startswith(expected_tenant_prefix):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Tenant isolation violation"
+            )
+        
+        try:
+            presigned_url = storage_service.get_presigned_url(
+                object_name=minio_path,
+                expires=timedelta(hours=expires_hours)
+            )
+            
+            return {
+                'customer_id': customer_id,
+                'customer_name': customer.company_name,
+                'transaction_id': transaction_id,
+                'document_info': document_info,
+                'presigned_url': presigned_url,
+                'expires_hours': expires_hours
+            }
+        except Exception as storage_error:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error generating presigned URL: {str(storage_error)}"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting document URL: {str(e)}"
         )

@@ -49,7 +49,14 @@ export const useWebSocket = (): UseWebSocketReturn => {
     }
 
     // Get API base URL from environment or default
-    const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    // Handle both Vite (import.meta.env) and React (process.env) environments
+    let apiBaseUrl = 'http://localhost:8000';
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
+      apiBaseUrl = import.meta.env.VITE_API_URL;
+    } else if (typeof window !== 'undefined') {
+      // Fallback: use window location for same-origin requests
+      apiBaseUrl = window.location.origin.replace(':3000', ':8000');
+    }
     const wsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/api/v1/ws?token=' + encodeURIComponent(token);
 
     try {

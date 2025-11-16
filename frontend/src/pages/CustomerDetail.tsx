@@ -52,6 +52,7 @@ import {
   People as PeopleIcon,
   CompareArrows as CompareArrowsIcon,
   Description as DescriptionIcon,
+  GetApp as GetAppIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
   Error as ErrorIcon,
@@ -63,6 +64,20 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI } from '../services/api';
+
+// Get API base URL (works in both React and Vite)
+const getApiBaseUrl = () => {
+  // Try Vite env first
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Try React env
+  if (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  // Fallback to window location for same-origin requests
+  return window.location.origin.replace(':3000', ':8000');
+};
 import api from '../services/api';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import CustomerOverviewTab from '../components/CustomerOverviewTab';
@@ -126,6 +141,14 @@ const CustomerDetail: React.FC = () => {
   useEffect(() => {
     if (!id || !isConnected) return;
 
+    // Subscribe to ai_analysis.started for this customer (updates status from 'queued' to 'running')
+    const unsubscribeStarted = subscribe('ai_analysis.started', (event) => {
+      if (event.data.customer_id === id) {
+        console.log('AI analysis started! Updating status to running...');
+        loadCustomerData(); // Reload to show 'running' status
+      }
+    });
+
     // Subscribe to ai_analysis.completed for this customer
     const unsubscribeCompleted = subscribe('ai_analysis.completed', (event) => {
       if (event.data.customer_id === id) {
@@ -155,6 +178,7 @@ const CustomerDetail: React.FC = () => {
     });
 
     return () => {
+      unsubscribeStarted();
       unsubscribeCompleted();
       unsubscribeFailed();
       unsubscribeUpdated();
@@ -1197,7 +1221,7 @@ const CustomerDetail: React.FC = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {customer.companies_house_data.accounts_detail.detailed_financials.slice(0, 5).map((yearData: any, index: number) => (
+                        {customer.companies_house_data.accounts_detail.detailed_financials.map((yearData: any, index: number) => (
                           <TableRow key={index} sx={{ '&:nth-of-type(odd)': { bgcolor: '#fafafa' } }}>
                             <TableCell>
                               <strong>
@@ -1320,6 +1344,115 @@ const CustomerDetail: React.FC = () => {
                   </Alert>
                 )}
               </Box>
+
+              {/* Accounts Documents Section */}
+              {customer.companies_house_data?.accounts_documents && 
+               Array.isArray(customer.companies_house_data.accounts_documents) && 
+               customer.companies_house_data.accounts_documents.length > 0 && (
+                <Box sx={{ mt: 4 }}>
+                  <Typography variant="h6" color="primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📄 Accounts Documents
+                  </Typography>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      View original accounts documents stored in MinIO. These documents are available for reference and can be shared with accountants.
+                    </Typography>
+                  </Alert>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell><strong>Year</strong></TableCell>
+                          <TableCell><strong>Filing Date</strong></TableCell>
+                          <TableCell><strong>Description</strong></TableCell>
+                          <TableCell><strong>Size</strong></TableCell>
+                          <TableCell><strong>Actions</strong></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {customer.companies_house_data.accounts_documents.map((doc: any, index: number) => (
+                          <TableRow key={index} sx={{ '&:nth-of-type(odd)': { bgcolor: '#fafafa' } }}>
+                            <TableCell>
+                              <strong>{doc.year || 'Unknown'}</strong>
+                            </TableCell>
+                            <TableCell>
+                              {doc.filing_date ? new Date(doc.filing_date).toLocaleDateString() : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {doc.description || 'Annual Accounts'}
+                            </TableCell>
+                            <TableCell>
+                              {doc.size_bytes ? `${(doc.size_bytes / 1024).toFixed(1)} KB` : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<DescriptionIcon />}
+                                onClick={async () => {
+                                  if (doc.transaction_id) {
+                                    try {
+                                      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+                                      const apiUrl = getApiBaseUrl();
+                                      const response = await fetch(`${apiUrl}/api/v1/customers/${id}/accounts-documents/${doc.transaction_id}/view`, {
+                                        headers: {
+                                          'Authorization': `Bearer ${token}`
+                                        }
+                                      });
+                                      if (response.ok) {
+                                        const blob = await response.blob();
+                                        const url = window.URL.createObjectURL(blob);
+                                        window.open(url, '_blank');
+                                      } else {
+                                        console.error('Error viewing document:', response.status, response.statusText);
+                                      }
+                                    } catch (error) {
+                                      console.error('Error viewing document:', error);
+                                    }
+                                  }
+                                }}
+                                sx={{ mr: 1 }}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<GetAppIcon />}
+                                onClick={async () => {
+                                  if (doc.transaction_id) {
+                                    try {
+                                      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+                                      const apiUrl = getApiBaseUrl();
+                                      const response = await fetch(`${apiUrl}/api/v1/customers/${id}/accounts-documents/${doc.transaction_id}/download-url?expires_hours=24`, {
+                                        headers: {
+                                          'Authorization': `Bearer ${token}`
+                                        }
+                                      });
+                                      if (response.ok) {
+                                        const data = await response.json();
+                                        if (data.presigned_url) {
+                                          window.open(data.presigned_url, '_blank');
+                                        }
+                                      } else {
+                                        console.error('Error getting download URL:', response.status, response.statusText);
+                                      }
+                                    } catch (error) {
+                                      console.error('Error getting download URL:', error);
+                                    }
+                                  }
+                                }}
+                              >
+                                Download
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
             </Paper>
           )}
 

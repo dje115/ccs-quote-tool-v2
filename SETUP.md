@@ -48,8 +48,8 @@ Once containers are running, access:
 - **Admin Portal:** http://localhost:3010
 - **Backend API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
-- **MailHog Web UI:** http://localhost:3005 (Email testing)
-- **MinIO Console:** http://localhost:9090 (Object storage)
+- **MailHog Web UI:** http://localhost:3006 (Email testing)
+- **MinIO Console:** http://localhost:9092 (Object storage)
 
 **Default Login:**
 - Email: `admin@ccs.com`
@@ -100,26 +100,28 @@ docker-compose exec backend pytest backend/tests/test_pricing_import_service.py
 
 ### MailHog (Email Testing)
 
-MailHog is automatically configured for development. All emails sent by the application are captured in MailHog's web UI at http://localhost:3005.
+MailHog is automatically configured for development. All emails sent by the application are captured in MailHog's web UI at http://localhost:3006.
 
 **Configuration:**
-- SMTP Host: `mailhog`
-- SMTP Port: `1025`
-- Web UI: http://localhost:3005
+- SMTP Host: `mailhog` (internal container name)
+- SMTP Port: `1025` (internal container port)
+- Web UI: http://localhost:3006 (host port, changed from 3005 to avoid conflicts)
 
 ### MinIO (Object Storage)
 
 MinIO provides S3-compatible object storage for product images, quote attachments, and customer documents.
 
 **Configuration:**
-- API Endpoint: `minio:9000`
-- Console: http://localhost:9090
+- API Endpoint: `minio:9000` (internal container port)
+- Console: http://localhost:9092 (host port, changed from 9090 to avoid conflicts)
 - Default Credentials: `minioadmin` / `minioadmin123`
 - Default Bucket: `ccs-quote-tool`
 
 **Access MinIO Console:**
-1. Navigate to http://localhost:9090
+1. Navigate to http://localhost:9092 (changed from 9090 to avoid conflicts)
 2. Login with `minioadmin` / `minioadmin123`
+
+**Note:** MinIO API is available on localhost:9002 (changed from 9000 to avoid conflicts)
 3. Create buckets and manage files
 
 ## Troubleshooting

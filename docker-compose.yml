@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
       target: development
       args:
-        APP_VERSION: ${APP_VERSION:-2.6.0}
+        APP_VERSION: ${APP_VERSION:-2.20.0}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-backend
@@ -122,7 +122,7 @@ services:
       dockerfile: Dockerfile
       target: development
       args:
-        APP_VERSION: ${APP_VERSION:-2.6.0}
+        APP_VERSION: ${APP_VERSION:-2.20.0}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-celery-worker
@@ -155,7 +155,7 @@ services:
       dockerfile: Dockerfile
       target: development
       args:
-        APP_VERSION: ${APP_VERSION:-2.6.0}
+        APP_VERSION: ${APP_VERSION:-2.20.0}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-celery-beat
@@ -186,8 +186,8 @@ services:
     image: mailhog/mailhog:latest
     container_name: ccs-mailhog
     ports:
-      - "1025:1025"  # SMTP port
-      - "3005:8025"  # Web UI port
+      - "1026:1025"  # SMTP port (changed from 1025 to avoid conflict)
+      - "3006:8025"  # Web UI port (changed from 3005 to avoid conflict)
     networks:
       - ccs-network
     restart: unless-stopped
@@ -206,8 +206,8 @@ services:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin123
     ports:
-      - "9000:9000"  # API port
-      - "9090:9001"  # Console port
+      - "9002:9000"  # API port (changed from 9000 to avoid conflict)
+      - "9092:9001"  # Console port (changed from 9090 to avoid conflict)
     volumes:
       - minio_data:/data
     networks:

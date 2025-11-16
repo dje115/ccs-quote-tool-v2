@@ -9,9 +9,6 @@ import {
   Card,
   CardContent,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
   IconButton,
   Alert,
   Menu,
@@ -493,89 +490,191 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
             {!Array.isArray(contacts) || contacts.length === 0 ? (
               <Alert severity="info">No contacts yet. Add key contacts to improve relationship management.</Alert>
             ) : (
-              <List>
-                {contacts.slice(0, 5).map((contact) => (
-                  <ListItem 
-                    key={contact.id} 
-                    sx={{ 
-                      border: '1px solid #e0e0e0', 
-                      borderRadius: 1, 
-                      mb: 1,
-                      cursor: 'pointer',
-                      '&:hover': { 
-                        backgroundColor: '#f5f5f5',
-                        borderColor: '#1976d2',
-                        boxShadow: 1
-                      }
-                    }}
-                    onClick={() => handleContactClick(contact)}
-                  >
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography fontWeight="600">
-                            {contact.first_name} {contact.last_name}
-                          </Typography>
-                          {contact.is_primary && <Chip label="Primary" size="small" color="primary" />}
-                          {((contact.emails && contact.emails.length > 0) || (contact.phones && contact.phones.length > 0)) && (
-                            <Chip label="Multiple contacts" size="small" variant="outlined" color="info" />
-                          )}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {contacts.slice(0, 5).map((contact) => {
+                  // Collect all emails (primary + additional)
+                  const allEmails: Array<{email: string, type?: string, is_primary?: boolean}> = [];
+                  if (contact.email) {
+                    allEmails.push({ email: contact.email, type: 'work', is_primary: true });
+                  }
+                  if (contact.emails && Array.isArray(contact.emails)) {
+                    allEmails.push(...contact.emails);
+                  }
+
+                  // Collect all phones (primary + additional)
+                  const allPhones: Array<{number: string, type?: string, is_primary?: boolean}> = [];
+                  if (contact.phone) {
+                    allPhones.push({ number: contact.phone, type: 'mobile', is_primary: true });
+                  }
+                  if (contact.phones && Array.isArray(contact.phones)) {
+                    allPhones.push(...contact.phones);
+                  }
+
+                  return (
+                    <Card
+                      key={contact.id}
+                      variant="outlined"
+                      sx={{
+                        cursor: 'pointer',
+                        border: contact.is_primary ? '2px solid' : '1px solid',
+                        borderColor: contact.is_primary ? 'primary.main' : 'divider',
+                        backgroundColor: contact.is_primary ? 'primary.50' : 'background.paper',
+                        '&:hover': {
+                          boxShadow: 3,
+                          borderColor: 'primary.main',
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s ease-in-out'
+                        }
+                      }}
+                      onClick={() => handleContactClick(contact)}
+                    >
+                      <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Box sx={{ flex: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                {contact.first_name} {contact.last_name}
+                              </Typography>
+                              {contact.is_primary && (
+                                <Chip 
+                                  icon={<StarIcon />}
+                                  label="Primary" 
+                                  size="small" 
+                                  color="primary"
+                                  sx={{ fontWeight: 600 }}
+                                />
+                              )}
+                            </Box>
+                            {contact.job_title && (
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                {contact.job_title}
+                              </Typography>
+                            )}
+                          </Box>
+                          <IconButton 
+                            size="small" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditContact(contact);
+                            }} 
+                            color="default"
+                            title="Edit Contact"
+                            sx={{ ml: 1 }}
+                          >
+                            <EditIcon />
+                          </IconButton>
                         </Box>
-                      }
-                      secondary={
-                        <>
-                          {contact.job_title && <Typography variant="body2" color="text.secondary">{contact.job_title}</Typography>}
-                          {contact.email && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                              <EmailIcon sx={{ fontSize: 14 }} color="action" />
-                              <Typography variant="body2">{contact.email}</Typography>
-                            </Box>
-                          )}
-                          {contact.phone && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                              <PhoneIcon sx={{ fontSize: 14 }} color="action" />
-                              <Typography variant="body2">{contact.phone}</Typography>
-                            </Box>
-                          )}
-                        </>
-                      }
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      {contact.email && (
-                        <IconButton 
-                          size="small" 
-                          href={`mailto:${contact.email}`} 
-                          color="primary"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <EmailIcon />
-                        </IconButton>
-                      )}
-                      {contact.phone && (
-                        <IconButton 
-                          size="small" 
-                          href={`tel:${contact.phone}`} 
-                          color="primary"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <PhoneIcon />
-                        </IconButton>
-                      )}
-                      <IconButton 
-                        size="small" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditContact(contact);
-                        }} 
-                        color="default"
-                        title="Edit Contact"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Box>
-                  </ListItem>
-                ))}
-              </List>
+
+                        <Divider sx={{ my: 1.5 }} />
+
+                        {/* Emails Section */}
+                        {allEmails.length > 0 && (
+                          <Box sx={{ mb: allPhones.length > 0 ? 1.5 : 0 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>
+                              Email{allEmails.length > 1 ? 's' : ''}
+                            </Typography>
+                            {allEmails.map((emailItem, idx) => (
+                              <Box 
+                                key={idx}
+                                sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: 1, 
+                                  mb: 0.5,
+                                  p: 0.5,
+                                  borderRadius: 1,
+                                  '&:hover': { bgcolor: 'action.hover' }
+                                }}
+                              >
+                                <EmailIcon sx={{ fontSize: 16 }} color="action" />
+                                <Typography 
+                                  variant="body2" 
+                                  component="a" 
+                                  href={`mailto:${emailItem.email}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  sx={{ 
+                                    textDecoration: 'none', 
+                                    color: 'primary.main',
+                                    '&:hover': { textDecoration: 'underline' }
+                                  }}
+                                >
+                                  {emailItem.email}
+                                </Typography>
+                                {emailItem.is_primary && (
+                                  <Chip label="Primary" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
+                                )}
+                                {emailItem.type && (
+                                  <Chip 
+                                    label={emailItem.type} 
+                                    size="small" 
+                                    variant="outlined" 
+                                    sx={{ height: 18, fontSize: '0.65rem' }} 
+                                  />
+                                )}
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+
+                        {/* Phones Section */}
+                        {allPhones.length > 0 && (
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>
+                              Phone{allPhones.length > 1 ? 's' : ''}
+                            </Typography>
+                            {allPhones.map((phoneItem, idx) => (
+                              <Box 
+                                key={idx}
+                                sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: 1, 
+                                  mb: 0.5,
+                                  p: 0.5,
+                                  borderRadius: 1,
+                                  '&:hover': { bgcolor: 'action.hover' }
+                                }}
+                              >
+                                <PhoneIcon sx={{ fontSize: 16 }} color="action" />
+                                <Typography 
+                                  variant="body2" 
+                                  component="a" 
+                                  href={`tel:${phoneItem.number}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  sx={{ 
+                                    textDecoration: 'none', 
+                                    color: 'primary.main',
+                                    '&:hover': { textDecoration: 'underline' }
+                                  }}
+                                >
+                                  {phoneItem.number}
+                                </Typography>
+                                {phoneItem.is_primary && (
+                                  <Chip label="Primary" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
+                                )}
+                                {phoneItem.type && (
+                                  <Chip 
+                                    label={phoneItem.type} 
+                                    size="small" 
+                                    variant="outlined" 
+                                    sx={{ height: 18, fontSize: '0.65rem' }} 
+                                  />
+                                )}
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+
+                        {allEmails.length === 0 && allPhones.length === 0 && (
+                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            No contact information
+                          </Typography>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </Box>
             )}
           </Paper>
 
