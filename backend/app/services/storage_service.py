@@ -74,6 +74,7 @@ class StorageService:
             Object name (path) of uploaded file
         """
         try:
+            import asyncio
             bucket = bucket_name or self.default_bucket
             self._ensure_bucket_exists(bucket)
             
@@ -87,14 +88,18 @@ class StorageService:
                 length = file_obj.tell()
                 file_obj.seek(0)  # Reset to start
             
-            # Upload file
-            self.client.put_object(
-                bucket_name=bucket,
-                object_name=object_name,
-                data=file_obj,
-                length=length,
-                content_type=content_type or 'application/octet-stream',
-                metadata=metadata or {}
+            # Wrap synchronous MinIO call in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.put_object(
+                    bucket_name=bucket,
+                    object_name=object_name,
+                    data=file_obj,
+                    length=length,
+                    content_type=content_type or 'application/octet-stream',
+                    metadata=metadata or {}
+                )
             )
             
             logger.info(f"File uploaded successfully: {bucket}/{object_name}")
@@ -120,9 +125,16 @@ class StorageService:
             File data as bytes
         """
         try:
+            import asyncio
             bucket = bucket_name or self.default_bucket
             
-            response = self.client.get_object(bucket, object_name)
+            # Wrap synchronous MinIO call in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.get_object(bucket, object_name)
+            )
+            
             data = response.read()
             response.close()
             response.release_conn()
@@ -149,8 +161,16 @@ class StorageService:
             True if deleted successfully
         """
         try:
+            import asyncio
             bucket = bucket_name or self.default_bucket
-            self.client.remove_object(bucket, object_name)
+            
+            # Wrap synchronous MinIO call in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.remove_object(bucket, object_name)
+            )
+            
             logger.info(f"File deleted: {bucket}/{object_name}")
             return True
             
@@ -204,8 +224,15 @@ class StorageService:
             True if file exists
         """
         try:
+            import asyncio
             bucket = bucket_name or self.default_bucket
-            self.client.stat_object(bucket, object_name)
+            
+            # Wrap synchronous MinIO call in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.stat_object(bucket, object_name)
+            )
             return True
         except S3Error:
             return False

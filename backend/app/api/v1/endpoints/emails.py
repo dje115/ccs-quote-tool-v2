@@ -56,7 +56,7 @@ async def test_email(
     if success:
         return EmailTestResponse(
             success=True,
-            message=f"Test email sent successfully to {request.to}. Check MailHog at http://localhost:3005 if in development mode."
+            message=f"Test email sent successfully to {request.to}. Check MailHog at http://localhost:3006 if in development mode."
         )
     else:
         return EmailTestResponse(
