@@ -1148,13 +1148,19 @@ const CustomerDetail: React.FC = () => {
                 </Alert>
                 
                 {customer.google_maps_data.locations
-                  .filter((place: any) => {
+                  .filter((place: any, index: number) => {
                     const excludedAddresses = customer.excluded_addresses || [];
-                    const locationId = place.name?.replace(/\s+/g, '_').replace(/\./g, '_').replace(/,/g, '_');
+                    // Use same key generation logic as in map function
+                    const locationId = place.place_id 
+                      ? place.place_id 
+                      : `${place.name?.replace(/\s+/g, '_').replace(/\./g, '_').replace(/,/g, '_') || 'unnamed'}_${place.formatted_address?.replace(/\s+/g, '_').replace(/\./g, '_').replace(/,/g, '_').replace(/\//g, '_') || index}_${index}`;
                     return !excludedAddresses.includes(locationId);
                   })
-                  .map((place: any) => {
-                    const locationId = place.name?.replace(/\s+/g, '_').replace(/\./g, '_').replace(/,/g, '_');
+                  .map((place: any, index: number) => {
+                    // Create unique key: use place_id if available, otherwise combine name + address + index
+                    const locationId = place.place_id 
+                      ? place.place_id 
+                      : `${place.name?.replace(/\s+/g, '_').replace(/\./g, '_').replace(/,/g, '_') || 'unnamed'}_${place.formatted_address?.replace(/\s+/g, '_').replace(/\./g, '_').replace(/,/g, '_').replace(/\//g, '_') || index}_${index}`;
                     
                     return (
                       <Card key={locationId} id={`address_${locationId}`} variant="outlined" sx={{ mb: 2, p: 2, '&:hover': { boxShadow: 3 }, transition: 'box-shadow 0.3s' }}>

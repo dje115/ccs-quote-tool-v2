@@ -853,6 +853,29 @@ Better 3 verified than 10 unverified.
             print(f"[AI] AI provider call successful, processing response...")
             result_text = provider_response.content
             
+            # Debug: Check if content is empty
+            if not result_text or len(result_text.strip()) < 10:
+                print(f"[AI] ⚠️ WARNING: Empty or very short content from provider_response")
+                print(f"[AI] Content length: {len(result_text) if result_text else 0}")
+                print(f"[AI] Content preview: {result_text[:200] if result_text else 'None'}")
+                print(f"[AI] Provider response type: {type(provider_response)}")
+                print(f"[AI] Provider response attributes: {[a for a in dir(provider_response) if not a.startswith('_')]}")
+                
+                # Try to get raw response
+                if hasattr(provider_response, 'raw_response'):
+                    raw = provider_response.raw_response
+                    print(f"[AI] Raw response type: {type(raw)}")
+                    if hasattr(raw, 'output'):
+                        print(f"[AI] Raw response has 'output' attribute: {type(raw.output)}")
+                        if isinstance(raw.output, dict):
+                            print(f"[AI] Raw response.output keys: {list(raw.output.keys())}")
+                            if 'text' in raw.output:
+                                result_text = str(raw.output['text']).strip()
+                                print(f"[AI] ✅ Extracted content from raw_response.output.text: {len(result_text)} chars")
+                
+                if not result_text or len(result_text.strip()) < 10:
+                    raise Exception(f"No valid content extracted from AI provider response. Content length: {len(result_text) if result_text else 0}")
+            
             # Parse JSON response
             # Remove markdown code blocks if present
             if result_text.strip().startswith('```'):

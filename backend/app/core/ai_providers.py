@@ -103,42 +103,167 @@ class OpenAIProvider(AIProvider):
             if use_responses_api or (tools and len(tools) > 0):
                 input_string = f"{system_prompt}\n\n{user_prompt}"
                 
+                # Add timeout (5 minutes = 300 seconds)
+                timeout_seconds = kwargs.get("timeout", 300)
+                
                 # Wrap synchronous call in executor to avoid blocking event loop
-                response = await asyncio.run_in_executor(
-                    None,
-                    lambda: self.client.responses.create(
-                        model=model,
-                        input=input_string,
-                        tools=tools or [],
-                        tool_choice=kwargs.get("tool_choice", "auto")
+                loop = asyncio.get_event_loop()
+                try:
+                    response = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None,
+                            lambda: self.client.responses.create(
+                                model=model,
+                                input=input_string,
+                                tools=tools or [],
+                                tool_choice=kwargs.get("tool_choice", "auto"),
+                                max_completion_tokens=kwargs.get("max_completion_tokens", max_tokens)
+                            )
+                        ),
+                        timeout=timeout_seconds
                     )
-                )
+                except asyncio.TimeoutError:
+                    raise Exception(f"OpenAI API call timed out after {timeout_seconds} seconds")
                 
                 # Extract content from responses.create() format
+                # Based on OpenAI responses API, the response structure can vary
                 content = None
                 sources = []
                 
+                print(f"[OpenAI Provider] Extracting response content...")
+                print(f"[OpenAI Provider] Response type: {type(response)}")
+                
+                # Method 1: Check for output_text attribute (most common)
                 if hasattr(response, 'output_text') and response.output_text:
-                    content = response.output_text.strip()
-                elif hasattr(response, 'output') and isinstance(response.output, list):
-                    for item in response.output:
-                        if isinstance(item, dict) and "content" in item:
-                            for block in item["content"]:
-                                if block.get("type") == "output_text" and not content:
-                                    content = block.get("text", "").strip()
-                                elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
-                                    web_results = block.get("results", [])
-                                    for r in web_results:
-                                        sources.append({
-                                            "title": r.get("title", "Untitled"),
-                                            "url": r.get("url", ""),
-                                            "snippet": r.get("snippet", "")
-                                        })
+                    content = str(response.output_text).strip()
+                    print(f"[OpenAI Provider] ✅ Extracted from output_text: {len(content)} chars")
+                
+                # Method 2: Check for output attribute (can be string, dict, or list)
+                elif hasattr(response, 'output'):
+                    output = response.output
+                    print(f"[OpenAI Provider] Found output attribute: {type(output)}")
+                    
+                    # Check if output is a dict with 'text' key (nested structure)
+                    if isinstance(output, dict):
+                        if 'text' in output:
+                            content = str(output['text']).strip()
+                            print(f"[OpenAI Provider] ✅ Extracted from output.text (dict): {len(content)} chars")
+                        elif 'output_text' in output:
+                            content = str(output['output_text']).strip()
+                            print(f"[OpenAI Provider] ✅ Extracted from output.output_text (dict): {len(content)} chars")
+                        else:
+                            # Try to convert dict to string or extract first text-like value
+                            print(f"[OpenAI Provider] Output dict keys: {list(output.keys())}")
+                            # Look for any text-like values in the dict
+                            for key, value in output.items():
+                                if isinstance(value, str) and len(value) > 100:  # Likely the content
+                                    content = value.strip()
+                                    print(f"[OpenAI Provider] ✅ Extracted from output['{key}']: {len(content)} chars")
+                                    break
+                    elif isinstance(output, str):
+                        content = output.strip()
+                        print(f"[OpenAI Provider] ✅ Extracted from output (string): {len(content)} chars")
+                    elif isinstance(output, list) and len(output) > 0:
+                        # Try to extract from list items
+                        for item in output:
+                            if isinstance(item, dict):
+                                # Check for content blocks
+                                if "content" in item and isinstance(item["content"], list):
+                                    for block in item["content"]:
+                                        if block.get("type") == "output_text" and not content:
+                                            content = block.get("text", "").strip()
+                                            print(f"[OpenAI Provider] ✅ Extracted from output[].content[].text: {len(content)} chars")
+                                        elif block.get("type") == "tool_use" and block.get("tool") == "web_search_preview":
+                                            web_results = block.get("results", [])
+                                            for r in web_results:
+                                                sources.append({
+                                                    "title": r.get("title", "Untitled"),
+                                                    "url": r.get("url", ""),
+                                                    "snippet": r.get("snippet", "")
+                                                })
+                                # Check for direct text/output_text keys
+                                elif "text" in item and not content:
+                                    content = str(item["text"]).strip()
+                                    print(f"[OpenAI Provider] ✅ Extracted from output[].text: {len(content)} chars")
+                                elif "output_text" in item and not content:
+                                    content = str(item["output_text"]).strip()
+                                    print(f"[OpenAI Provider] ✅ Extracted from output[].output_text: {len(content)} chars")
+                        # If still no content, try converting first item
+                        if not content and len(output) > 0:
+                            first_item = output[0]
+                            if isinstance(first_item, str):
+                                content = first_item.strip()
+                                print(f"[OpenAI Provider] ✅ Extracted from output[0] (string): {len(content)} chars")
+                            elif isinstance(first_item, dict) and "text" in first_item:
+                                content = str(first_item["text"]).strip()
+                                print(f"[OpenAI Provider] ✅ Extracted from output[0].text: {len(content)} chars")
+                    else:
+                        # Try to convert to string
+                        content = str(output).strip()
+                        print(f"[OpenAI Provider] ✅ Converted output to string: {len(content)} chars")
+                
+                # Method 3: Check for choices (chat.completions format)
                 elif hasattr(response, 'choices') and len(response.choices) > 0:
                     content = response.choices[0].message.content.strip()
+                    print(f"[OpenAI Provider] ✅ Extracted from choices[0].message.content: {len(content)} chars")
                 
-                if not content:
-                    raise Exception("No content extracted from OpenAI response")
+                # Method 4: Check for text attribute
+                elif hasattr(response, 'text'):
+                    content = str(response.text).strip()
+                    print(f"[OpenAI Provider] ✅ Extracted from text attribute: {len(content)} chars")
+                
+                # Method 5: Try to serialize response to JSON and extract
+                if not content or len(content) < 10:
+                    print(f"[OpenAI Provider] Trying JSON serialization...")
+                    try:
+                        import json
+                        # Try to get the raw response dict if available
+                        if hasattr(response, 'model_dump'):
+                            response_dict = response.model_dump()
+                            # Look for output_text or output in the dict
+                            if "output_text" in response_dict:
+                                content = str(response_dict["output_text"]).strip()
+                                print(f"[OpenAI Provider] ✅ Extracted from model_dump().output_text: {len(content)} chars")
+                            elif "output" in response_dict:
+                                output_val = response_dict["output"]
+                                if isinstance(output_val, str):
+                                    content = output_val.strip()
+                                    print(f"[OpenAI Provider] ✅ Extracted from model_dump().output: {len(content)} chars")
+                                elif isinstance(output_val, dict):
+                                    # Handle nested output.text structure
+                                    if "text" in output_val:
+                                        content = str(output_val["text"]).strip()
+                                        print(f"[OpenAI Provider] ✅ Extracted from model_dump().output.text: {len(content)} chars")
+                                    elif "output_text" in output_val:
+                                        content = str(output_val["output_text"]).strip()
+                                        print(f"[OpenAI Provider] ✅ Extracted from model_dump().output.output_text: {len(content)} chars")
+                                    else:
+                                        # Look for any text-like values in the output dict
+                                        for key, value in output_val.items():
+                                            if isinstance(value, str) and len(value) > 100:
+                                                content = value.strip()
+                                                print(f"[OpenAI Provider] ✅ Extracted from model_dump().output['{key}']: {len(content)} chars")
+                                                break
+                    except Exception as e:
+                        print(f"[OpenAI Provider] JSON serialization failed: {e}")
+                
+                # Final fallback: convert entire response to string
+                if not content or len(content) < 10:
+                    print(f"[OpenAI Provider] Using string conversion fallback...")
+                    content = str(response).strip()
+                    print(f"[OpenAI Provider] ✅ Converted response to string: {len(content)} chars")
+                
+                if not content or len(content) < 10:
+                    # Log detailed debug info
+                    print(f"[OpenAI Provider] ❌ ERROR: No valid content extracted!")
+                    print(f"[OpenAI Provider] Response type: {type(response)}")
+                    print(f"[OpenAI Provider] Response attributes: {[a for a in dir(response) if not a.startswith('_')]}")
+                    if hasattr(response, 'model_dump'):
+                        try:
+                            print(f"[OpenAI Provider] Response dict keys: {list(response.model_dump().keys())}")
+                        except:
+                            pass
+                    raise Exception(f"No content extracted from OpenAI response. Response type: {type(response)}")
                 
                 return AIProviderResponse(
                     content=content,
@@ -162,19 +287,20 @@ class OpenAIProvider(AIProvider):
                     # Remove max_tokens if present to avoid confusion
                     completion_kwargs.pop("max_tokens", None)
                 
-                # Wrap synchronous call in executor to avoid blocking event loop
-                response = await asyncio.run_in_executor(
-                    None,
-                    lambda: self.client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        temperature=temperature,
-                        **completion_kwargs
+                    # Wrap synchronous call in executor to avoid blocking event loop
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: self.client.chat.completions.create(
+                            model=model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt}
+                            ],
+                            temperature=temperature,
+                            **completion_kwargs
+                        )
                     )
-                )
                 
                 content = response.choices[0].message.content
                 usage = {
