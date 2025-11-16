@@ -50,6 +50,9 @@ class SupplierCreate(BaseModel):
     pricing_url: Optional[str] = None
     api_key: Optional[str] = None
     notes: Optional[str] = None
+    scraping_config: Optional[dict] = None
+    scraping_enabled: bool = True
+    scraping_method: str = "generic"
     is_preferred: bool = False
 
 
@@ -60,6 +63,9 @@ class SupplierUpdate(BaseModel):
     pricing_url: Optional[str] = None
     api_key: Optional[str] = None
     notes: Optional[str] = None
+    scraping_config: Optional[dict] = None
+    scraping_enabled: Optional[bool] = None
+    scraping_method: Optional[str] = None
     is_preferred: Optional[bool] = None
     is_active: Optional[bool] = None
 
@@ -71,7 +77,11 @@ class SupplierResponse(BaseModel):
     name: str
     website: Optional[str]
     pricing_url: Optional[str]
+    api_key: Optional[str] = None
     notes: Optional[str]
+    scraping_config: Optional[dict] = None
+    scraping_enabled: bool = True
+    scraping_method: str = "generic"
     is_preferred: bool
     is_active: bool
     created_at: str
@@ -213,6 +223,18 @@ async def list_suppliers(
             else:
                 category_data = None
             
+            # Parse scraping_config if it's a string
+            import json
+            scraping_config = None
+            if supplier.scraping_config:
+                if isinstance(supplier.scraping_config, str):
+                    try:
+                        scraping_config = json.loads(supplier.scraping_config)
+                    except:
+                        scraping_config = {}
+                else:
+                    scraping_config = supplier.scraping_config
+            
             supplier_response = SupplierResponse(
                 id=supplier.id,
                 tenant_id=supplier.tenant_id,
@@ -220,7 +242,11 @@ async def list_suppliers(
                 name=supplier.name,
                 website=supplier.website,
                 pricing_url=supplier.pricing_url,
+                api_key=supplier.api_key,
                 notes=supplier.notes,
+                scraping_config=scraping_config,
+                scraping_enabled=supplier.scraping_enabled if hasattr(supplier, 'scraping_enabled') else True,
+                scraping_method=supplier.scraping_method if hasattr(supplier, 'scraping_method') else "generic",
                 is_preferred=supplier.is_preferred,
                 is_active=supplier.is_active,
                 created_at=supplier.created_at.isoformat() if supplier.created_at else "",
@@ -255,6 +281,11 @@ async def create_supplier(
     """Create a new supplier"""
     try:
         service = SupplierService(db, current_tenant.id)
+        import json
+        scraping_config_json = None
+        if supplier_data.scraping_config:
+            scraping_config_json = json.dumps(supplier_data.scraping_config) if isinstance(supplier_data.scraping_config, dict) else supplier_data.scraping_config
+        
         supplier = service.create_supplier(
             category_id=supplier_data.category_id,
             name=supplier_data.name,
@@ -262,6 +293,9 @@ async def create_supplier(
             pricing_url=supplier_data.pricing_url,
             api_key=supplier_data.api_key,
             notes=supplier_data.notes,
+            scraping_config=scraping_config_json,
+            scraping_enabled=supplier_data.scraping_enabled,
+            scraping_method=supplier_data.scraping_method,
             is_preferred=supplier_data.is_preferred
         )
         if not supplier:
@@ -271,6 +305,17 @@ async def create_supplier(
         db.refresh(supplier)
         category_data = supplier.category if supplier.category else None
         
+        # Parse scraping_config if it's a string
+        scraping_config = None
+        if supplier.scraping_config:
+            if isinstance(supplier.scraping_config, str):
+                try:
+                    scraping_config = json.loads(supplier.scraping_config)
+                except:
+                    scraping_config = {}
+            else:
+                scraping_config = supplier.scraping_config
+        
         # Convert to response format
         return SupplierResponse(
             id=supplier.id,
@@ -279,7 +324,11 @@ async def create_supplier(
             name=supplier.name,
             website=supplier.website,
             pricing_url=supplier.pricing_url,
+            api_key=supplier.api_key,
             notes=supplier.notes,
+            scraping_config=scraping_config,
+            scraping_enabled=supplier.scraping_enabled if hasattr(supplier, 'scraping_enabled') else True,
+            scraping_method=supplier.scraping_method if hasattr(supplier, 'scraping_method') else "generic",
             is_preferred=supplier.is_preferred,
             is_active=supplier.is_active,
             created_at=supplier.created_at.isoformat() if supplier.created_at else "",
@@ -316,12 +365,47 @@ async def get_supplier(
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
     
-    supplier_dict = {
-        **{c.name: getattr(supplier, c.name) for c in supplier.__table__.columns},
-        'category': supplier.category,
-        'pricing_count': service.get_supplier_pricing_count(supplier.id)
-    }
-    return supplier_dict
+    # Parse scraping_config if it's a string
+    import json
+    scraping_config = None
+    if supplier.scraping_config:
+        if isinstance(supplier.scraping_config, str):
+            try:
+                scraping_config = json.loads(supplier.scraping_config)
+            except:
+                scraping_config = {}
+        else:
+            scraping_config = supplier.scraping_config
+    
+    category_data = supplier.category if supplier.category else None
+    
+    return SupplierResponse(
+        id=supplier.id,
+        tenant_id=supplier.tenant_id,
+        category_id=supplier.category_id,
+        name=supplier.name,
+        website=supplier.website,
+        pricing_url=supplier.pricing_url,
+        api_key=supplier.api_key,
+        notes=supplier.notes,
+        scraping_config=scraping_config,
+        scraping_enabled=supplier.scraping_enabled if hasattr(supplier, 'scraping_enabled') else True,
+        scraping_method=supplier.scraping_method if hasattr(supplier, 'scraping_method') else "generic",
+        is_preferred=supplier.is_preferred,
+        is_active=supplier.is_active,
+        created_at=supplier.created_at.isoformat() if supplier.created_at else "",
+        updated_at=supplier.updated_at.isoformat() if supplier.updated_at else "",
+        category=SupplierCategoryResponse(
+            id=category_data.id,
+            tenant_id=category_data.tenant_id,
+            name=category_data.name,
+            description=category_data.description,
+            is_active=category_data.is_active,
+            created_at=category_data.created_at.isoformat() if category_data.created_at else "",
+            updated_at=category_data.updated_at.isoformat() if category_data.updated_at else ""
+        ) if category_data else None,
+        pricing_count=service.get_supplier_pricing_count(supplier.id) if hasattr(service, 'get_supplier_pricing_count') else 0
+    )
 
 
 @router.put("/{supplier_id}", response_model=SupplierResponse)
@@ -334,6 +418,11 @@ async def update_supplier(
 ):
     """Update a supplier"""
     service = SupplierService(db, current_tenant.id)
+    import json
+    scraping_config_json = None
+    if supplier_data.scraping_config is not None:
+        scraping_config_json = json.dumps(supplier_data.scraping_config) if isinstance(supplier_data.scraping_config, dict) else supplier_data.scraping_config
+    
     supplier = service.update_supplier(
         supplier_id=supplier_id,
         name=supplier_data.name,
@@ -342,18 +431,55 @@ async def update_supplier(
         pricing_url=supplier_data.pricing_url,
         api_key=supplier_data.api_key,
         notes=supplier_data.notes,
+        scraping_config=scraping_config_json,
+        scraping_enabled=supplier_data.scraping_enabled,
+        scraping_method=supplier_data.scraping_method,
         is_preferred=supplier_data.is_preferred,
         is_active=supplier_data.is_active
     )
     if not supplier:
         raise HTTPException(status_code=404, detail="Supplier not found")
     
-    supplier_dict = {
-        **{c.name: getattr(supplier, c.name) for c in supplier.__table__.columns},
-        'category': supplier.category,
-        'pricing_count': service.get_supplier_pricing_count(supplier.id)
-    }
-    return supplier_dict
+    # Parse scraping_config if it's a string
+    scraping_config = None
+    if supplier.scraping_config:
+        if isinstance(supplier.scraping_config, str):
+            try:
+                scraping_config = json.loads(supplier.scraping_config)
+            except:
+                scraping_config = {}
+        else:
+            scraping_config = supplier.scraping_config
+    
+    category_data = supplier.category if supplier.category else None
+    
+    return SupplierResponse(
+        id=supplier.id,
+        tenant_id=supplier.tenant_id,
+        category_id=supplier.category_id,
+        name=supplier.name,
+        website=supplier.website,
+        pricing_url=supplier.pricing_url,
+        api_key=supplier.api_key,
+        notes=supplier.notes,
+        scraping_config=scraping_config,
+        scraping_enabled=supplier.scraping_enabled if hasattr(supplier, 'scraping_enabled') else True,
+        scraping_method=supplier.scraping_method if hasattr(supplier, 'scraping_method') else "generic",
+        is_preferred=supplier.is_preferred,
+        is_active=supplier.is_active,
+        created_at=supplier.created_at.isoformat() if supplier.created_at else "",
+        updated_at=supplier.updated_at.isoformat() if supplier.updated_at else "",
+        category=SupplierCategoryResponse(
+            id=category_data.id,
+            tenant_id=category_data.tenant_id,
+            name=category_data.name,
+            description=category_data.description,
+            is_active=category_data.is_active,
+            created_at=category_data.created_at.isoformat() if category_data.created_at else "",
+            updated_at=category_data.updated_at.isoformat() if category_data.updated_at else ""
+        ) if category_data else None,
+        pricing_count=service.get_supplier_pricing_count(supplier.id) if hasattr(service, 'get_supplier_pricing_count') else 0
+    )
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -352,20 +352,17 @@ class QuoteAnalysisService:
     def _get_day_rate_info(self) -> str:
         """Get day rate information for AI prompt"""
         try:
-            # Try to get from tenant settings or admin settings
-            # For now, return default
-            day_rate = 300  # Default day rate
-            
-            # TODO: Get from tenant settings or admin settings
-            # tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
-            # if tenant and tenant.settings:
-            #     day_rate = tenant.settings.get('day_rate', 300)
-            
-            return f"**Labour Rate:** £{day_rate} per pair of engineers per day (8-hour day)\n**CRITICAL: £{day_rate} is the TOTAL cost for BOTH engineers working together for one day**"
+            # Get from pricing configuration service
+            from app.services.pricing_config_service import PricingConfigService
+            pricing_service = PricingConfigService(self.db, self.tenant_id)
+            return pricing_service.get_day_rate_info()
             
         except Exception as e:
             print(f"[QUOTE ANALYSIS] Error getting day rate info: {e}")
-            return ""
+            import traceback
+            traceback.print_exc()
+            # Fallback to default
+            return "**Labour Rate:** £300 per pair of engineers per day (8-hour day)\n**CRITICAL: £300 is the TOTAL cost for BOTH engineers working together for one day**"
     
     def _extract_clarification_questions(self, response_text: str) -> List[Dict[str, str]]:
         """Extract clarification questions from AI response"""

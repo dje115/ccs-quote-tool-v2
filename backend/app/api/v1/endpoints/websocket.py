@@ -111,7 +111,6 @@ async def websocket_endpoint(
                     # Handle ping messages
                     if data == "ping":
                         await websocket.send_text("pong")
-                
                 except WebSocketDisconnect:
                     # Normal disconnect
                     break

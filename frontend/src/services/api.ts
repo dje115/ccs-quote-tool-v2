@@ -116,7 +116,8 @@ export const customerAPI = {
   get: (id: string) => apiClient.get(`/customers/${id}`),
   update: (id: string, data: any) => apiClient.put(`/customers/${id}`, data),
   delete: (id: string) => apiClient.delete(`/customers/${id}`),
-  runAiAnalysis: (id: string) => apiClient.post(`/customers/${id}/ai-analysis`),
+  runAiAnalysis: (id: string, options?: { update_financial_data?: boolean; update_addresses?: boolean }) => 
+    apiClient.post(`/customers/${id}/ai-analysis`, options || {}),
   confirmRegistration: (id: string, confirmed: boolean) => apiClient.post(`/customers/${id}/confirm-registration?confirmed=${confirmed}`),
   excludeAddress: (id: string, locationId: string) => apiClient.post(`/customers/${id}/addresses/exclude`, { location_id: locationId }),
   includeAddress: (id: string, locationId: string) => apiClient.post(`/customers/${id}/addresses/include`, { location_id: locationId }),

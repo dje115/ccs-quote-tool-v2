@@ -271,21 +271,23 @@ Respond in this exact JSON format:
 
 
 @celery_app.task(name='run_ai_analysis', bind=True)
-def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, Any]:
+def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financial_data: bool = True, update_addresses: bool = True) -> Dict[str, Any]:
     """
     Background task to run comprehensive AI analysis for a customer
     
     This task runs asynchronously to avoid blocking the user interface
     while AI performs comprehensive analysis including:
     - Website discovery (using web search)
-    - Companies House data retrieval
-    - Google Maps location data
+    - Companies House data retrieval (if update_financial_data=True)
+    - Google Maps location data (if update_addresses=True)
     - Website scraping and LinkedIn data
     - Comprehensive AI business intelligence
     
     Args:
         customer_id: Customer ID
         tenant_id: Tenant ID
+        update_financial_data: Whether to fetch/update Companies House data
+        update_addresses: Whether to fetch/update Google Maps address data
     
     Returns:
         Dict with task results
@@ -341,6 +343,7 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
         print(f"[AI ANALYSIS] OpenAI configured: {bool(api_keys.openai)}")
         print(f"[AI ANALYSIS] Companies House configured: {bool(api_keys.companies_house)}")
         print(f"[AI ANALYSIS] Google Maps configured: {bool(api_keys.google_maps)}")
+        print(f"[AI ANALYSIS] Options: update_financial_data={update_financial_data}, update_addresses={update_addresses}")
         
         if not api_keys.openai:
             print(f"❌ No OpenAI API key configured")
@@ -378,7 +381,9 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
                 company_number=customer.company_registration,
                 website=customer.website,
                 known_facts=customer.known_facts,
-                excluded_addresses=customer.excluded_addresses or []
+                excluded_addresses=customer.excluded_addresses or [],
+                update_financial_data=update_financial_data,
+                update_addresses=update_addresses
             )
         )
         
@@ -388,8 +393,18 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             # Store the results in customer record
             customer.ai_analysis_raw = analysis_result.get('analysis')
             customer.lead_score = analysis_result.get('analysis', {}).get('lead_score')
-            customer.companies_house_data = analysis_result.get('source_data', {}).get('companies_house')
-            customer.google_maps_data = analysis_result.get('source_data', {}).get('google_maps')
+            
+            # Only update Companies House data if it was fetched
+            if update_financial_data:
+                companies_house_data = analysis_result.get('source_data', {}).get('companies_house')
+                if companies_house_data:
+                    customer.companies_house_data = companies_house_data
+            
+            # Only update Google Maps data if it was fetched
+            if update_addresses:
+                google_maps_data = analysis_result.get('source_data', {}).get('google_maps')
+                if google_maps_data:
+                    customer.google_maps_data = google_maps_data
             
             # Store web scraping data (website and LinkedIn)
             web_scraping_data = analysis_result.get('source_data', {}).get('web_scraping', {})

@@ -22,3 +22,4 @@ def test_building_analysis_service_imports_available():
     assert hasattr(building_module, 'Tenant') or 'Tenant' in dir(building_module)
     assert hasattr(building_module, 'get_api_keys') or 'get_api_keys' in dir(building_module)
 
+

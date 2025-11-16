@@ -206,8 +206,19 @@ class AIAnalysisService:
             traceback.print_exc()
             return None
     
-    async def analyze_company(self, company_name: str, company_number: str = None, website: str = None, known_facts: str = None, excluded_addresses: list = None) -> Dict[str, Any]:
-        """Comprehensive company analysis using AI, Companies House, Google Maps, and web scraping"""
+    async def analyze_company(self, company_name: str, company_number: str = None, website: str = None, known_facts: str = None, excluded_addresses: list = None, update_financial_data: bool = True, update_addresses: bool = True) -> Dict[str, Any]:
+        """
+        Comprehensive company analysis using AI, Companies House, Google Maps, and web scraping
+        
+        Args:
+            company_name: Company name to analyze
+            company_number: Optional Companies House company number
+            website: Optional company website URL
+            known_facts: Optional known facts about the company
+            excluded_addresses: Optional list of excluded address place_ids
+            update_financial_data: Whether to fetch/update Companies House data (default: True)
+            update_addresses: Whether to fetch/update Google Maps address data (default: True)
+        """
         try:
             # If no website provided, try to find it via Google search
             if not website:
@@ -221,29 +232,36 @@ class AIAnalysisService:
             google_maps_data = {}
             web_scraping_data = {}
             
-            # Get Companies House data - search by name if no number provided
-            if company_number:
-                print(f"[CH] Getting company profile for number: {company_number}")
-                companies_house_data = await self.companies_house_service.get_company_profile(company_number)
-            else:
-                print(f"[CH] Searching for company by name: {company_name}")
-                # Search for company first
-                search_result = await self.companies_house_service.search_companies(company_name)
-                print(f"[CH] Search result: {search_result}")
-                if search_result and not search_result.get('error'):
-                    items = search_result.get('items', [])
-                    if items and len(items) > 0:
-                        # Use first result
-                        first_company = items[0]
-                        company_number = first_company.get('company_number')
-                        if company_number:
-                            print(f"[CH] Found company number: {company_number}, fetching full profile")
-                            companies_house_data = await self.companies_house_service.get_company_profile(company_number)
+            # Get Companies House data - only if update_financial_data is True
+            if update_financial_data:
+                if company_number:
+                    print(f"[CH] Getting company profile for number: {company_number}")
+                    companies_house_data = await self.companies_house_service.get_company_profile(company_number)
                 else:
-                    print(f"[CH] Search failed or returned no results: {search_result.get('error', 'No companies found')}")
+                    print(f"[CH] Searching for company by name: {company_name}")
+                    # Search for company first
+                    search_result = await self.companies_house_service.search_companies(company_name)
+                    print(f"[CH] Search result: {search_result}")
+                    if search_result and not search_result.get('error'):
+                        items = search_result.get('items', [])
+                        if items and len(items) > 0:
+                            # Use first result
+                            first_company = items[0]
+                            company_number = first_company.get('company_number')
+                            if company_number:
+                                print(f"[CH] Found company number: {company_number}, fetching full profile")
+                                companies_house_data = await self.companies_house_service.get_company_profile(company_number)
+                    else:
+                        print(f"[CH] Search failed or returned no results: {search_result.get('error', 'No companies found')}")
+            else:
+                print(f"[CH] Skipping Companies House data fetch (update_financial_data=False)")
             
-            # Get Google Maps data for company locations
-            google_maps_data = await self.google_maps_service.search_company_locations(company_name)
+            # Get Google Maps data for company locations - only if update_addresses is True
+            if update_addresses:
+                print(f"[GOOGLE MAPS] Fetching address data for: {company_name}")
+                google_maps_data = await self.google_maps_service.search_company_locations(company_name)
+            else:
+                print(f"[GOOGLE MAPS] Skipping Google Maps data fetch (update_addresses=False)")
             
             # Get web scraping data (LinkedIn and website)
             if website:

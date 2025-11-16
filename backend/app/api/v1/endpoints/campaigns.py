@@ -336,13 +336,23 @@ def delete_campaign(
             detail=f"Failed to delete campaign: {str(e)}"
         )
 
-def _safe_json_parse(json_string: Optional[str]) -> Dict[str, Any]:
-    """Safely parse JSON string, return empty dict if invalid"""
-    if not json_string or json_string.strip() == "":
+def _safe_json_parse(json_data: Optional[Any]) -> Dict[str, Any]:
+    """Safely parse JSON data (string or dict), return empty dict if invalid"""
+    if json_data is None:
         return {}
+    if isinstance(json_data, dict):
+        return json_data
+    if isinstance(json_data, str):
+        if not json_data.strip():
+            return {}
+        try:
+            return json.loads(json_data)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    # If it's already a dict-like object, try to convert
     try:
-        return json.loads(json_string)
-    except (json.JSONDecodeError, TypeError):
+        return dict(json_data)
+    except (TypeError, ValueError):
         return {}
 
 def _safe_parse_ai_analysis(ai_analysis):
@@ -371,6 +381,16 @@ def get_all_leads(
 ):
     """Get all leads (discoveries) for the current tenant with campaign information"""
     try:
+        # Normalize sort_by parameter (handle truncated values like "lead_sco")
+        if sort_by and sort_by.startswith("lead_sco"):
+            sort_by = "lead_score"
+        elif sort_by not in ["company_name", "lead_score", "postcode", "created_at", "status"]:
+            sort_by = "created_at"
+        
+        # Normalize sort_order
+        if sort_order not in ["asc", "desc"]:
+            sort_order = "desc"
+        
         # Build query with sorting
         query = db.query(Lead).filter(
             Lead.tenant_id == current_user.tenant_id,
@@ -384,6 +404,8 @@ def get_all_leads(
             query = query.order_by(Lead.lead_score.asc() if sort_order == "asc" else Lead.lead_score.desc())
         elif sort_by == "postcode":
             query = query.order_by(Lead.postcode.asc() if sort_order == "asc" else Lead.postcode.desc())
+        elif sort_by == "status":
+            query = query.order_by(Lead.status.asc() if sort_order == "asc" else Lead.status.desc())
         elif sort_by == "created_at":
             query = query.order_by(Lead.created_at.asc() if sort_order == "asc" else Lead.created_at.desc())
         else:
@@ -394,49 +416,65 @@ def get_all_leads(
         # Convert to response format with campaign information
         result = []
         for lead in leads:
-            lead_data = {
-                "id": lead.id,
-                "company_name": lead.company_name,
-                "contact_name": lead.contact_name,
-                "contact_email": lead.contact_email,
-                "contact_phone": lead.contact_phone,
-                "website": lead.website,
-                "address": lead.address,
-                "postcode": lead.postcode,
-                "business_sector": lead.business_sector,
-                "company_size": lead.company_size,
-                "lead_score": lead.lead_score,
-                "status": lead.status.value if lead.status else "NEW",
-                "source": lead.source.value if lead.source else "AI_GENERATED",
-                "campaign_id": lead.campaign_id,
-                "campaign_name": None,
-                "description": lead.qualification_reason,
-                "qualification_reason": lead.qualification_reason,
-                "project_value": lead.potential_project_value,
-                "timeline": lead.timeline_estimate,
-                "created_at": lead.created_at.isoformat() if lead.created_at else None,
-                "external_data": {
-                    "google_maps": _safe_json_parse(lead.google_maps_data),
-                    "companies_house": _safe_json_parse(lead.companies_house_data),
-                    "website": _safe_json_parse(lead.website_data),
-                    "linkedin": _safe_json_parse(lead.linkedin_data)
-                },
-                "ai_analysis": lead.ai_analysis
-            }
-            
-            # Get campaign name if campaign_id exists
-            if lead.campaign_id:
-                campaign = db.query(LeadGenerationCampaign).filter(
-                    LeadGenerationCampaign.id == lead.campaign_id
-                ).first()
-                if campaign:
-                    lead_data["campaign_name"] = campaign.name
-            
-            result.append(lead_data)
+            try:
+                lead_data = {
+                    "id": str(lead.id),
+                    "company_name": lead.company_name or "",
+                    "contact_name": lead.contact_name or None,
+                    "contact_email": lead.contact_email or None,
+                    "contact_phone": lead.contact_phone or None,
+                    "website": lead.website or None,
+                    "address": lead.address or None,
+                    "postcode": lead.postcode or None,
+                    "business_sector": lead.business_sector or None,
+                    "company_size": lead.company_size or None,
+                    "lead_score": lead.lead_score or 0,
+                    "status": lead.status.value if lead.status else "NEW",
+                    "source": lead.source.value if lead.source else "AI_GENERATED",
+                    "campaign_id": str(lead.campaign_id) if lead.campaign_id else None,
+                    "campaign_name": None,
+                    "description": lead.qualification_reason or None,
+                    "qualification_reason": lead.qualification_reason or None,
+                    "project_value": float(lead.potential_project_value) if lead.potential_project_value else None,
+                    "timeline": lead.timeline_estimate or None,
+                    "created_at": lead.created_at.isoformat() if lead.created_at else None,
+                    "external_data": {
+                        "google_maps": _safe_json_parse(lead.google_maps_data),
+                        "companies_house": _safe_json_parse(lead.companies_house_data),
+                        "website": _safe_json_parse(lead.website_data),
+                        "linkedin": _safe_json_parse(lead.linkedin_data)
+                    },
+                    "ai_analysis": _safe_parse_ai_analysis(lead.ai_analysis)
+                }
+                
+                # Get campaign name if campaign_id exists
+                if lead.campaign_id:
+                    try:
+                        campaign = db.query(LeadGenerationCampaign).filter(
+                            LeadGenerationCampaign.id == lead.campaign_id
+                        ).first()
+                        if campaign:
+                            lead_data["campaign_name"] = campaign.name
+                    except Exception as campaign_error:
+                        print(f"[WARNING] Failed to get campaign name for lead {lead.id}: {campaign_error}")
+                        lead_data["campaign_name"] = None
+                
+                result.append(lead_data)
+            except Exception as lead_error:
+                print(f"[ERROR] Failed to process lead {lead.id if lead else 'unknown'}: {lead_error}")
+                import traceback
+                traceback.print_exc()
+                # Skip this lead and continue
+                continue
         
         return {"data": result}
         
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[ERROR] Failed to retrieve leads: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve leads: {str(e)}"
@@ -503,7 +541,7 @@ def get_campaign_leads(
                     "website": _safe_json_parse(lead.website_data),
                     "linkedin": _safe_json_parse(lead.linkedin_data)
                 },
-                "ai_analysis": lead.ai_analysis
+                "ai_analysis": _safe_parse_ai_analysis(lead.ai_analysis)
             }
             result.append(lead_data)
         

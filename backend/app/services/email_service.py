@@ -156,3 +156,4 @@ def get_email_service() -> EmailService:
         _email_service = EmailService()
     return _email_service
 
+

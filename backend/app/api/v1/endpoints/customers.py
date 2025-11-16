@@ -433,9 +433,16 @@ async def confirm_registration(
     return {"success": True, "registration_confirmed": confirmed}
 
 
+class AIAnalysisOptions(BaseModel):
+    """Options for AI analysis"""
+    update_financial_data: bool = True  # Default to True for backward compatibility
+    update_addresses: bool = True  # Default to True for backward compatibility
+
+
 @router.post("/{customer_id}/ai-analysis")
 async def run_ai_analysis(
     customer_id: str,
+    options: AIAnalysisOptions = AIAnalysisOptions(),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
@@ -445,10 +452,13 @@ async def run_ai_analysis(
     
     Analysis runs asynchronously using Celery and includes:
     - Website discovery (using web search like campaigns)
-    - Companies House data retrieval
-    - Google Maps location data
+    - Companies House data retrieval (if update_financial_data=True)
+    - Google Maps location data (if update_addresses=True)
     - Website scraping and LinkedIn data
     - Comprehensive AI business intelligence
+    
+    Args:
+        options: Analysis options controlling which data sources to update
     """
     from sqlalchemy import select
     from app.core.celery_app import celery_app
@@ -469,12 +479,17 @@ async def run_ai_analysis(
     print(f"🔄 QUEUEING AI ANALYSIS TO CELERY")
     print(f"Customer: {customer.company_name} ({customer_id})")
     print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    print(f"Options: update_financial_data={options.update_financial_data}, update_addresses={options.update_addresses}")
     print(f"{'='*80}\n")
     
-    # Queue the AI analysis task to Celery
+    # Queue the AI analysis task to Celery with options
     task = celery_app.send_task(
         'run_ai_analysis',
-        args=[customer_id, str(current_tenant.id)]
+        args=[customer_id, str(current_tenant.id)],
+        kwargs={
+            'update_financial_data': options.update_financial_data,
+            'update_addresses': options.update_addresses
+        }
     )
     
     print(f"✓ Task queued: {task.id}")

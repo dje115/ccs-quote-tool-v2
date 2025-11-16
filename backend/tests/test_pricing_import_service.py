@@ -33,3 +33,4 @@ def test_pricing_import_service_without_api_key():
     assert hasattr(service, 'openai_api_key')
     assert service.openai_api_key is None
 
+

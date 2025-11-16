@@ -7,11 +7,12 @@ Migrated from v1 PricingService
 
 import logging
 from typing import Dict, Optional, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
+import json
 
-from app.models.supplier import Supplier, SupplierCategory, SupplierPricing
+from app.models.supplier import Supplier, SupplierCategory, SupplierPricing, ProductContentHistory, PricingVerificationQueue
 from app.services.web_pricing_scraper import WebPricingScraper
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,54 @@ class SupplierPricingService:
                 if cached_price:
                     return cached_price
             
+            # Get supplier configuration for scraping
+            supplier = self.db.query(Supplier).filter(
+                and_(
+                    Supplier.tenant_id == self.tenant_id,
+                    Supplier.name.ilike(f'%{supplier_name}%'),
+                    Supplier.is_active == True
+                )
+            ).first()
+            
+            if not supplier:
+                return {
+                    'success': False,
+                    'error': f'Supplier not found: {supplier_name}'
+                }
+            
+            # Check if scraping is enabled
+            if not supplier.scraping_enabled:
+                return {
+                    'success': False,
+                    'error': 'Scraping is disabled for this supplier'
+                }
+            
+            # Get scraping configuration
+            import json
+            scraping_config = {}
+            if supplier.scraping_config:
+                if isinstance(supplier.scraping_config, str):
+                    scraping_config = json.loads(supplier.scraping_config)
+                else:
+                    scraping_config = supplier.scraping_config
+            
+            # If no config but website/pricing_url exists, create basic config
+            if not scraping_config and (supplier.website or supplier.pricing_url):
+                scraping_config = {
+                    'base_url': supplier.website or '',
+                    'price_selectors': ['.price', '.price-value', '[class*="price"]'],
+                    'product_selectors': ['.product-item', '.product-card'],
+                    'name_selectors': ['.product-title', 'h3', 'h4'],
+                    'currency': 'GBP'
+                }
+            
             # Try to get pricing from web scraper
-            pricing_result = await self.scraper.get_product_pricing(supplier_name, product_name)
+            pricing_result = await self.scraper.get_product_pricing(
+                scraping_config,
+                product_name,
+                supplier_name=supplier.name,
+                pricing_url=supplier.pricing_url
+            )
             
             if pricing_result.get('success'):
                 # Cache the result
@@ -158,20 +205,72 @@ class SupplierPricingService:
             for entry in old_entries:
                 entry.is_active = False
             
-            # Create new cached entry
+            # Get confidence score and determine verification status
+            confidence = pricing_result.get('confidence', 0.7)
+            scraping_method = pricing_result.get('scraping_method', 'search')
+            source_url = pricing_result.get('url')
+            scraping_metadata = pricing_result.get('scraping_metadata', {})
+            
+            # Determine if needs manual review (low confidence or suspicious price)
+            needs_review = confidence < 0.7
+            review_reason = None
+            if confidence < 0.7:
+                review_reason = f"Low confidence score ({confidence:.2f}) from {scraping_method} method"
+            elif pricing_result.get('price', 0) < 0.01 or pricing_result.get('price', 0) > 100000:
+                needs_review = True
+                review_reason = f"Suspicious price value: £{pricing_result.get('price')}"
+            
+            verification_status = 'needs_review' if needs_review else 'pending'
+            
+            # Create new cached entry with verification fields
             cached_pricing = SupplierPricing(
                 supplier_id=supplier.id,
                 product_name=pricing_result.get('product_name', product_name),
                 product_code=pricing_result.get('product_code', ''),
                 price=pricing_result.get('price', 0),
                 currency=pricing_result.get('currency', 'GBP'),
+                confidence_score=confidence,
+                verification_status=verification_status,
+                source_url=source_url,
+                scraping_method=scraping_method,
+                scraping_metadata=json.dumps(scraping_metadata) if scraping_metadata else None,
+                needs_manual_review=needs_review,
+                review_reason=review_reason,
                 is_active=True
             )
             
             self.db.add(cached_pricing)
+            self.db.flush()  # Flush to get the ID
+            
+            # Create price history entry
+            price_history = ProductContentHistory(
+                supplier_id=supplier.id,
+                product_name=pricing_result.get('product_name', product_name),
+                product_code=pricing_result.get('product_code', ''),
+                price=pricing_result.get('price', 0),
+                currency=pricing_result.get('currency', 'GBP'),
+                confidence_score=confidence,
+                source_url=source_url,
+                scraping_method=scraping_method,
+                scraping_metadata=json.dumps(scraping_metadata) if scraping_metadata else None,
+                recorded_at=datetime.now(timezone.utc)
+            )
+            self.db.add(price_history)
+            
+            # Create verification queue entry if needed
+            if needs_review:
+                verification_queue = PricingVerificationQueue(
+                    supplier_pricing_id=cached_pricing.id,
+                    tenant_id=self.tenant_id,
+                    priority=1 if confidence < 0.5 else 0,  # Higher priority for very low confidence
+                    reason=review_reason or f"Low confidence pricing ({confidence:.2f})",
+                    status='pending'
+                )
+                self.db.add(verification_queue)
+            
             self.db.commit()
             
-            logger.info(f"Cached pricing for {supplier_name} - {product_name}: £{pricing_result.get('price')}")
+            logger.info(f"Cached pricing for {supplier_name} - {product_name}: £{pricing_result.get('price')} (confidence: {confidence:.2f})")
             
         except Exception as e:
             logger.error(f"Error caching price: {e}")

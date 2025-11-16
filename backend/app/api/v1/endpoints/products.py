@@ -7,11 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
+import uuid
+from datetime import datetime
 
 from app.core.dependencies import get_db, get_current_user
 from app.models.tenant import User
 from app.models.product import Product
 from app.services.product_service import ProductService
+from app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -57,6 +60,9 @@ class ProductResponse(BaseModel):
     cost_price: Optional[float]
     supplier: Optional[str]
     part_number: Optional[str]
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
+    gallery_images: Optional[List[str]] = None
     is_active: bool
     is_service: bool
     created_at: str
@@ -291,6 +297,237 @@ async def import_products_csv(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error importing products: {str(e)}"
+        )
+
+
+@router.post("/{product_id}/upload-image", response_model=ProductResponse)
+async def upload_product_image(
+    product_id: str,
+    file: UploadFile = File(...),
+    is_primary: bool = Query(True, description="Set as primary image (replaces existing)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload an image for a product
+    
+    Supports primary image and gallery images. Images are stored in MinIO.
+    """
+    try:
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+            )
+        
+        # Get product
+        service = ProductService(db, tenant_id=current_user.tenant_id)
+        product = service.get_product(product_id)
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product {product_id} not found"
+            )
+        
+        # Get storage service
+        storage_service = get_storage_service()
+        
+        # Generate object path: products/{tenant_id}/{product_id}/{filename}
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        object_name = f"products/{current_user.tenant_id}/{product_id}/{timestamp}_{uuid.uuid4().hex[:8]}.{file_extension}"
+        
+        # Read file data
+        file_data = await file.read()
+        
+        # Upload to MinIO
+        bucket_name = product.image_bucket or "ccs-quote-tool"
+        uploaded_path = await storage_service.upload_file(
+            file_data=file_data,
+            object_name=object_name,
+            bucket_name=bucket_name,
+            content_type=file.content_type
+        )
+        
+        # Generate presigned URL (valid for 1 year for product images)
+        from datetime import timedelta
+        image_url = storage_service.get_presigned_url(
+            object_name=uploaded_path,
+            bucket_name=bucket_name,
+            expires=timedelta(days=365)
+        )
+        
+        # Update product
+        if is_primary:
+            # Set as primary image
+            product.image_path = uploaded_path
+            product.image_url = image_url
+            product.image_bucket = bucket_name
+        else:
+            # Add to gallery
+            import json
+            gallery = json.loads(product.gallery_images) if product.gallery_images else []
+            gallery.append({
+                "path": uploaded_path,
+                "url": image_url,
+                "uploaded_at": datetime.now().isoformat()
+            })
+            product.gallery_images = json.dumps(gallery)
+        
+        db.commit()
+        db.refresh(product)
+        
+        return product
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading image: {str(e)}"
+        )
+
+
+@router.delete("/{product_id}/image")
+async def delete_product_image(
+    product_id: str,
+    image_path: Optional[str] = Query(None, description="Specific image path to delete (if not provided, deletes primary)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a product image
+    
+    If image_path is provided, removes from gallery. Otherwise, deletes primary image.
+    """
+    try:
+        # Get product
+        service = ProductService(db, tenant_id=current_user.tenant_id)
+        product = service.get_product(product_id)
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product {product_id} not found"
+            )
+        
+        # Get storage service
+        storage_service = get_storage_service()
+        bucket_name = product.image_bucket or "ccs-quote-tool"
+        
+        if image_path:
+            # Delete from gallery
+            import json
+            gallery = json.loads(product.gallery_images) if product.gallery_images else []
+            gallery = [img for img in gallery if img.get("path") != image_path]
+            product.gallery_images = json.dumps(gallery) if gallery else None
+            
+            # Delete from MinIO
+            await storage_service.delete_file(
+                object_name=image_path,
+                bucket_name=bucket_name
+            )
+        else:
+            # Delete primary image
+            if product.image_path:
+                await storage_service.delete_file(
+                    object_name=product.image_path,
+                    bucket_name=bucket_name
+                )
+                product.image_path = None
+                product.image_url = None
+        
+        db.commit()
+        db.refresh(product)
+        
+        return {"success": True, "message": "Image deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting image: {str(e)}"
+        )
+
+
+@router.get("/{product_id}/image")
+async def get_product_image(
+    product_id: str,
+    image_path: Optional[str] = Query(None, description="Specific image path (if not provided, returns primary)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get product image URL (presigned)
+    
+    Returns a presigned URL for accessing the product image.
+    """
+    try:
+        # Get product
+        service = ProductService(db, tenant_id=current_user.tenant_id)
+        product = service.get_product(product_id)
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product {product_id} not found"
+            )
+        
+        # Get storage service
+        storage_service = get_storage_service()
+        bucket_name = product.image_bucket or "ccs-quote-tool"
+        
+        if image_path:
+            # Get specific gallery image
+            import json
+            gallery = json.loads(product.gallery_images) if product.gallery_images else []
+            image_data = next((img for img in gallery if img.get("path") == image_path), None)
+            
+            if not image_data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Image not found in gallery"
+                )
+            
+            # Generate presigned URL
+            from datetime import timedelta
+            url = storage_service.get_presigned_url(
+                object_name=image_path,
+                bucket_name=bucket_name,
+                expires=timedelta(days=365)
+            )
+            
+            return {"url": url, "path": image_path}
+        else:
+            # Get primary image
+            if not product.image_path:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Product has no primary image"
+                )
+            
+            # Generate presigned URL
+            from datetime import timedelta
+            url = storage_service.get_presigned_url(
+                object_name=product.image_path,
+                bucket_name=bucket_name,
+                expires=timedelta(days=365)
+            )
+            
+            return {"url": url, "path": product.image_path}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting image: {str(e)}"
         )
 
 

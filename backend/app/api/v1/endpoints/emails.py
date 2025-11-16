@@ -64,3 +64,4 @@ async def test_email(
             message="Failed to send test email. Please check email configuration."
         )
 
+

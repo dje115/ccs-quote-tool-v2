@@ -12,7 +12,7 @@ if (Test-Path $versionFile) {
     $APP_VERSION = (Get-Content $versionFile -Raw).Trim()
     Write-Host "📦 Version from VERSION file: $APP_VERSION" -ForegroundColor Green
 } else {
-    $APP_VERSION = "2.5.0"
+    $APP_VERSION = "2.6.0"
     Write-Host "⚠️  VERSION file not found, using default: $APP_VERSION" -ForegroundColor Yellow
 }
 

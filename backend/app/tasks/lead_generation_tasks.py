@@ -53,9 +53,9 @@ def run_lead_generation_campaign(self, campaign_data: Dict[str, Any], tenant_id:
         )
         
         # Generate leads using the comprehensive AI system
-        # Note: For now, we'll use a synchronous approach
-        # In production, you might want to use asyncio.run() or make the service synchronous
         import asyncio
+        import sys
+        
         # Get campaign ID from campaign data
         campaign_id = campaign_data.get('id')
         if not campaign_id:
@@ -72,10 +72,34 @@ def run_lead_generation_campaign(self, campaign_data: Dict[str, Any], tenant_id:
         # Update campaign status to RUNNING and store task ID
         campaign.status = LeadGenerationStatus.RUNNING
         campaign.task_id = task_id  # Store Celery task ID for tracking
+        campaign.started_at = datetime.now(timezone.utc)
         campaign.updated_at = datetime.now(timezone.utc)
         db.commit()
         
-        leads = asyncio.run(lead_service.generate_leads(campaign_data))
+        print(f"✅ Campaign status updated to RUNNING")
+        print(f"🔍 Starting async lead generation...")
+        sys.stdout.flush()  # Force flush to ensure logs appear
+        
+        # Use proper async context for Celery (synchronous task calling async function)
+        try:
+            # Create a new event loop for this task
+            # Celery tasks run in separate processes, so we can safely create a new loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                print(f"🔍 Event loop created, calling generate_leads...")
+                sys.stdout.flush()
+                leads = loop.run_until_complete(lead_service.generate_leads(campaign_data))
+                print(f"✅ Async call completed")
+                sys.stdout.flush()
+            finally:
+                loop.close()
+        except Exception as async_error:
+            print(f"❌ Error in async execution: {async_error}")
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            raise
         
         print(f"✅ Generated {len(leads)} leads")
         

@@ -122,6 +122,9 @@ class SupplierService:
         pricing_url: Optional[str] = None,
         api_key: Optional[str] = None,
         notes: Optional[str] = None,
+        scraping_config: Optional[str] = None,
+        scraping_enabled: bool = True,
+        scraping_method: str = "generic",
         is_preferred: bool = False
     ) -> Optional[Supplier]:
         """Create a new supplier"""
@@ -138,6 +141,9 @@ class SupplierService:
             pricing_url=pricing_url,
             api_key=api_key,
             notes=notes,
+            scraping_config=scraping_config,
+            scraping_enabled=scraping_enabled,
+            scraping_method=scraping_method,
             is_preferred=is_preferred
         )
         
@@ -167,6 +173,9 @@ class SupplierService:
         pricing_url: Optional[str] = None,
         api_key: Optional[str] = None,
         notes: Optional[str] = None,
+        scraping_config: Optional[str] = None,
+        scraping_enabled: Optional[bool] = None,
+        scraping_method: Optional[str] = None,
         is_preferred: Optional[bool] = None,
         is_active: Optional[bool] = None
     ) -> Optional[Supplier]:
@@ -190,6 +199,12 @@ class SupplierService:
             supplier.api_key = api_key
         if notes is not None:
             supplier.notes = notes
+        if scraping_config is not None:
+            supplier.scraping_config = scraping_config
+        if scraping_enabled is not None:
+            supplier.scraping_enabled = scraping_enabled
+        if scraping_method is not None:
+            supplier.scraping_method = scraping_method
         if is_preferred is not None:
             supplier.is_preferred = is_preferred
         if is_active is not None:

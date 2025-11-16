@@ -16,7 +16,8 @@ celery_app = Celery(
         "app.tasks.activity_tasks", 
         "app.tasks.lead_generation_tasks",
         "app.tasks.campaign_monitor_tasks",
-        "app.tasks.planning_tasks"
+        "app.tasks.planning_tasks",
+        "app.tasks.contract_renewal_tasks"
     ]  # Import task modules
 )
 
@@ -48,6 +49,14 @@ celery_app.conf.update(
             'task': 'app.tasks.campaign_monitor_tasks.force_cleanup_stuck_campaigns',
             'schedule': 86400.0,  # Daily
             'args': (4,)  # 4 hours max duration
+        },
+        'check-expiring-contracts': {
+            'task': 'contract_renewal.check_expiring_contracts',
+            'schedule': 86400.0,  # Daily at midnight
+        },
+        'process-auto-renewals': {
+            'task': 'contract_renewal.process_auto_renewals',
+            'schedule': 86400.0,  # Daily at midnight
         },
     }
 )

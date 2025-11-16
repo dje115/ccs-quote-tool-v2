@@ -53,3 +53,4 @@ def test_quote_queries_include_is_deleted_filter():
     # Verify the pattern structure
     assert expected_pattern is not None
 
+

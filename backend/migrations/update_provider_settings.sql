@@ -64,3 +64,4 @@ UPDATE ai_providers SET
   default_settings = '{"temperature":0.7,"max_tokens":8000,"top_p":1.0}'::jsonb
 WHERE slug = 'openai_compatible';
 
+

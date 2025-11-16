@@ -187,13 +187,16 @@ class LeadGenerationService:
                 enhanced_system_prompt = f"{system_prompt}\n\nAnalyze the provided list of {len(company_names)} companies and return comprehensive business intelligence for each. Use online sources to verify and enhance company information."
                 
                 # Generate completion with web search tools
+                # Use high token limit for comprehensive business intelligence (100k tokens)
+                max_tokens = prompt_obj.max_tokens if prompt_obj else 100000
                 provider_response = await self.provider_service.generate_with_rendered_prompts(
                     prompt=prompt_obj,
                     system_prompt=enhanced_system_prompt,
                     user_prompt=prompt,
                     use_responses_api=True,  # Use responses API for web search
                     tools=[{"type": "web_search_preview"}],
-                    tool_choice="auto"
+                    tool_choice="auto",
+                    max_completion_tokens=max_tokens  # Explicitly set high token limit for comprehensive responses
                 )
                 
                 print(f"✅ AI provider call completed for company list, processing response...")
@@ -380,13 +383,16 @@ class LeadGenerationService:
                 enhanced_system_prompt = f"{system_prompt}\n\nUse online sources to find REAL, VERIFIED UK businesses. Focus on finding the top {max_results} most relevant results."
                 
                 # Generate completion with web search tools
+                # Use high token limit for comprehensive business intelligence (100k tokens)
+                max_tokens = prompt_obj.max_tokens if prompt_obj else 100000
                 provider_response = await self.provider_service.generate_with_rendered_prompts(
                     prompt=prompt_obj,
                     system_prompt=enhanced_system_prompt,
                     user_prompt=prompt,
                     use_responses_api=True,  # Use responses API for web search
                     tools=[{"type": "web_search_preview"}],
-                    tool_choice="auto"
+                    tool_choice="auto",
+                    max_completion_tokens=max_tokens  # Explicitly set high token limit for comprehensive responses
                 )
                 
                 print(f"✅ AI provider call completed, processing response...")

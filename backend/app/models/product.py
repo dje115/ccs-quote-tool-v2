@@ -3,7 +3,7 @@
 Product models for quote system
 """
 
-from sqlalchemy import Column, String, Boolean, Text, Numeric, ForeignKey
+from sqlalchemy import Column, String, Boolean, Text, Numeric, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 import uuid
 from .base import Base, BaseModel
@@ -30,6 +30,12 @@ class Product(BaseModel):
     # Supplier information
     supplier = Column(String(100), nullable=True)
     part_number = Column(String(100), nullable=True)
+    
+    # Image support (MinIO)
+    image_url = Column(String(500), nullable=True)  # Public or presigned URL
+    image_path = Column(String(500), nullable=True, index=True)  # MinIO object path
+    image_bucket = Column(String(100), default="ccs-quote-tool", nullable=True)  # MinIO bucket
+    gallery_images = Column(JSON, nullable=True)  # Array of additional image paths for gallery
     
     # Settings
     is_active = Column(Boolean, default=True, nullable=False, index=True)
