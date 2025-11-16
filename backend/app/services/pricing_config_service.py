@@ -13,6 +13,9 @@ from decimal import Decimal
 
 from app.models.pricing_config import TenantPricingConfig, PricingBundleItem, PricingConfigType
 from app.models.tenant import Tenant
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PricingConfigService:

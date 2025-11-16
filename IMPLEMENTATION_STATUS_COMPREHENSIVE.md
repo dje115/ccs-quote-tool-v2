@@ -110,10 +110,15 @@ All critical bugs have been fixed:
 - **Service**: `backend/app/services/web_pricing_scraper.py` exists
 - **Action Required**: Expand with more suppliers, add verification workflow
 
-### ⏳ 2.3: Day-Rate & Bundle Engines
-- **Status**: ⏳ Partial
-- **Service**: `backend/app/services/pricing_config_service.py` has foundation
-- **Action Required**: Add engineer grades, overtime multipliers, travel uplift
+### ✅ 2.3: Day-Rate & Bundle Engines - Complete
+- **Status**: ✅ Complete
+- **Service**: `backend/app/services/pricing_config_service.py` ✅
+- **Features**:
+  - Engineer grades (junior, standard, senior, specialist) ✅
+  - Overtime multipliers ✅
+  - Travel uplift percentage ✅
+  - `calculate_day_rate()` method with full breakdown ✅
+- **Verified**: Full calculation engine with grade multipliers, overtime, and travel uplift
 
 ### ✅ 2.4: Product Image Management - Complete
 - **Status**: ✅ Complete
@@ -224,13 +229,13 @@ All critical bugs have been fixed:
 ### Overall Progress
 - **Phase 0**: ✅ 100% Complete (7/7 items)
 - **Phase 1**: ✅ 90% Complete (3.5/4 items)
-- **Phase 2**: ⏳ 40% Complete (2/5 items)
+- **Phase 2**: ⏳ 60% Complete (3/5 items)
 - **Phase 3**: ⏳ 30% Complete (0.3/4 items)
 - **Phase 4**: ✅ 80% Complete (3.2/4 items)
 - **Phase 5**: ⏳ 5% Complete (0.2/4 items)
 - **Phase 6**: ⏳ 0% Complete (0/5 items)
 
-### Total Progress: ~48% Complete
+### Total Progress: ~50% Complete
 
 ---
 
