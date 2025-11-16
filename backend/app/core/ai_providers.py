@@ -287,19 +287,37 @@ class OpenAIProvider(AIProvider):
                     # Remove max_tokens if present to avoid confusion
                     completion_kwargs.pop("max_tokens", None)
                 
+                # Some OpenAI models (like o1, o1-mini) only support temperature=1
+                # Check if model doesn't support custom temperature
+                models_without_temperature = ["o1", "o1-mini", "o1-preview", "o1-2024-09-12"]
+                if model.lower() in [m.lower() for m in models_without_temperature]:
+                    # Skip temperature parameter for these models (they use default=1)
+                    print(f"[OpenAI Provider] Model {model} doesn't support custom temperature, using default (1)")
+                    create_kwargs = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        **completion_kwargs
+                    }
+                else:
+                    # Include temperature for models that support it
+                    create_kwargs = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": temperature,
+                        **completion_kwargs
+                    }
+                
                 # Wrap synchronous call in executor to avoid blocking event loop
                 loop = asyncio.get_event_loop()
                 response = await loop.run_in_executor(
                     None,
-                    lambda: self.client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        temperature=temperature,
-                        **completion_kwargs
-                    )
+                    lambda: self.client.chat.completions.create(**create_kwargs)
                 )
                 
                 content = response.choices[0].message.content
