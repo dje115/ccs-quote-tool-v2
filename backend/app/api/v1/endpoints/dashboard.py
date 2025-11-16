@@ -329,7 +329,8 @@ async def get_dashboard(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT, CustomerStatus.OPPORTUNITY]),
-                    Customer.lead_score >= 70
+                    Customer.lead_score >= 70,
+                    Customer.is_deleted == False
                 )
             ).limit(5)
         ).scalars().all()
@@ -408,7 +409,7 @@ async def get_dashboard(
         return DashboardResponse(
             stats=DashboardStats(
                 total_discovery=discovery_count,
-                total_leads=discovery_count,  # Frontend expects total_leads to be discoveries count
+                total_leads=leads_count,  # Show customers with LEAD status (not discoveries)
                 total_prospects=prospects_count,
                 total_opportunities=opportunities_count,
                 total_customers=customers_count,
@@ -509,7 +510,12 @@ async def ai_dashboard_query(
         
         # ===== CUSTOMER DATA =====
         total_customers = db.execute(
-            select(func.count(Customer.id)).where(Customer.tenant_id == tenant_id)
+            select(func.count(Customer.id)).where(
+                and_(
+                    Customer.tenant_id == tenant_id,
+                    Customer.is_deleted == False
+                )
+            )
         ).scalar() or 0
         
         customers_by_status = {}
@@ -518,7 +524,8 @@ async def ai_dashboard_query(
                 select(func.count(Customer.id)).where(
                     and_(
                         Customer.tenant_id == tenant_id,
-                        Customer.status == status
+                        Customer.status == status,
+                        Customer.is_deleted == False
                     )
                 )
             ).scalar() or 0
@@ -527,7 +534,12 @@ async def ai_dashboard_query(
         # ===== CONTACT DATA =====
         from app.models.crm import Contact
         total_contacts = db.execute(
-            select(func.count(Contact.id)).where(Contact.tenant_id == tenant_id)
+            select(func.count(Contact.id)).where(
+                and_(
+                    Contact.tenant_id == tenant_id,
+                    Contact.is_deleted == False
+                )
+            )
         ).scalar() or 0
         
         # ===== MONTHLY TRENDS (Last 6 months) =====
@@ -556,7 +568,8 @@ async def ai_dashboard_query(
                         Customer.tenant_id == tenant_id,
                         Customer.created_at >= month_start,
                         Customer.created_at <= month_end,
-                        Customer.status == CustomerStatus.CUSTOMER
+                        Customer.status == CustomerStatus.CUSTOMER,
+                        Customer.is_deleted == False
                     )
                 )
             ).scalar() or 0
@@ -572,7 +585,8 @@ async def ai_dashboard_query(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
-                    Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT])
+                    Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT]),
+                    Customer.is_deleted == False
                 )
             ).order_by(Customer.lead_score.desc()).limit(5)
         ).scalars().all()

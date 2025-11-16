@@ -22,12 +22,12 @@ class StorageService:
     
     def __init__(self):
         """Initialize MinIO client"""
-        # MinIO configuration (defaults for development)
-        self.endpoint = getattr(settings, 'MINIO_ENDPOINT', 'minio:9000')
-        self.access_key = getattr(settings, 'MINIO_ACCESS_KEY', 'minioadmin')
-        self.secret_key = getattr(settings, 'MINIO_SECRET_KEY', 'minioadmin123')
-        self.secure = getattr(settings, 'MINIO_SECURE', False)  # False for development
-        self.region = getattr(settings, 'MINIO_REGION', None)
+        # MinIO configuration from settings
+        self.endpoint = settings.MINIO_ENDPOINT
+        self.access_key = settings.MINIO_ACCESS_KEY
+        self.secret_key = settings.MINIO_SECRET_KEY
+        self.secure = settings.MINIO_SECURE
+        self.region = settings.MINIO_REGION
         
         # Initialize MinIO client
         self.client = Minio(
@@ -39,7 +39,7 @@ class StorageService:
         )
         
         # Ensure default bucket exists
-        self.default_bucket = getattr(settings, 'MINIO_BUCKET', 'ccs-quote-tool')
+        self.default_bucket = settings.MINIO_BUCKET
         self._ensure_bucket_exists(self.default_bucket)
     
     def _ensure_bucket_exists(self, bucket_name: str):
@@ -221,4 +221,5 @@ def get_storage_service() -> StorageService:
     if _storage_service is None:
         _storage_service = StorageService()
     return _storage_service
+
 

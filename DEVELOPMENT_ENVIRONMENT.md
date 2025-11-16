@@ -46,6 +46,8 @@ docker-compose up -d
 - **Admin Portal:** http://localhost:3011
 - **Backend API:** http://localhost:8001
 - **API Documentation:** http://localhost:8001/docs
+- **MailHog Web UI:** http://localhost:3005 (Email testing - all emails captured here)
+- **MinIO Console:** http://localhost:9090 (Object storage management)
 
 **Production Mode (using docker-compose.prod.yml):**
 - **Frontend (CRM):** http://localhost:3000
@@ -331,6 +333,19 @@ SECRET_KEY=ccs_super_secret_key_2025_change_in_production
 DEFAULT_TENANT=ccs
 SUPER_ADMIN_EMAIL=admin@ccs.com
 SUPER_ADMIN_PASSWORD=admin123
+
+# Email (MailHog for development)
+SMTP_HOST=mailhog
+SMTP_PORT=1025
+SMTP_TLS=false
+SMTP_FROM_EMAIL=noreply@ccs.com
+
+# Storage (MinIO for development)
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+MINIO_BUCKET=ccs-quote-tool
+MINIO_SECURE=false
 ```
 
 ### Production
@@ -371,6 +386,10 @@ volumes:
 | Backend | 8000 | 8000 | FastAPI REST API |
 | PostgreSQL | 5432 | 5432 | Database |
 | Redis | 6379 | 6379 | Cache |
+| MailHog SMTP | 1025 | 1025 | Email testing (SMTP) |
+| MailHog Web UI | 3005 | 3005 | Email testing (Web interface) |
+| MinIO API | 9000 | 9000 | Object storage API |
+| MinIO Console | 9090 | 9090 | Object storage management |
 
 ## 🆘 Getting Help
 

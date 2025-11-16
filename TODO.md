@@ -1,9 +1,11 @@
 # CCS Quote Tool v2 - TODO List
 ## Comprehensive Task List for Development
 
-**Last Updated**: October 11, 2025  
+**Last Updated**: Current Date  
 **Current Version**: 2.2.0  
-**Target Version**: 2.3.0
+**Target Version**: 2.3.0+
+
+**Note**: This TODO list has been enhanced with comprehensive helpdesk/customer service features including per-tenant email provider support (Google Workspace, Microsoft 365, IMAP/POP3, cloud services), WhatsApp Business API integration, and PSA/RMM platform integrations. See `PHASE_5_HELPDESK_DETAILED.md` and `HELPDESK_EMAIL_WHATSAPP_INTEGRATIONS.md` for detailed implementation plans.
 
 ---
 
@@ -152,6 +154,91 @@
   - `DELETE /api/v1/customers/{id}/addresses/{address_id}` - Delete address
   - `PUT /api/v1/customers/{id}/addresses/{address_id}/type` - Set address type
   - `PUT /api/v1/customers/{id}/addresses/{address_id}/primary` - Set as primary
+
+---
+
+### **4. World-Class Helpdesk & Customer Service** 🎧
+**Status**: Not Started  
+**Priority**: High  
+**Estimated Effort**: 12-16 weeks
+
+#### 4.1: Per-Tenant Helpdesk Configuration & Integrations
+**Status**: Not Started  
+**Priority**: Critical
+
+**Database Schema:**
+- [ ] Create `tenant_helpdesk_config` table:
+  - Email ticket configuration (provider type, credentials, parsing rules)
+  - PSA integration (ConnectWise Manage, Autotask PSA, Kaseya BMS, Atera)
+  - RMM integration (ConnectWise Automate, Kaseya VSA, Datto RMM, NinjaOne, Atera, SyncroMSP, N-able)
+  - WhatsApp Business API configuration
+  - Ticket sync settings (bidirectional PSA sync, RMM alert sync)
+- [ ] Create `TenantHelpdeskConfig` model
+- [ ] Create configuration service and API endpoints
+- [ ] Create admin UI for tenant helpdesk configuration
+
+**Email Provider Support (Per Tenant):**
+- [ ] Google Workspace (Gmail) - Gmail API, OAuth2, push notifications
+- [ ] Microsoft 365 Business - Microsoft Graph API, OAuth2, webhooks
+- [ ] IMAP/POP3 - Standard email servers (Exchange, Zimbra, etc.)
+- [ ] Cloud Email Services - SendGrid, Mailgun, AWS SES, Postmark webhooks
+
+**WhatsApp Integration:**
+- [ ] WhatsApp Business API integration
+- [ ] Per-tenant WhatsApp Business Account configuration
+- [ ] Message receiving (webhook endpoint)
+- [ ] Message sending (text, media, templates)
+- [ ] Template message management
+- [ ] Thread detection (link messages to tickets)
+
+**PSA Platform Integrations:**
+- [ ] ConnectWise Manage - OAuth2, ticket sync, time entry sync
+- [ ] Autotask PSA - API key auth, ticket sync, time entry sync
+- [ ] Kaseya BMS - Token auth, ticket sync, time entry sync
+- [ ] Atera - API key auth, ticket sync, time entry sync
+
+**RMM Platform Integrations:**
+- [ ] ConnectWise Automate - OAuth2, alert monitoring, ticket creation
+- [ ] Kaseya VSA - Token auth, alert monitoring, ticket creation
+- [ ] Datto RMM - API key auth, alert monitoring, ticket creation
+- [ ] NinjaOne - OAuth2, alert monitoring, ticket creation
+- [ ] Atera - API key auth, alert monitoring, ticket creation
+- [ ] SyncroMSP - API key auth, alert monitoring, ticket creation
+- [ ] N-able (SolarWinds) - OAuth2, alert monitoring, ticket creation
+
+**Email Ticket Ingestion:**
+- [ ] Multi-provider email ingestion service (factory pattern)
+- [ ] Gmail ingestion service (Gmail API, watch renewal)
+- [ ] Microsoft 365 ingestion service (Graph API, webhooks)
+- [ ] IMAP/POP3 ingestion service (polling)
+- [ ] Cloud email ingestion service (webhooks)
+- [ ] Email parsing rules engine (priority, category, auto-assignment)
+- [ ] Thread detection (reply to existing ticket)
+- [ ] Customer/contact matching from email address
+
+**Ticket Synchronization:**
+- [ ] Ticket sync service (bidirectional PSA sync)
+- [ ] RMM alert to ticket creation
+- [ ] Sync queue table (track sync status, retries)
+- [ ] Celery tasks for periodic sync (PSA every 5 min, RMM real-time)
+
+**Files:**
+- `backend/migrations/add_tenant_helpdesk_config.sql`
+- `backend/app/models/helpdesk_config.py`
+- `backend/app/services/tenant_helpdesk_config_service.py`
+- `backend/app/services/email_ingestion/` (multiple provider services)
+- `backend/app/services/whatsapp/` (WhatsApp integration)
+- `backend/app/services/psa/` (PSA integrations)
+- `backend/app/services/rmm/` (RMM integrations)
+- `backend/app/services/ticket_sync_service.py`
+- `backend/app/api/v1/endpoints/helpdesk_config.py`
+- `backend/app/api/v1/endpoints/email_webhooks.py`
+- `backend/app/api/v1/endpoints/whatsapp_webhooks.py`
+- `admin-portal/src/views/HelpdeskConfig.vue`
+
+**See detailed implementation plans:**
+- `PHASE_5_HELPDESK_DETAILED.md` - Complete helpdesk implementation with next actions
+- `HELPDESK_EMAIL_WHATSAPP_INTEGRATIONS.md` - Email/WhatsApp integration details
 
 ---
 

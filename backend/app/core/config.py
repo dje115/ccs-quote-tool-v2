@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "CCS Quote Tool v2"
-    VERSION: str = "2.0.0"
+    VERSION: str = "2.6.0"
     ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
     DEBUG: bool = Field(default=True, env="DEBUG")
     
@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     # File Storage
     UPLOAD_DIR: str = Field(default="uploads", env="UPLOAD_DIR")
     MAX_FILE_SIZE: int = Field(default=10 * 1024 * 1024, env="MAX_FILE_SIZE")  # 10MB
+    
+    # MinIO Configuration (Object Storage)
+    MINIO_ENDPOINT: str = Field(default="minio:9000", env="MINIO_ENDPOINT")
+    MINIO_ACCESS_KEY: str = Field(default="minioadmin", env="MINIO_ACCESS_KEY")
+    MINIO_SECRET_KEY: str = Field(default="minioadmin123", env="MINIO_SECRET_KEY")
+    MINIO_BUCKET: str = Field(default="ccs-quote-tool", env="MINIO_BUCKET")
+    MINIO_SECURE: bool = Field(default=False, env="MINIO_SECURE")  # False for development
+    MINIO_REGION: Optional[str] = Field(default=None, env="MINIO_REGION")
     
     # Pagination
     DEFAULT_PAGE_SIZE: int = Field(default=20, env="DEFAULT_PAGE_SIZE")
