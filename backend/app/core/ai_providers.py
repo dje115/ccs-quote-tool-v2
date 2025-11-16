@@ -287,20 +287,20 @@ class OpenAIProvider(AIProvider):
                     # Remove max_tokens if present to avoid confusion
                     completion_kwargs.pop("max_tokens", None)
                 
-                    # Wrap synchronous call in executor to avoid blocking event loop
-                    loop = asyncio.get_event_loop()
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: self.client.chat.completions.create(
-                            model=model,
-                            messages=[
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": user_prompt}
-                            ],
-                            temperature=temperature,
-                            **completion_kwargs
-                        )
+                # Wrap synchronous call in executor to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=temperature,
+                        **completion_kwargs
                     )
+                )
                 
                 content = response.choices[0].message.content
                 usage = {
