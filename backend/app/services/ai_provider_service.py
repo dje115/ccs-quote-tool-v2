@@ -24,6 +24,80 @@ class AIProviderService:
         self.tenant_id = tenant_id
         self._provider_cache: Dict[str, AIProvider] = {}
     
+    @staticmethod
+    def normalize_model_parameters(
+        model: str,
+        provider_slug: str,
+        temperature: float,
+        max_tokens: int,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Normalize parameters based on model-specific requirements
+        
+        Args:
+            model: Model name (e.g., "o1-mini", "gpt-4", "claude-3-opus")
+            provider_slug: Provider slug (e.g., "openai", "anthropic")
+            temperature: Requested temperature value
+            max_tokens: Requested max tokens
+            **kwargs: Additional parameters
+        
+        Returns:
+            Dict with normalized parameters and flags indicating what was changed
+        """
+        normalized = {
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "skip_temperature": False,
+            "changes": []
+        }
+        
+        # OpenAI models that don't support custom temperature
+        openai_no_temp_models = [
+            "o1", "o1-mini", "o1-preview", "o1-2024-09-12",
+            "o3", "o3-mini"  # Future-proofing
+        ]
+        
+        # Anthropic Claude models with specific requirements
+        claude_models = ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
+                        "claude-3-5-sonnet", "claude-3-5-opus"]
+        
+        model_lower = model.lower()
+        
+        # Handle OpenAI models without temperature support
+        if provider_slug == "openai" and model_lower in [m.lower() for m in openai_no_temp_models]:
+            if temperature != 1.0:
+                normalized["skip_temperature"] = True
+                normalized["changes"].append(f"Model {model} only supports temperature=1, skipping temperature parameter")
+        
+        # Handle max_tokens limits for specific models
+        # OpenAI o1 models have different token limits
+        if provider_slug == "openai" and model_lower.startswith("o1"):
+            # o1 models have a max output of 16,384 tokens
+            if max_tokens > 16384:
+                normalized["max_tokens"] = 16384
+                normalized["changes"].append(f"Model {model} max_tokens capped at 16,384")
+        
+        # Anthropic Claude models have max output token limits
+        if provider_slug == "anthropic" and any(model_lower.startswith(c.lower()) for c in claude_models):
+            # Claude 3 models have max output of 4,096 tokens (some up to 8,192)
+            if "opus" in model_lower or "sonnet" in model_lower:
+                max_output = 8192
+            else:
+                max_output = 4096
+            
+            if max_tokens > max_output:
+                normalized["max_tokens"] = max_output
+                normalized["changes"].append(f"Model {model} max_tokens capped at {max_output}")
+        
+        # Log changes if any
+        if normalized["changes"]:
+            print(f"[AIProviderService] Model parameter normalization for {model}:")
+            for change in normalized["changes"]:
+                print(f"  - {change}")
+        
+        return normalized
+    
     def _get_provider_api_key(self, provider_id: str, tenant_id: Optional[str] = None) -> Optional[str]:
         """
         Get API key for a provider with fallback logic:
@@ -184,6 +258,17 @@ class AIProviderService:
             elif "max_tokens" in kwargs:
                 max_tokens = kwargs["max_tokens"]
             
+            # Normalize parameters based on model requirements
+            normalized = self.normalize_model_parameters(
+                model=model,
+                provider_slug=provider_model.slug,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
+            )
+            temperature = normalized["temperature"]
+            max_tokens = normalized["max_tokens"]
+            
             # Render prompts if variables provided
             system_prompt = prompt.system_prompt
             user_prompt = prompt.user_prompt_template
@@ -210,6 +295,11 @@ class AIProviderService:
                 provider_kwargs["max_tokens"] = max_tokens
             
             # Generate completion
+            # Pass skip_temperature flag if model doesn't support it
+            completion_kwargs = provider_kwargs.copy()
+            if normalized.get("skip_temperature"):
+                completion_kwargs["skip_temperature"] = True
+            
             response = await provider_instance.generate_completion(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -218,7 +308,7 @@ class AIProviderService:
                 max_tokens=max_tokens,  # Base parameter (will be overridden by provider_kwargs for OpenAI)
                 use_responses_api=use_responses_api,
                 tools=tools,
-                **provider_kwargs
+                **completion_kwargs
             )
             
             return response
@@ -347,6 +437,17 @@ class AIProviderService:
             else:
                 max_tokens = default_max_tokens
             
+            # Normalize parameters based on model requirements
+            normalized = self.normalize_model_parameters(
+                model=model,
+                provider_slug=provider_model.slug,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
+            )
+            temperature = normalized["temperature"]
+            max_tokens = normalized["max_tokens"]
+            
             # Check if we need to use responses API (for OpenAI with web search)
             use_responses_api = kwargs.get("use_responses_api", False)
             tools = kwargs.get("tools", None)
@@ -363,6 +464,15 @@ class AIProviderService:
                 provider_kwargs["max_tokens"] = max_tokens
             
             # Generate completion with pre-rendered prompts
+            # Add timeout to provider_kwargs if not already set
+            if "timeout" not in provider_kwargs:
+                provider_kwargs["timeout"] = 300  # 5 minutes default timeout
+            
+            # Pass skip_temperature flag if model doesn't support it
+            completion_kwargs = provider_kwargs.copy()
+            if normalized.get("skip_temperature"):
+                completion_kwargs["skip_temperature"] = True
+            
             response = await provider_instance.generate_completion(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -371,7 +481,7 @@ class AIProviderService:
                 max_tokens=max_tokens,  # Base parameter (will be overridden by provider_kwargs for OpenAI)
                 use_responses_api=use_responses_api,
                 tools=tools,
-                **provider_kwargs
+                **completion_kwargs
             )
             
             return response

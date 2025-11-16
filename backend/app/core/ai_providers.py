@@ -288,9 +288,11 @@ class OpenAIProvider(AIProvider):
                     completion_kwargs.pop("max_tokens", None)
                 
                 # Some OpenAI models (like o1, o1-mini) only support temperature=1
-                # Check if model doesn't support custom temperature
-                models_without_temperature = ["o1", "o1-mini", "o1-preview", "o1-2024-09-12"]
-                if model.lower() in [m.lower() for m in models_without_temperature]:
+                # Check if model doesn't support custom temperature or skip_temperature flag is set
+                models_without_temperature = ["o1", "o1-mini", "o1-preview", "o1-2024-09-12", "o3", "o3-mini"]
+                skip_temperature = kwargs.get("skip_temperature", False) or model.lower() in [m.lower() for m in models_without_temperature]
+                
+                if skip_temperature:
                     # Skip temperature parameter for these models (they use default=1)
                     print(f"[OpenAI Provider] Model {model} doesn't support custom temperature, using default (1)")
                     create_kwargs = {
