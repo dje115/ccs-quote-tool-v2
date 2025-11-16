@@ -275,11 +275,23 @@ class CompaniesHouseService:
                                 except Exception as storage_e:
                                     print(f"[IXBRL] Year {i+1}: Error storing document in MinIO: {storage_e}")
                                 
-                                # Parse the iXBRL document
-                                parsed_data = await self._parse_ixbrl_document(content)
+                                # Parse the iXBRL document - pass the target year for context matching
+                                target_year = None
+                                if made_up_date:
+                                    try:
+                                        target_year = made_up_date.split('-')[0]
+                                    except:
+                                        pass
+                                if not target_year and year_data.get('filing_date'):
+                                    try:
+                                        target_year = year_data.get('filing_date').split('-')[0]
+                                    except:
+                                        pass
+                                
+                                parsed_data = await self._parse_ixbrl_document(content, target_year=target_year)
                                 
                                 if parsed_data:
-                                    print(f"[IXBRL] Year {i+1}: Extracted {list(parsed_data.keys())}")
+                                    print(f"[IXBRL] Year {i+1}: Extracted {list(parsed_data.keys())} for year {target_year}")
                                     year_data.update(parsed_data)
                                     financial_history.append(year_data)
                                 else:
@@ -348,8 +360,13 @@ class CompaniesHouseService:
         except Exception as e:
             return {"error": str(e)}
     
-    async def _parse_ixbrl_document(self, content: str) -> Dict[str, Any]:
-        """Parse iXBRL document to extract financial data"""
+    async def _parse_ixbrl_document(self, content: str, target_year: str = None) -> Dict[str, Any]:
+        """Parse iXBRL document to extract financial data
+        
+        Args:
+            content: iXBRL document content
+            target_year: Target year (YYYY) to extract data for (documents often contain multiple years)
+        """
         try:
             import xml.etree.ElementTree as ET
             
@@ -382,6 +399,28 @@ class CompaniesHouseService:
             
             print(f"[IXBRL] Using taxonomy version: {taxonomy_version}")
             
+            # Extract context periods to match values to years
+            context_periods = {}
+            if target_year:
+                # Find all context elements and extract their period end dates
+                context_elements = root.findall('.//xbrli:context', namespaces)
+                for ctx in context_elements:
+                    ctx_id = ctx.get('id', '')
+                    period = ctx.find('xbrli:period', namespaces)
+                    if period is not None:
+                        end_date = period.find('xbrli:endDate', namespaces)
+                        if end_date is not None:
+                            end_date_text = end_date.text
+                            if end_date_text:
+                                try:
+                                    # Extract year from date (format: YYYY-MM-DD)
+                                    ctx_year = end_date_text.split('-')[0]
+                                    context_periods[ctx_id] = ctx_year
+                                    print(f"[IXBRL] Context {ctx_id} -> Year {ctx_year}")
+                                except:
+                                    pass
+                print(f"[IXBRL] Found {len(context_periods)} context periods, target year: {target_year}")
+            
             # Extract financial data using XBRL tags
             # Note: Different accounting standards (FRS-102, FRS-105, etc.) use different tag names
             tag_variations = [
@@ -407,6 +446,8 @@ class CompaniesHouseService:
                     # Additional common variations
                     'e:TotalRevenue', 'core:TotalRevenue',
                     'bus:TotalRevenue', 'd:TotalRevenue',
+                    # Try without namespace prefix (some documents use different structures)
+                    'TurnoverRevenue', 'Revenue', 'Turnover', 'TotalRevenue',
                 ]),
                 ('profit_before_tax', ['e:ProfitLossOnOrdinaryActivitiesBeforeTax', 'core:ProfitLossOnOrdinaryActivitiesBeforeTax', 'e:ProfitBeforeTax', 'core:ProfitBeforeTax', 'e:ProfitLossBeforeTax', 'core:ProfitLossBeforeTax']),
                 ('operating_profit', ['e:OperatingProfitLoss', 'core:OperatingProfitLoss', 'e:OperatingProfit', 'core:OperatingProfit', 'e:ProfitLossFromOperations', 'core:ProfitLossFromOperations']),
@@ -430,10 +471,20 @@ class CompaniesHouseService:
                                 elements = root.findall(f'.//ix:nonFraction[@name="{tag_without_ns}"]', namespaces)
                                 if elements:
                                     break
+                    # For turnover, also try case-insensitive search and partial matches
+                    # Do this BEFORE trying regex fallback - run it once per field, not per tag
+                    if not elements and field_name == 'turnover' and tag == tag_list[0]:  # Only run once, on first tag
+                        # Try case-insensitive search across ALL nonFraction elements
+                        for elem in root.findall('.//ix:nonFraction', namespaces):
+                            elem_name = elem.get('name', '').lower()
+                            if 'turnover' in elem_name or ('revenue' in elem_name and 'turnover' not in elem_name):
+                                elements.append(elem)
+                        if elements:
+                            print(f"[IXBRL] Found {len(elements)} turnover elements via case-insensitive search")
                     
                     if elements:
-                        # For turnover, collect all values and take the largest positive one
-                        # (turnover should be positive and the largest value is likely the correct one)
+                        # For turnover, collect all values and match to target year if provided
+                        # (turnover should be positive and match the target year context)
                         all_values = []
                         for elem in elements:
                             try:
@@ -442,32 +493,72 @@ class CompaniesHouseService:
                                 value_text = value_text.replace('£', '').replace('$', '').replace(',', '').replace(' ', '').replace('(', '-').replace(')', '')
                                 if value_text and value_text != '-' and value_text != '':
                                     value = float(value_text)
+                                    context_ref = elem.get('contextRef', 'unknown')
+                                    
                                     # For turnover, only consider positive values >= 10000 (to avoid note numbers like "3")
                                     if field_name == 'turnover':
                                         if value >= 10000:  # Minimum reasonable turnover
-                                            all_values.append((value, elem.get('contextRef', 'unknown')))
+                                            # If we have a target year, check if this value matches it
+                                            if target_year and context_periods:
+                                                ctx_year = context_periods.get(context_ref, '')
+                                                if ctx_year == target_year:
+                                                    all_values.append((value, context_ref, ctx_year))
+                                                    print(f"[IXBRL] Matched turnover £{value:,.0f} to year {ctx_year} (contextRef: {context_ref})")
+                                                else:
+                                                    print(f"[IXBRL] Skipping turnover £{value:,.0f} - year {ctx_year} doesn't match target {target_year}")
+                                            else:
+                                                # No target year specified, collect all valid values
+                                                ctx_year = context_periods.get(context_ref, 'unknown')
+                                                all_values.append((value, context_ref, ctx_year))
                                         else:
                                             print(f"[IXBRL] Skipping turnover value {value} (too small, likely a note number)")
                                     else:
-                                        all_values.append((value, elem.get('contextRef', 'unknown')))
+                                        # For other fields, collect all values (or match to target year if specified)
+                                        if target_year and context_periods:
+                                            ctx_year = context_periods.get(context_ref, '')
+                                            if ctx_year == target_year or not ctx_year:
+                                                all_values.append((value, context_ref, ctx_year))
+                                        else:
+                                            all_values.append((value, context_ref, context_periods.get(context_ref, 'unknown')))
                             except Exception as e:
                                 if field_name == 'turnover':
                                     print(f"[IXBRL] Failed to parse {tag}: {e}, text: {elem.text if elem.text else 'empty'}")
                                 continue
                         
                         if all_values:
-                            if field_name == 'turnover' and len(all_values) > 1:
-                                # For turnover, take the largest value (most likely the correct one)
-                                all_values.sort(key=lambda x: x[0], reverse=True)
-                                value, context_ref = all_values[0]
-                                financial_data[field_name] = value
-                                print(f"[IXBRL] Extracted {field_name} = £{value:,.0f} using tag: {tag}, contextRef: {context_ref} (from {len(all_values)} matches, took max)")
+                            if field_name == 'turnover':
+                                # For turnover with target year, prefer values matching the target year
+                                if target_year:
+                                    matching_values = [v for v in all_values if v[2] == target_year]
+                                    if matching_values:
+                                        # Take the largest value for the target year
+                                        matching_values.sort(key=lambda x: x[0], reverse=True)
+                                        value, context_ref, ctx_year = matching_values[0]
+                                        financial_data[field_name] = value
+                                        print(f"[IXBRL] Extracted {field_name} = £{value:,.0f} for year {ctx_year} using tag: {tag}, contextRef: {context_ref}")
+                                    elif len(all_values) > 0:
+                                        # Fallback: no exact match, take largest value
+                                        all_values.sort(key=lambda x: x[0], reverse=True)
+                                        value, context_ref, ctx_year = all_values[0]
+                                        financial_data[field_name] = value
+                                        print(f"[IXBRL] Extracted {field_name} = £{value:,.0f} (year {ctx_year}, no exact match for {target_year}) using tag: {tag}")
+                                else:
+                                    # No target year, take the largest value
+                                    all_values.sort(key=lambda x: x[0], reverse=True)
+                                    value, context_ref, ctx_year = all_values[0]
+                                    financial_data[field_name] = value
+                                    print(f"[IXBRL] Extracted {field_name} = £{value:,.0f} using tag: {tag}, contextRef: {context_ref} (from {len(all_values)} matches, took max)")
                             else:
-                                # For other fields, take the first valid value
-                                value, context_ref = all_values[0]
+                                # For other fields, take the first valid value (or match to target year if specified)
+                                if target_year:
+                                    matching_values = [v for v in all_values if v[2] == target_year]
+                                    if matching_values:
+                                        value, context_ref, ctx_year = matching_values[0]
+                                    else:
+                                        value, context_ref, ctx_year = all_values[0]
+                                else:
+                                    value, context_ref, ctx_year = all_values[0]
                                 financial_data[field_name] = value
-                                if field_name == 'turnover':
-                                    print(f"[IXBRL] Extracted {field_name} = £{value:,.0f} using tag: {tag}, contextRef: {context_ref}")
                         if field_name in financial_data:
                             break
             
@@ -498,7 +589,7 @@ class CompaniesHouseService:
             
             # Fallback: regex patterns if XBRL tags don't work (especially for turnover)
             if 'turnover' not in financial_data:
-                regex_data = self._extract_financial_data_regex(content)
+                regex_data = self._extract_financial_data_regex(content, target_year=target_year)
                 if 'turnover' in regex_data and 'turnover' not in financial_data:
                     financial_data['turnover'] = regex_data['turnover']
                     print(f"[IXBRL] Extracted turnover via regex: £{regex_data['turnover']:,.0f}")
@@ -520,8 +611,13 @@ class CompaniesHouseService:
             print(f"Error parsing iXBRL: {e}")
             return {}
     
-    def _extract_financial_data_regex(self, content: str) -> Dict[str, Any]:
-        """Extract financial data using regex patterns as fallback"""
+    def _extract_financial_data_regex(self, content: str, target_year: str = None) -> Dict[str, Any]:
+        """Extract financial data using regex patterns as fallback
+        
+        Args:
+            content: Document content to search
+            target_year: Target year (for logging purposes, regex can't match to specific years)
+        """
         try:
             financial_data = {}
             import re
@@ -533,16 +629,35 @@ class CompaniesHouseService:
                     # XBRL format: look for turnover in ix:nonFraction elements
                     r'name="[^"]*[Tt]urnover[^"]*"[^>]*>([\d,]+(?:\.\d+)?)',
                     r'name="[^"]*[Rr]evenue[^"]*"[^>]*>([\d,]+(?:\.\d+)?)',
-                    # Pattern for "Turnover" followed immediately by numbers (no space/colon)
-                    # This handles formats like "Turnover21,638,153" or "Turnover321,638,15319,864,471"
-                    # Match large numbers (at least 6 digits) to avoid catching note numbers like "3"
-                    r'Turnover(\d{6,}(?:,\d{3})*(?:\.\d+)?)',
-                    r'Turnover\s+(\d{6,}(?:,\d{3})*(?:\.\d+)?)',
-                    r'Revenue(\d{6,}(?:,\d{3})*(?:\.\d+)?)',
-                    r'Revenue\s+(\d{6,}(?:,\d{3})*(?:\.\d+)?)',
-                    # Fallback: any turnover followed by numbers (but filter small values later)
-                    r'Turnover\s*([\d,]+(?:\.\d+)?)',
-                    r'Revenue\s*([\d,]+(?:\.\d+)?)',
+                    # Pattern for "Turnover" followed immediately by numbers (no space/colon) - handles "Turnover321,638,153"
+                    # Match numbers with at least 6 digits when commas removed (to avoid note numbers like "3")
+                    # This will match "21,638,153" or "321,638,153" but not "3"
+                    r'Turnover([\d,]{6,}(?:\.\d+)?)',
+                    r'Turnover\s+([\d,]{6,}(?:\.\d+)?)',
+                    r'Revenue([\d,]{6,}(?:\.\d+)?)',
+                    r'Revenue\s+([\d,]{6,}(?:\.\d+)?)',
+                    # Also try with shorter minimum for formatted numbers (but still avoid "3")
+                    r'Turnover([\d]{3,}(?:,\d{3})*(?:\.\d+)?)',  # At least 3 digits, then optional comma groups
+                    r'Turnover\s+([\d]{3,}(?:,\d{3})*(?:\.\d+)?)',
+                    r'Revenue([\d]{3,}(?:,\d{3})*(?:\.\d+)?)',
+                    r'Revenue\s+([\d]{3,}(?:,\d{3})*(?:\.\d+)?)',
+                    # Pattern for div-based layout (common in iXBRL): Turnover label, then note number, then values
+                    # Match "Turnover</div>" then skip note div (single digit), then capture large numbers in divs
+                    r'Turnover</div>[^<]*<div[^>]*>\d{1,2}</div>\s*<div[^>]*>([\d,]{6,}(?:\.\d+)?)</div>',
+                    r'Turnover[^<]*</div>[^<]*<div[^>]*>\d{1,2}</div>\s*<div[^>]*>([\d,]{6,}(?:\.\d+)?)</div>',
+                    # Pattern for table structure: Turnover row with multiple year columns
+                    # Match "Turnover" then skip Notes column (single digit), then capture numbers
+                    r'Turnover[^<]*</td>\s*<td[^>]*>\d{1,2}</td>\s*<td[^>]*>£?\s*([\d,]{6,}(?:\.\d+)?)',
+                    r'Turnover[^<]*</td>\s*<td[^>]*>\d{1,2}</td>\s*<td[^>]*>£?\s*([\d,]{6,}(?:\.\d+)?)',
+                    # Table row patterns - match turnover in table rows, avoiding Notes column
+                    # Match "Turnover" in a table row, then skip potential Notes column, then get the value
+                    r'<tr[^>]*>.*?Turnover[^<]*</td>\s*(?:<td[^>]*>\d{1,2}</td>\s*)?<td[^>]*>£?\s*([\d,]{6,}(?:\.\d+)?)',
+                    r'<tr[^>]*>.*?Turnover[^<]*</td>\s*<td[^>]*>£?\s*([\d,]{6,}(?:\.\d+)?)',
+                    # Also handle numbers without commas (at least 3 digits to avoid note numbers, but allow shorter)
+                    r'Turnover(\d{3,}(?:\.\d+)?)',
+                    r'Turnover\s+(\d{3,}(?:\.\d+)?)',
+                    r'Revenue(\d{3,}(?:\.\d+)?)',
+                    r'Revenue\s+(\d{3,}(?:\.\d+)?)',
                     # Standard text patterns with separators
                     r'Turnover[:\s]+£?\s*([\d,]+(?:\.\d+)?)',
                     r'Revenue[:\s]+£?\s*([\d,]+(?:\.\d+)?)',
@@ -579,12 +694,50 @@ class CompaniesHouseService:
                         try:
                             if key in financial_data:
                                 continue
-                            # Take the first match, but prefer larger numbers (likely the main figure)
-                            values = [float(m.replace(',', '')) for m in matches]
+                            # Parse all matches, handling comma-separated numbers
+                            # Also handle cases where numbers are concatenated (e.g., "321,638,15319,864,471")
+                            values = []
+                            for m in matches:
+                                try:
+                                    match_str = str(m).replace(',', '').strip()
+                                    if not match_str:
+                                        continue
+                                    
+                                    # Check if this looks like concatenated numbers (e.g., "32163815319864471")
+                                    # Large numbers (15+ digits) might be two numbers concatenated
+                                    if len(match_str) > 15 and match_str.isdigit():
+                                        # Try to split into two numbers - look for a reasonable split point
+                                        # Assume the first number is longer (more recent year)
+                                        # Try splitting at various points
+                                        for split_point in range(len(match_str) - 7, 7, -1):  # Try splits from end
+                                            first_part = match_str[:split_point]
+                                            second_part = match_str[split_point:]
+                                            try:
+                                                first_val = float(first_part)
+                                                second_val = float(second_part)
+                                                # Both should be reasonable turnover values
+                                                if first_val >= 1000000 and second_val >= 1000000:
+                                                    values.append(first_val)
+                                                    values.append(second_val)
+                                                    print(f"[REGEX] Split concatenated number: {match_str} -> {first_val:,.0f} and {second_val:,.0f}")
+                                                    break
+                                            except:
+                                                continue
+                                    else:
+                                        # Normal single number
+                                        value = float(match_str)
+                                        values.append(value)
+                                except (ValueError, AttributeError):
+                                    continue
+                            
                             if values:
                                 # For turnover, filter out obviously wrong values (too small, negative, etc.)
-                                # Minimum reasonable turnover is £10,000 (to avoid catching note numbers like "3")
-                                valid_values = [v for v in values if v >= 10000]  # Minimum reasonable turnover
+                                # Minimum reasonable turnover is £1,000 (to allow for companies that format as "230" = £230,000)
+                                # But exclude single-digit note numbers (3, 4, 5, etc.) and very small values
+                                # Also exclude values that are clearly note numbers (less than 10)
+                                # Filter values: minimum £1,000,000 (1 million) to avoid note numbers and small values
+                                # But also exclude single-digit note numbers explicitly
+                                valid_values = [v for v in values if v >= 1000000 and v not in [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]]  # Minimum reasonable turnover (£1M), exclude common note numbers
                                 if valid_values:
                                     if key == 'turnover' and len(valid_values) > 1:
                                         # Take the largest value (likely the most recent year or total)
