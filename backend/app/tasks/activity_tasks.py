@@ -479,7 +479,8 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             }
         else:
             error_msg = analysis_result.get('error', 'AI analysis failed')
-            print(f"❌ {error_msg}")
+            print(f"❌ AI Analysis failed: {error_msg}")
+            print(f"❌ Full analysis_result: {analysis_result}")
             
             # Update status to 'failed'
             from datetime import datetime, timezone
@@ -487,19 +488,24 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
             customer.ai_analysis_completed_at = datetime.now(timezone.utc)
             db.commit()
             
-            # Publish failed event
+            # Publish failed event with detailed error
+            detailed_error = f"{error_msg}"
+            if isinstance(analysis_result.get('error'), dict):
+                detailed_error = f"{error_msg} - Details: {json.dumps(analysis_result.get('error'))}"
+            
             event_publisher.publish_ai_analysis_failed(
                 tenant_id=tenant_id,
                 customer_id=customer_id,
                 task_id=self.request.id,
                 customer_name=customer.company_name,
-                error=error_msg
+                error=detailed_error
             )
             
             return {'success': False, 'error': error_msg}
             
     except Exception as e:
-        print(f"❌ Error in run_ai_analysis task: {e}")
+        print(f"❌ Exception in run_ai_analysis task: {e}")
+        print(f"❌ Exception type: {type(e).__name__}")
         import traceback
         traceback.print_exc()
         
@@ -512,18 +518,19 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str) -> Dict[str, An
                 customer.ai_analysis_completed_at = datetime.now(timezone.utc)
                 db.commit()
                 
-                # Publish failed event
+                # Publish failed event with detailed error
                 from app.core.events import get_event_publisher
                 event_publisher = get_event_publisher()
+                error_details = f"{type(e).__name__}: {str(e)}"
                 event_publisher.publish_ai_analysis_failed(
                     tenant_id=tenant_id,
                     customer_id=customer_id,
                     task_id=self.request.id,
                     customer_name=customer.company_name,
-                    error=str(e)
+                    error=error_details
                 )
-        except:
-            pass
+        except Exception as inner_e:
+            print(f"❌ Error updating failed status: {inner_e}")
         
         return {'success': False, 'error': str(e)}
     finally:
