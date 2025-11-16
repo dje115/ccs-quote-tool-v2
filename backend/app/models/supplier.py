@@ -96,29 +96,49 @@ class SupplierPricing(Base, TimestampMixin):
 
 
 class ProductContentHistory(Base, TimestampMixin):
-    """Price history tracking for products"""
+    """Price history tracking for products with full content for price intelligence"""
     __tablename__ = "product_content_history"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    supplier_id = Column(String(36), ForeignKey("suppliers.id"), nullable=False, index=True)
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    supplier_id = Column(String(36), ForeignKey("suppliers.id"), nullable=True, index=True)
     
-    product_name = Column(String(200), nullable=False, index=True)
+    product_name = Column(String(500), nullable=False, index=True)
     product_code = Column(String(100), nullable=True, index=True)
-    price = Column(Numeric(10, 2), nullable=False)
-    currency = Column(String(3), default="GBP", nullable=False)
+    supplier_product_url = Column(Text, nullable=True)
     
-    confidence_score = Column(Numeric(3, 2), default=1.0, nullable=False)
-    source_url = Column(String(500), nullable=True)
-    scraping_method = Column(String(50), nullable=True)
-    scraping_metadata = Column(JSON, nullable=True)
+    # Scraped content (full HTML/text for analysis)
+    scraped_content = Column(Text, nullable=True)  # Full HTML/text content from supplier page
     
-    recorded_at = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
+    # Extracted pricing
+    price = Column(Numeric(10, 2), nullable=True)  # Made nullable as extraction may fail
+    currency = Column(String(10), default="GBP", nullable=False)
+    confidence_score = Column(Numeric(3, 2), default=0.5, nullable=False)  # 0.0-1.0
+    
+    # Scraping metadata
+    scraping_method = Column(String(50), nullable=True)  # direct_url, search, api, cached, known_pricing
+    scraping_timestamp = Column(DateTime(timezone=True), default=func.now(), nullable=False, index=True)
+    scraping_metadata = Column(JSON, nullable=True)  # Selector used, retry count, etc.
+    
+    # Verification
+    is_verified = Column(Boolean, default=False, nullable=False, index=True)
+    verified_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    verification_notes = Column(Text, nullable=True)
+    
+    # Status
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    # Legacy field for backward compatibility
+    recorded_at = Column(DateTime(timezone=True), nullable=True, index=True)
     
     # Relationships
+    tenant = relationship("Tenant")
     supplier = relationship("Supplier")
+    verifier = relationship("User", foreign_keys=[verified_by])
     
     def __repr__(self):
-        return f"<ProductContentHistory {self.product_name} - £{self.price} @ {self.recorded_at}>"
+        return f"<ProductContentHistory {self.product_name} - £{self.price} @ {self.scraping_timestamp}>"
 
 
 class PricingVerificationQueue(Base, TimestampMixin):

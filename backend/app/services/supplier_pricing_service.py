@@ -14,6 +14,7 @@ import json
 
 from app.models.supplier import Supplier, SupplierCategory, SupplierPricing, ProductContentHistory, PricingVerificationQueue
 from app.services.web_pricing_scraper import WebPricingScraper
+from app.services.price_intelligence_service import PriceIntelligenceService
 
 logger = logging.getLogger(__name__)
 
@@ -242,20 +243,20 @@ class SupplierPricingService:
             self.db.add(cached_pricing)
             self.db.flush()  # Flush to get the ID
             
-            # Create price history entry
-            price_history = ProductContentHistory(
+            # Create price history entry using PriceIntelligenceService
+            price_intel = PriceIntelligenceService(self.db, self.tenant_id)
+            from decimal import Decimal
+            price_intel.record_price_history(
                 supplier_id=supplier.id,
                 product_name=pricing_result.get('product_name', product_name),
-                product_code=pricing_result.get('product_code', ''),
-                price=pricing_result.get('price', 0),
+                price=Decimal(str(pricing_result.get('price', 0))) if pricing_result.get('price') else None,
                 currency=pricing_result.get('currency', 'GBP'),
                 confidence_score=confidence,
                 source_url=source_url,
                 scraping_method=scraping_method,
-                scraping_metadata=json.dumps(scraping_metadata) if scraping_metadata else None,
-                recorded_at=datetime.now(timezone.utc)
+                scraped_content=pricing_result.get('scraped_content'),
+                scraping_metadata=scraping_metadata
             )
-            self.db.add(price_history)
             
             # Create verification queue entry if needed
             if needs_review:
