@@ -259,12 +259,14 @@ class AIProviderService:
                 max_tokens = kwargs["max_tokens"]
             
             # Normalize parameters based on model requirements
+            # Filter out max_tokens and temperature from kwargs to avoid duplicate arguments
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['max_tokens', 'temperature', 'max_completion_tokens']}
             normalized = self.normalize_model_parameters(
                 model=model,
                 provider_slug=provider_model.slug,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **filtered_kwargs
             )
             temperature = normalized["temperature"]
             max_tokens = normalized["max_tokens"]
@@ -438,12 +440,14 @@ class AIProviderService:
                 max_tokens = default_max_tokens
             
             # Normalize parameters based on model requirements
+            # Filter out max_tokens and temperature from kwargs to avoid duplicate arguments
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['max_tokens', 'temperature', 'max_completion_tokens']}
             normalized = self.normalize_model_parameters(
                 model=model,
                 provider_slug=provider_model.slug,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **filtered_kwargs
             )
             temperature = normalized["temperature"]
             max_tokens = normalized["max_tokens"]
