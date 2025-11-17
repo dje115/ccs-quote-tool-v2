@@ -307,7 +307,8 @@ function App() {
             }
           />
           <Route path="/" element={<Navigate to="/dashboard" />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </WebSocketProvider>
     </ThemeProvider>
