@@ -14,27 +14,41 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(name="check_sla_violations")
-def check_sla_violations_task(tenant_id: str):
+def check_sla_violations_task(tenant_id: str = None):
     """
     Check for SLA violations and escalate if needed
     
     Args:
-        tenant_id: Tenant ID to check
+        tenant_id: Tenant ID to check (if None, check all tenants)
     
     Returns:
         Dictionary with violation check results
     """
     db: Session = SessionLocal()
     try:
-        service = SLAService(db, tenant_id)
-        violations = service.check_sla_violations()
+        from app.models.tenant import Tenant
         
-        logger.info(f"Found {len(violations)} SLA violations for tenant {tenant_id}")
+        if tenant_id:
+            tenants = [db.query(Tenant).filter(Tenant.id == tenant_id).first()]
+        else:
+            tenants = db.query(Tenant).all()
+        
+        all_violations = []
+        for tenant in tenants:
+            if not tenant:
+                continue
+            service = SLAService(db, tenant.id)
+            violations = service.check_sla_violations()
+            
+            logger.info(f"Found {len(violations)} SLA violations for tenant {tenant.id}")
+            
+            for violation in violations:
+                violation['tenant_id'] = tenant.id
+                all_violations.append(violation)
         
         return {
-            'tenant_id': tenant_id,
-            'violations_count': len(violations),
-            'violations': violations
+            'violations_count': len(all_violations),
+            'violations': all_violations
         }
     except Exception as e:
         logger.error(f"Error checking SLA violations: {e}")
