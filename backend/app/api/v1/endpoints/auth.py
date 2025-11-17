@@ -3,10 +3,10 @@
 Authentication endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 from pydantic import BaseModel, EmailStr
 
 from app.core.database import get_db
@@ -48,10 +48,14 @@ class LoginResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
+    response: Response = None,
     db: Session = Depends(get_db)
 ):
     """
-    Login endpoint - returns JWT tokens
+    Login endpoint - sets HttpOnly cookies and returns user info
+    
+    SECURITY: Tokens are stored in HttpOnly cookies to prevent XSS attacks.
+    The frontend should not store tokens in localStorage.
     """
     # Find user by email or username
     user = db.query(User).filter(
@@ -75,9 +79,36 @@ async def login(
     access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     refresh_token = create_refresh_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     
+    # Calculate cookie expiration times
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    # Set HttpOnly cookies
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",  # HTTPS only in production
+        samesite="lax",  # CSRF protection
+        max_age=int(access_token_expires.total_seconds()),
+        path="/"
+    )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        max_age=int(refresh_token_expires.total_seconds()),
+        path="/"
+    )
+    
+    # Return user info (tokens are in cookies, not in response body for security)
+    # Still return tokens in body for backward compatibility during migration
     return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
+        "access_token": access_token,  # Deprecated - use cookie
+        "refresh_token": refresh_token,  # Deprecated - use cookie
         "token_type": "bearer",
         "user": user
     }
@@ -91,6 +122,8 @@ class RefreshTokenRequest(BaseModel):
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
     request: RefreshTokenRequest,
+    response: Response = None,
+    refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
     db: Session = Depends(get_db)
 ):
     """
@@ -99,10 +132,19 @@ async def refresh_token(
     SECURITY: Implements refresh token rotation - when a refresh token is used,
     it is invalidated and a new one is issued. This prevents token reuse if
     a refresh token is stolen.
+    
+    Supports both HttpOnly cookies (preferred) and request body (backward compatibility).
     """
     from app.core.security import decode_token
     
-    refresh_token_value = request.refresh_token
+    # Try to get refresh token from cookie first (more secure)
+    refresh_token_value = refresh_token_cookie or request.refresh_token
+    
+    if not refresh_token_value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not provided"
+        )
     
     # Decode and validate refresh token
     payload = decode_token(refresh_token_value)
@@ -143,11 +185,51 @@ async def refresh_token(
     access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     new_refresh_token = create_refresh_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     
+    # Calculate cookie expiration times
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    # Set HttpOnly cookies
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        max_age=int(access_token_expires.total_seconds()),
+        path="/"
+    )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        max_age=int(refresh_token_expires.total_seconds()),
+        path="/"
+    )
+    
+    # Return tokens in body for backward compatibility
     return {
-        "access_token": access_token,
-        "refresh_token": new_refresh_token,
+        "access_token": access_token,  # Deprecated - use cookie
+        "refresh_token": new_refresh_token,  # Deprecated - use cookie
         "token_type": "bearer"
     }
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """
+    Logout endpoint - clears HttpOnly cookies
+    
+    SECURITY: Clears authentication cookies to log out the user.
+    """
+    # Clear HttpOnly cookies
+    response.delete_cookie(key="access_token", path="/", samesite="lax")
+    response.delete_cookie(key="refresh_token", path="/", samesite="lax")
+    
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/me", response_model=UserResponse)
@@ -156,6 +238,9 @@ async def get_current_user_info(
 ):
     """
     Get current user information
+    
+    This endpoint can be used by the frontend to check authentication status
+    since HttpOnly cookies cannot be read by JavaScript.
     """
     return current_user
 

@@ -3,7 +3,7 @@
 FastAPI dependencies for authentication and database access
 """
 
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request, Cookie
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -13,20 +13,38 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.tenant import User, Tenant
 
-# Security
-security = HTTPBearer()
+# Security - HTTPBearer for Authorization header (backward compatibility)
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    access_token_cookie: Optional[str] = Cookie(None, alias="access_token"),
     db: Session = Depends(get_db)
 ) -> User:
     """
     Get current authenticated user from JWT token
+    
+    SECURITY: Supports both HttpOnly cookies (preferred) and Authorization header (backward compatibility).
+    HttpOnly cookies prevent XSS attacks by making tokens inaccessible to JavaScript.
     """
+    # Try to get token from cookie first (more secure)
+    token = access_token_cookie
+    
+    # Fallback to Authorization header for backward compatibility
+    if not token and credentials:
+        token = credentials.credentials
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials - no token provided",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     try:
         # Decode JWT token
-        token = credentials.credentials
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,

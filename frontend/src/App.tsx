@@ -51,9 +51,41 @@ const theme = createTheme({
 });
 
 // Protected route wrapper with layout
+// SECURITY: HttpOnly cookies cannot be read by JavaScript, so we check auth status
+// by verifying user object exists (stored in localStorage) or by making API call
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const token = localStorage.getItem('access_token');
-  return token ? <Layout>{children}</Layout> : <Navigate to="/login" />;
+  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
+  
+  React.useEffect(() => {
+    // Check if user object exists (we store this in localStorage)
+    const user = localStorage.getItem('user');
+    
+    if (user) {
+      // User object exists - assume authenticated (cookies will be sent automatically)
+      // If cookies are invalid, API calls will fail with 401 and redirect to login
+      setIsAuthenticated(true);
+    } else {
+      // No user object - check auth via API call
+      // This is needed because HttpOnly cookies can't be read by JavaScript
+      const checkAuth = async () => {
+        try {
+          const { authAPI } = await import('./services/api');
+          await authAPI.getCurrentUser();
+          setIsAuthenticated(true);
+        } catch {
+          setIsAuthenticated(false);
+        }
+      };
+      checkAuth();
+    }
+  }, []);
+  
+  if (isAuthenticated === null) {
+    // Still checking auth status
+    return null; // or a loading spinner
+  }
+  
+  return isAuthenticated ? <Layout>{children}</Layout> : <Navigate to="/login" />;
 };
 
 function App() {

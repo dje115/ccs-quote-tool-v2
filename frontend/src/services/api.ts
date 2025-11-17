@@ -9,15 +9,21 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,  // IMPORTANT: Required for HttpOnly cookies
 });
 
 // Add auth token to requests
+// SECURITY: Prefer HttpOnly cookies (sent automatically with withCredentials: true)
+// Fallback to Authorization header for backward compatibility during migration
 apiClient.interceptors.request.use(
   (config) => {
+    // Try to get token from localStorage (backward compatibility)
+    // HttpOnly cookies are sent automatically by the browser
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // If no token in localStorage, rely on HttpOnly cookie (sent automatically)
     return config;
   },
   (error) => Promise.reject(error)
@@ -32,24 +38,36 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       
+      // Try refresh token from localStorage (backward compatibility)
+      // HttpOnly cookies are sent automatically with withCredentials: true
       const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken) {
-        try {
-          // Use apiClient instead of axios to maintain consistency
-          const response = await apiClient.post('/auth/refresh', {
-            refresh_token: refreshToken
-          });
-          
-          const { access_token, refresh_token: newRefreshToken } = response.data;
-          localStorage.setItem('access_token', access_token);
-          localStorage.setItem('refresh_token', newRefreshToken);
-          
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return apiClient(originalRequest);
-        } catch (refreshError) {
-          localStorage.clear();
-          window.location.href = '/login';
+      
+      try {
+        // Refresh token endpoint will use cookie if available, or body if provided
+        const response = await apiClient.post('/auth/refresh', 
+          refreshToken ? { refresh_token: refreshToken } : {}
+        );
+        
+        // Update localStorage for backward compatibility (if tokens returned)
+        // HttpOnly cookies are set automatically by the server
+        if (response.data.access_token) {
+          localStorage.setItem('access_token', response.data.access_token);
         }
+        if (response.data.refresh_token) {
+          localStorage.setItem('refresh_token', response.data.refresh_token);
+        }
+        
+        // Retry original request (cookies will be sent automatically)
+        if (response.data.access_token) {
+          originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
+        }
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // Clear all auth data and redirect to login
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
       }
     }
     
