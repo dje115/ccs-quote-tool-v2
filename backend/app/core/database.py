@@ -41,11 +41,11 @@ engine = create_engine(
 )
 
 # Create async engine for async operations with connection pooling
-# Async engines benefit significantly from connection pooling
+# Async engines use AsyncAdaptedQueuePool by default - don't specify poolclass
+# The pool parameters work the same way for async engines
 async_engine = create_async_engine(
     settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
     echo=settings.DEBUG,
-    poolclass=QueuePool,
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
