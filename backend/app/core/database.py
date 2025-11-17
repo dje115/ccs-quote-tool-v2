@@ -6,7 +6,7 @@ Database configuration and initialization
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool, NullPool
 import asyncio
 from typing import AsyncGenerator
 
@@ -25,18 +25,31 @@ import uuid
 # Password hashing - using Argon2 (most secure and modern algorithm)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-# Create database engine
+# Create database engine with connection pooling
+# QueuePool allows connection reuse, improving performance for async routes
+# pool_size: number of connections to maintain
+# max_overflow: additional connections that can be created on demand
+# pool_pre_ping: verify connections before using them (handles stale connections)
 engine = create_engine(
     settings.DATABASE_URL,
-    poolclass=NullPool,
+    poolclass=QueuePool,
+    pool_size=10,  # Base pool size
+    max_overflow=20,  # Additional connections allowed
+    pool_pre_ping=True,  # Verify connections before using
+    pool_recycle=3600,  # Recycle connections after 1 hour
     echo=settings.DEBUG
 )
 
-# Create async engine for async operations
+# Create async engine for async operations with connection pooling
+# Async engines benefit significantly from connection pooling
 async_engine = create_async_engine(
     settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
     echo=settings.DEBUG,
-    poolclass=NullPool
+    poolclass=QueuePool,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=3600
 )
 
 # Create session factories
@@ -153,11 +166,26 @@ async def create_default_tenant():
         print(f"✅ Created default tenant '{settings.DEFAULT_TENANT}' with super admin user")
         print(f"   Tenant ID: {tenant.id}")
         print(f"   Admin Email: {settings.SUPER_ADMIN_EMAIL}")
-        print(f"   Admin Password: {settings.SUPER_ADMIN_PASSWORD}")
+        # SECURITY: Never print passwords to console, even in development
+        # Password is set via SUPER_ADMIN_PASSWORD environment variable
+        if settings.ENVIRONMENT == "development":
+            print(f"   ⚠️  Admin Password: Set via SUPER_ADMIN_PASSWORD environment variable")
+        else:
+            print(f"   Admin Password: [REDACTED - Set via environment variable]")
 
 
 def get_db():
-    """Get database session"""
+    """
+    Get database session.
+    
+    SECURITY: Tenant isolation is enforced at the application level by filtering
+    queries with current_user.tenant_id (see get_current_tenant() dependency).
+    Row-level security (RLS) is configured as an additional layer but requires
+    tenant context to be set via get_current_tenant() which sets request.state.db_tenant_id.
+    
+    All endpoints using get_current_user() or get_current_tenant() automatically
+    filter by tenant_id, preventing cross-tenant data access.
+    """
     db = SessionLocal()
     try:
         yield db

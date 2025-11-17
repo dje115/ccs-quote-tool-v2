@@ -31,6 +31,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("✅ Database initialized")
     
+    # Set up row-level security for tenant isolation
+    from app.core.database import setup_row_level_security
+    try:
+        await setup_row_level_security()
+        print("✅ Row-level security configured")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not set up row-level security: {e}")
+        print("   Tenant isolation will rely on application-level filtering")
+    
     # Initialize Redis
     await init_redis()
     print("✅ Redis initialized")

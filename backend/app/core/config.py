@@ -39,8 +39,10 @@ class Settings(BaseSettings):
     
     # Multi-tenant
     DEFAULT_TENANT: str = Field(default="ccs", env="DEFAULT_TENANT")
-    SUPER_ADMIN_EMAIL: str = Field(default="admin@ccs.com", env="SUPER_ADMIN_EMAIL")
-    SUPER_ADMIN_PASSWORD: str = Field(default="admin", env="SUPER_ADMIN_PASSWORD")
+    # SECURITY: Super admin credentials MUST be set via environment variables
+    # Never use hardcoded defaults in production
+    SUPER_ADMIN_EMAIL: str = Field(..., env="SUPER_ADMIN_EMAIL")
+    SUPER_ADMIN_PASSWORD: str = Field(..., env="SUPER_ADMIN_PASSWORD")
     
     # API Keys (System-wide defaults)
     OPENAI_API_KEY: Optional[str] = Field(default=None, env="OPENAI_API_KEY")

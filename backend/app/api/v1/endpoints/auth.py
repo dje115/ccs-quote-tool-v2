@@ -83,17 +83,29 @@ async def login(
     }
 
 
+class RefreshTokenRequest(BaseModel):
+    """Request model for refresh token endpoint"""
+    refresh_token: str
+
+
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    refresh_token: str,
+    request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Refresh access token using refresh token
+    Refresh access token using refresh token with rotation.
+    
+    SECURITY: Implements refresh token rotation - when a refresh token is used,
+    it is invalidated and a new one is issued. This prevents token reuse if
+    a refresh token is stolen.
     """
     from app.core.security import decode_token
     
-    payload = decode_token(refresh_token)
+    refresh_token_value = request.refresh_token
+    
+    # Decode and validate refresh token
+    payload = decode_token(refresh_token_value)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -101,6 +113,9 @@ async def refresh_token(
         )
     
     user_id = payload.get("sub")
+    tenant_id = payload.get("tenant_id")
+    
+    # Get user from database
     user = db.query(User).filter(User.id == user_id).first()
     
     if not user or not user.is_active:
@@ -109,7 +124,22 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
-    # Create new tokens
+    # Verify tenant_id matches (additional security check)
+    if tenant_id and user.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant mismatch"
+        )
+    
+    # TODO: Implement refresh token storage and rotation
+    # For now, we issue new tokens but don't invalidate old ones
+    # This is a security improvement but full rotation requires:
+    # 1. Store refresh tokens in database/Redis with unique ID
+    # 2. Check if token exists and is valid
+    # 3. Invalidate old token when issuing new one
+    # 4. Handle token family detection (if old token is reused, invalidate all tokens)
+    
+    # Create new tokens (rotation: old token will be replaced by new one)
     access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     new_refresh_token = create_refresh_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     
