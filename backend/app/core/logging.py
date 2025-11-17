@@ -16,30 +16,31 @@ class SensitiveDataFilter(logging.Filter):
     """
     
     # Patterns to match sensitive data
+    # Format: (pattern, replacement, flags)
     SENSITIVE_PATTERNS = [
-        (r'password["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'password": "[REDACTED]"'),
-        (r'token["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'token": "[REDACTED]"'),
-        (r'api[_-]?key["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'api_key": "[REDACTED]"'),
-        (r'secret["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'secret": "[REDACTED]"'),
+        (r'password["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'password": "[REDACTED]"', 0),
+        (r'token["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'token": "[REDACTED]"', 0),
+        (r'api[_-]?key["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'api_key": "[REDACTED]"', 0),
+        (r'secret["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'secret": "[REDACTED]"', 0),
         (r'authorization["\']?\s*[:=]\s*["\']?bearer\s+([^"\',\s]+)', r'authorization": "Bearer [REDACTED]"', re.IGNORECASE),
-        (r'access[_-]?token["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'access_token": "[REDACTED]"'),
-        (r'refresh[_-]?token["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'refresh_token": "[REDACTED]"'),
+        (r'access[_-]?token["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'access_token": "[REDACTED]"', 0),
+        (r'refresh[_-]?token["\']?\s*[:=]\s*["\']?([^"\',\s]+)', r'refresh_token": "[REDACTED]"', 0),
     ]
     
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive data from log message"""
         if hasattr(record, 'msg') and record.msg:
             msg = str(record.msg)
-            for pattern, replacement in self.SENSITIVE_PATTERNS:
-                msg = re.sub(pattern, replacement, msg)
+            for pattern, replacement, flags in self.SENSITIVE_PATTERNS:
+                msg = re.sub(pattern, replacement, msg, flags=flags)
             record.msg = msg
         
         if hasattr(record, 'args') and record.args:
             args = list(record.args)
             for i, arg in enumerate(args):
                 if isinstance(arg, str):
-                    for pattern, replacement in self.SENSITIVE_PATTERNS:
-                        args[i] = re.sub(pattern, replacement, arg)
+                    for pattern, replacement, flags in self.SENSITIVE_PATTERNS:
+                        args[i] = re.sub(pattern, replacement, arg, flags=flags)
                 elif isinstance(arg, dict):
                     args[i] = self._redact_dict(arg)
             record.args = tuple(args)
