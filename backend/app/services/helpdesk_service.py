@@ -297,11 +297,11 @@ class HelpdeskService:
             
             # Use database-driven AI prompt for knowledge base search
             prompt_result = await self.ai_service.generate_with_rendered_prompts(
-                category=PromptCategory.PRODUCT_SEARCH,  # Reuse product search for semantic search
+                category=PromptCategory.KNOWLEDGE_BASE_SEARCH,
                 variables={
                     'query': query,
                     'articles': str(articles_context),
-                    'category': category or 'all'
+                    'limit': str(limit)
                 }
             )
             

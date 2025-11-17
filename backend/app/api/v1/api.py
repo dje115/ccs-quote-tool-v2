@@ -5,7 +5,7 @@ Main API router for v1
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import, provider_keys, emails, storage, pricing_config, support_contracts, contract_renewals, dynamic_pricing
+from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import, provider_keys, emails, storage, pricing_config, support_contracts, contract_renewals, dynamic_pricing, helpdesk
 
 # Create main API router
 api_router = APIRouter()
@@ -39,6 +39,7 @@ api_router.include_router(emails.router, prefix="/emails", tags=["emails"])
 api_router.include_router(storage.router, prefix="/storage", tags=["storage"])
 api_router.include_router(pricing_config.router, prefix="/pricing-config", tags=["pricing-config"])
 api_router.include_router(dynamic_pricing.router, tags=["dynamic-pricing"])
+api_router.include_router(helpdesk.router, tags=["helpdesk"])
 api_router.include_router(support_contracts.router, prefix="/support-contracts", tags=["support-contracts"])
 api_router.include_router(contract_renewals.router, prefix="/support-contracts", tags=["contract-renewals"])
 api_router.include_router(version.router, tags=["version"])

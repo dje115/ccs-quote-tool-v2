@@ -633,7 +633,62 @@ Response format (JSON):
     else:
         print("⏭️  pricing_analysis prompt already exists")
     
-    # 9. Product Search Prompt (from v1)
+    # 9. Knowledge Base Search Prompt (for helpdesk)
+    knowledge_base_search_prompt = """You are a helpful support assistant. Analyze the following user query and rank the provided knowledge base articles by relevance.
+
+User Query: {query}
+
+Available Articles:
+{articles}
+
+Your task:
+1. Understand the user's question or problem
+2. Rank articles by how well they answer the question
+3. Provide relevance scores (0.0-1.0) for each article
+4. Return the top {limit} most relevant articles
+
+Response format (JSON):
+{{
+    "ranked_articles": [
+        {{
+            "id": "<article_id>",
+            "relevance_score": <0.0-1.0>,
+            "reasoning": "<brief explanation of why this article is relevant>"
+        }}
+    ]
+}}"""
+    
+    knowledge_base_search_system = """You are an expert at matching user questions with relevant knowledge base articles. You understand technical support queries and can identify which articles best answer user questions."""
+    
+    existing_kb_search = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.KNOWLEDGE_BASE_SEARCH.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing_kb_search:
+        service.create_prompt(
+            name="Knowledge Base Search - Semantic Ranking",
+            category=PromptCategory.KNOWLEDGE_BASE_SEARCH.value,
+            system_prompt=knowledge_base_search_system,
+            user_prompt_template=knowledge_base_search_prompt,
+            model="gpt-5-mini",
+            temperature=0.3,
+            max_tokens=2000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "query": "User search query",
+                "articles": "JSON array of available articles with id, title, summary, category",
+                "limit": "Maximum number of results to return"
+            },
+            description="Rank knowledge base articles by relevance to user query"
+        )
+        print("✅ Created knowledge_base_search prompt")
+    else:
+        print("⏭️  knowledge_base_search prompt already exists")
+    
+    # 10. Product Search Prompt (from v1)
     product_search_prompt = """Search for {category} products related to: {query}
 
 Provide a list of specific products with:

@@ -29,6 +29,7 @@ class PromptCategory(str, enum.Enum):
     BUILDING_ANALYSIS = "building_analysis"
     COMPANY_PROFILE_ANALYSIS = "company_profile_analysis"
     PRICING_ANALYSIS = "pricing_analysis"
+    KNOWLEDGE_BASE_SEARCH = "knowledge_base_search"
 
 
 class AIPrompt(Base, TimestampMixin):
