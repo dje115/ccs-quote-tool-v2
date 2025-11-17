@@ -5,12 +5,14 @@ AI Analysis API endpoints for company analysis and lead generation
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
+from datetime import datetime
 
-from app.core.dependencies import get_db, get_current_active_user, get_current_tenant
+from app.core.dependencies import get_db, get_current_active_user, get_current_tenant, get_current_user
 from app.core.api_keys import get_api_keys
 from app.models.tenant import User, Tenant
+from app.models.crm import Customer
 from app.services.ai_analysis_service import AIAnalysisService
 
 router = APIRouter()

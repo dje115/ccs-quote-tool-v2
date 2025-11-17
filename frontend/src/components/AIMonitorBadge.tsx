@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chip, CircularProgress } from '@mui/material';
 import { Psychology as AiIcon } from '@mui/icons-material';
-import { customerAPI } from '../services/api';
+import { aiAnalysisAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 
@@ -29,34 +29,32 @@ const AIMonitorBadge: React.FC = () => {
 
     const loadStatus = async () => {
       try {
-        const response = await customerAPI.list({ limit: 1000 });
-        const customers = response.data.items || [];
+        // Use dedicated endpoint for better performance
+        const response = await aiAnalysisAPI.getStatus();
+        const { running, queued, total_active } = response.data;
         
-        const activeAnalyses = customers.filter((customer: any) => 
-          customer.ai_analysis_status === 'running' || customer.ai_analysis_status === 'queued'
-        );
-
-        // Count recently completed (within last 5 minutes)
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-        const recentlyCompleted = customers.filter((customer: any) => 
-          customer.ai_analysis_status === 'completed' && 
-          customer.ai_analysis_completed_at &&
-          new Date(customer.ai_analysis_completed_at).getTime() > fiveMinutesAgo
-        );
+        // Combine running and queued analyses
+        const activeAnalyses = [
+          ...running.map((item: any) => ({
+            id: item.customer_id,
+            company_name: item.company_name,
+            ai_analysis_status: item.status,
+            ai_analysis_task_id: item.task_id,
+          })),
+          ...queued.map((item: any) => ({
+            id: item.customer_id,
+            company_name: item.company_name,
+            ai_analysis_status: item.status,
+            ai_analysis_task_id: item.task_id,
+          }))
+        ];
         
-        setActiveCount(activeAnalyses.length);
-        setCompletedCount(recentlyCompleted.length);
+        setActiveCount(total_active);
         setRunningAnalyses(activeAnalyses);
         
-        // Store completion timestamps
-        recentlyCompleted.forEach((customer: any) => {
-          if (customer.ai_analysis_completed_at) {
-            completedTimestampsRef.current.set(
-              customer.id,
-              new Date(customer.ai_analysis_completed_at).getTime()
-            );
-          }
-        });
+        // Note: Recently completed count would require a separate query or endpoint
+        // For now, we'll rely on WebSocket events for completion notifications
+        setCompletedCount(0);
       } catch (error: any) {
         // Silently ignore 401/403 errors (user not authenticated)
         if (error?.response?.status !== 401 && error?.response?.status !== 403) {

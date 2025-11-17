@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Chip, CircularProgress, Snackbar, Alert, Badge } from '@mui/material';
 import { Psychology as AiIcon } from '@mui/icons-material';
-import { customerAPI } from '../services/api';
+import { aiAnalysisAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 
@@ -28,12 +28,25 @@ const GlobalAIMonitor: React.FC = () => {
 
     const loadRunningAnalyses = async () => {
       try {
-        const response = await customerAPI.list({ limit: 1000 });
-        const customers = response.data.items || [];
+        // Use dedicated endpoint for better performance
+        const response = await aiAnalysisAPI.getStatus();
+        const { running, queued } = response.data;
         
-        const activeAnalyses = customers.filter((customer: any) => 
-          customer.ai_analysis_status === 'running' || customer.ai_analysis_status === 'queued'
-        );
+        // Combine running and queued analyses
+        const activeAnalyses = [
+          ...running.map((item: any) => ({
+            id: item.customer_id,
+            company_name: item.company_name,
+            ai_analysis_status: item.status,
+            ai_analysis_task_id: item.task_id,
+          })),
+          ...queued.map((item: any) => ({
+            id: item.customer_id,
+            company_name: item.company_name,
+            ai_analysis_status: item.status,
+            ai_analysis_task_id: item.task_id,
+          }))
+        ];
         
         setRunningAnalyses(activeAnalyses);
         runningAnalysesRef.current = activeAnalyses;
