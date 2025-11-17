@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
-from app.core.dependencies import get_db, get_current_active_user
-from app.models.tenant import User
+from app.core.dependencies import get_db, get_current_active_user, get_current_tenant
+from app.core.api_keys import get_api_keys
+from app.models.tenant import User, Tenant
 from app.services.ai_analysis_service import AIAnalysisService
 
 router = APIRouter()
@@ -37,11 +38,22 @@ async def analyze_company(
     request: CompanyAnalysisRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """Comprehensive company analysis using AI, Companies House, and Google Maps"""
     try:
-        ai_service = AIAnalysisService()
+        # Resolve API keys (tenant-specific with fallback to system keys)
+        api_keys = get_api_keys(db, current_tenant)
+        
+        # Initialize AI service with proper DB, tenant, and API keys
+        ai_service = AIAnalysisService(
+            openai_api_key=api_keys.openai,
+            companies_house_api_key=api_keys.companies_house,
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
+        )
         
         # Perform analysis
         analysis_result = await ai_service.analyze_company(
@@ -75,11 +87,22 @@ async def analyze_company(
 async def score_lead(
     request: LeadScoringRequest,
     current_user: User = Depends(get_current_active_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """Score lead quality using AI analysis"""
     try:
-        ai_service = AIAnalysisService()
+        # Resolve API keys (tenant-specific with fallback to system keys)
+        api_keys = get_api_keys(db, current_tenant)
+        
+        # Initialize AI service with proper DB, tenant, and API keys
+        ai_service = AIAnalysisService(
+            openai_api_key=api_keys.openai,
+            companies_house_api_key=api_keys.companies_house,
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
+        )
         
         # Perform lead scoring
         scoring_result = await ai_service.score_lead(request.company_data)
@@ -107,11 +130,22 @@ async def score_lead(
 async def analyze_financial_data(
     request: FinancialAnalysisRequest,
     current_user: User = Depends(get_current_active_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """Analyze financial data from Companies House"""
     try:
-        ai_service = AIAnalysisService()
+        # Resolve API keys (tenant-specific with fallback to system keys)
+        api_keys = get_api_keys(db, current_tenant)
+        
+        # Initialize AI service with proper DB, tenant, and API keys
+        ai_service = AIAnalysisService(
+            openai_api_key=api_keys.openai,
+            companies_house_api_key=api_keys.companies_house,
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
+        )
         
         # Perform financial analysis
         analysis_result = await ai_service.analyze_financial_data(request.company_number)
@@ -141,11 +175,22 @@ async def analyze_financial_data(
 async def generate_lead_strategy(
     request: LeadStrategyRequest,
     current_user: User = Depends(get_current_active_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """Generate lead engagement strategy"""
     try:
-        ai_service = AIAnalysisService()
+        # Resolve API keys (tenant-specific with fallback to system keys)
+        api_keys = get_api_keys(db, current_tenant)
+        
+        # Initialize AI service with proper DB, tenant, and API keys
+        ai_service = AIAnalysisService(
+            openai_api_key=api_keys.openai,
+            companies_house_api_key=api_keys.companies_house,
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
+        )
         
         # Generate strategy
         strategy_result = await ai_service.generate_lead_strategy(request.company_data)
@@ -172,20 +217,32 @@ async def generate_lead_strategy(
 @router.get("/analysis-status")
 async def get_analysis_status(
     current_user: User = Depends(get_current_active_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
     """Get status of AI analysis services"""
     try:
-        ai_service = AIAnalysisService()
+        # Resolve API keys (tenant-specific with fallback to system keys)
+        api_keys = get_api_keys(db, current_tenant)
+        
+        # Initialize AI service with proper DB, tenant, and API keys
+        ai_service = AIAnalysisService(
+            openai_api_key=api_keys.openai,
+            companies_house_api_key=api_keys.companies_house,
+            google_maps_api_key=api_keys.google_maps,
+            tenant_id=current_tenant.id,
+            db=db
+        )
         
         return {
             "success": True,
             "services": {
-                "ai_analysis": ai_service.openai_client is not None,
-                "companies_house": ai_service.companies_house_service.api_key is not None,
-                "google_maps": ai_service.google_maps_service.api_key is not None
+                "ai_analysis": bool(api_keys.openai),
+                "companies_house": bool(api_keys.companies_house),
+                "google_maps": bool(api_keys.google_maps)
             },
-            "status": "operational" if ai_service.openai_client else "limited"
+            "status": "operational" if api_keys.openai else "limited",
+            "api_key_source": api_keys.source
         }
         
     except Exception as e:
