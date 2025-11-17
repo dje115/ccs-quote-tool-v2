@@ -243,18 +243,18 @@ function App() {
             }
           />
           <Route
-            path="/helpdesk"
-            element={
-              <ProtectedRoute>
-                <Helpdesk />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/helpdesk/:id"
             element={
               <ProtectedRoute>
                 <TicketDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk"
+            element={
+              <ProtectedRoute>
+                <Helpdesk />
               </ProtectedRoute>
             }
           />
