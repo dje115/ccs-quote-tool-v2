@@ -27,6 +27,16 @@ class EventPublisher:
         self.redis_client: Optional[aioredis.Redis] = None
         self._lock = asyncio.Lock()
     
+    async def close(self):
+        """Close Redis connection and cleanup resources"""
+        if self.redis_client:
+            try:
+                await self.redis_client.close()
+                self.redis_client = None
+                print("✅ EventPublisher: Redis connection closed")
+            except Exception as e:
+                print(f"⚠️ EventPublisher: Error closing Redis connection: {e}")
+    
     async def _connect(self):
         """Connect to Redis asynchronously"""
         async with self._lock:

@@ -56,8 +56,31 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown
+    # Shutdown - cleanup resources
     print("🛑 Shutting down CCS Quote Tool v2...")
+    
+    # Close Redis connections
+    from app.core.redis import close_redis
+    await close_redis()
+    print("✅ Redis connections closed")
+    
+    # Close EventPublisher Redis connection
+    from app.core.events import get_event_publisher
+    event_publisher = get_event_publisher()
+    await event_publisher.close()
+    
+    # Close WebSocketManager connections
+    from app.core.websocket import get_websocket_manager
+    manager = get_websocket_manager()
+    await manager.close()
+    
+    # Close database engine connections
+    from app.core.database import engine, async_engine
+    engine.dispose()
+    await async_engine.dispose()
+    print("✅ Database connections closed")
+    
+    print("✅ Cleanup complete")
 
 
 # Get version from VERSION file or environment

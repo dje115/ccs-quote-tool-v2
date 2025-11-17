@@ -23,12 +23,24 @@ class WebPricingScraper:
     """
     
     def __init__(self):
-        self.session = httpx.AsyncClient(
-            timeout=30.0,
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        )
+        self.session: Optional[httpx.AsyncClient] = None
+    
+    async def _get_session(self) -> httpx.AsyncClient:
+        """Get or create HTTP client session"""
+        if self.session is None:
+            self.session = httpx.AsyncClient(
+                timeout=30.0,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            )
+        return self.session
+    
+    async def close(self):
+        """Close HTTP client session and cleanup resources"""
+        if self.session:
+            await self.close()
+            self.session = None
     
     def extract_price(self, text: str) -> Optional[float]:
         """Extract numeric price from text"""
@@ -104,7 +116,8 @@ class WebPricingScraper:
             if custom_headers:
                 headers.update(custom_headers)
             
-            response = await self.session.get(url, headers=headers, follow_redirects=True)
+            session = await self._get_session()
+            response = await session.get(url, headers=headers, follow_redirects=True)
             if response.status_code != 200:
                 if retry_count < max_retries:
                     logger.warning(f"Retrying {url} (attempt {retry_count + 1}/{max_retries})")
@@ -411,6 +424,6 @@ class WebPricingScraper:
     
     async def close(self):
         """Close the HTTP session"""
-        await self.session.aclose()
+        await self.close()
 
 
