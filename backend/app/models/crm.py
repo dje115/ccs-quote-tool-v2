@@ -140,6 +140,12 @@ class Customer(BaseModel):
     ai_analysis_started_at = Column(DateTime(timezone=True), nullable=True)  # When analysis started
     ai_analysis_completed_at = Column(DateTime(timezone=True), nullable=True)  # When analysis completed
     
+    # Customer Portal Access
+    portal_access_enabled = Column(Boolean, default=False, nullable=False)  # Enable customer portal access
+    portal_access_token = Column(String(255), nullable=True, unique=True, index=True)  # Token for portal authentication
+    portal_access_token_generated_at = Column(DateTime(timezone=True), nullable=True)  # When token was generated
+    portal_permissions = Column(JSON, nullable=True)  # Granular permissions: {"tickets": true, "quotes": true, "orders": true, "reporting": true}
+    
     # Relationships
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
     interactions = relationship("CustomerInteraction", back_populates="customer", cascade="all, delete-orphan")

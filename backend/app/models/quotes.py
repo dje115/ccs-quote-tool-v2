@@ -93,6 +93,9 @@ class Quote(BaseModel):
     viewed_at = Column(DateTime(timezone=True), nullable=True)
     viewed_count = Column(Integer, default=0, nullable=False)
     
+    # Customer Portal
+    show_in_customer_portal = Column(Boolean, default=False, nullable=False)  # Show quote in customer portal
+    
     # Created by
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
     

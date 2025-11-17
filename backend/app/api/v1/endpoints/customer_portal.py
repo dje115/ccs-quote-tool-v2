@@ -24,8 +24,7 @@ def get_customer_by_token(
     db: Session = Depends(get_db)
 ) -> Customer:
     """
-    Authenticate customer using token (for now, we'll use customer ID as token)
-    In production, this should use a proper JWT or API key system
+    Authenticate customer using portal access token
     """
     if not x_customer_token:
         raise HTTPException(
@@ -33,16 +32,17 @@ def get_customer_by_token(
             detail="Customer token required"
         )
     
-    # For now, use customer ID directly (in production, decode JWT or validate API key)
+    # Find customer by portal access token
     customer = db.query(Customer).filter(
-        Customer.id == x_customer_token,
+        Customer.portal_access_token == x_customer_token,
+        Customer.portal_access_enabled == True,
         Customer.is_deleted == False
     ).first()
     
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid customer token"
+            detail="Invalid customer token or portal access disabled"
         )
     
     return customer
