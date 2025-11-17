@@ -260,5 +260,22 @@ export const providerKeysAPI = {
     apiClient.delete(`/provider-keys/${providerId}?is_system=${isSystem}`),
 };
 
+// Helpdesk API
+export const helpdeskAPI = {
+  getTickets: (params?: any) => apiClient.get('/helpdesk/tickets', { params }),
+  getTicket: (id: string) => apiClient.get(`/helpdesk/tickets/${id}`),
+  createTicket: (data: any) => apiClient.post('/helpdesk/tickets', data),
+  updateTicket: (id: string, data: any) => apiClient.put(`/helpdesk/tickets/${id}`, data),
+  addComment: (id: string, comment: string, isInternal: boolean = false) => 
+    apiClient.post(`/helpdesk/tickets/${id}/comments`, { comment, is_internal: isInternal }),
+  updateStatus: (id: string, status: string) => 
+    apiClient.patch(`/helpdesk/tickets/${id}/status`, { status }),
+  assignTicket: (id: string, userId: string) => 
+    apiClient.post(`/helpdesk/tickets/${id}/assign`, { user_id: userId }),
+  getTicketStats: () => apiClient.get('/helpdesk/tickets/stats'),
+  searchKnowledgeBase: (query: string, category?: string) => 
+    apiClient.get('/helpdesk/knowledge-base/search', { params: { query, category } }),
+};
+
 
 

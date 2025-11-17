@@ -30,7 +30,8 @@ import {
   Business as CompetitorsIcon,
   Architecture as ArchitectureIcon,
   LocalShipping as LocalShippingIcon,
-  Psychology as PsychologyIcon
+  Psychology as PsychologyIcon,
+  Support as SupportIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -121,6 +122,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: t('navigation.planning'), icon: <ArchitectureIcon />, path: '/planning-applications' },
     { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
+    { text: 'Helpdesk', icon: <SupportIcon />, path: '/helpdesk' },
         { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
         { text: t('navigation.competitors'), icon: <CompetitorsIcon />, path: '/competitors' },
         { text: 'AI Prompts', icon: <PsychologyIcon />, path: '/prompts', adminOnly: true },
