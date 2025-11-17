@@ -56,7 +56,11 @@ class Ticket(Base, TimestampMixin):
     
     # Ticket details
     subject = Column(String(500), nullable=False)
-    description = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)  # This will be the improved version shown in portal
+    original_description = Column(Text, nullable=True)  # Original description typed by agent
+    improved_description = Column(Text, nullable=True)  # AI-improved description (shown in portal)
+    ai_suggestions = Column(JSON, nullable=True)  # AI suggestions: {"next_actions": [], "questions": [], "solutions": []}
+    ai_analysis_date = Column(DateTime(timezone=True), nullable=True)  # When AI analysis was performed
     ticket_type = Column(Enum(TicketType), default=TicketType.SUPPORT, nullable=False, index=True)
     status = Column(Enum(TicketStatus), default=TicketStatus.OPEN, nullable=False, index=True)
     priority = Column(Enum(TicketPriority), default=TicketPriority.MEDIUM, nullable=False, index=True)

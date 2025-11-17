@@ -17,6 +17,7 @@ from app.models.helpdesk import (
     TicketStatus, TicketPriority, TicketType
 )
 from app.models.tenant import User
+from app.models.crm import Customer
 from app.services.ai_provider_service import AIProviderService
 from app.models.ai_prompt import PromptCategory
 
@@ -70,6 +71,28 @@ class HelpdeskService:
         sla_policy = self._get_sla_policy(priority, ticket_type, customer_id)
         sla_target_hours = sla_policy.resolution_hours if sla_policy else None
         
+        # Store original description
+        original_description = description
+        
+        # Perform AI analysis to improve description and get suggestions
+        improved_description = None
+        ai_suggestions = None
+        ai_analysis_date = None
+        
+        try:
+            ai_result = await self._analyze_ticket_with_ai(subject, description, customer_id)
+            if ai_result:
+                improved_description = ai_result.get("improved_description")
+                ai_suggestions = ai_result.get("suggestions", {})
+                ai_analysis_date = datetime.now(timezone.utc)
+                
+                # Use improved description if available
+                if improved_description:
+                    description = improved_description
+        except Exception as e:
+            logger.warning(f"AI analysis failed for ticket {ticket_number}: {str(e)}")
+            # Continue without AI improvements
+        
         ticket = Ticket(
             id=str(uuid.uuid4()),
             tenant_id=self.tenant_id,
@@ -78,7 +101,11 @@ class HelpdeskService:
             contact_id=contact_id,
             created_by_user_id=created_by_user_id,
             subject=subject,
-            description=description,
+            description=description,  # Use improved version if available
+            original_description=original_description,
+            improved_description=improved_description,
+            ai_suggestions=ai_suggestions,
+            ai_analysis_date=ai_analysis_date,
             ticket_type=ticket_type,
             status=TicketStatus.OPEN,
             priority=priority,
@@ -532,4 +559,106 @@ class HelpdeskService:
     ) -> Optional[SLAPolicy]:
         """Get applicable SLA policy (public method)"""
         return self._get_sla_policy(priority, ticket_type, customer_id)
+    
+    async def _analyze_ticket_with_ai(
+        self,
+        subject: str,
+        description: str,
+        customer_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Analyze ticket with AI to improve description and suggest actions
+        
+        Returns:
+            Dictionary with improved_description and suggestions
+        """
+        try:
+            # Get customer context if available
+            customer_context = ""
+            if customer_id:
+                customer = self.db.query(Customer).filter(
+                    Customer.id == customer_id,
+                    Customer.tenant_id == self.tenant_id
+                ).first()
+                if customer:
+                    customer_context = f"\n\nCustomer: {customer.company_name}"
+                    if customer.business_sector:
+                        customer_context += f"\nBusiness Sector: {customer.business_sector.value}"
+                    if customer.description:
+                        customer_context += f"\nCustomer Description: {customer.description[:200]}"
+            
+            # Build prompt for ticket analysis
+            prompt = f"""You are a customer service assistant. Analyze the following support ticket and:
+
+1. Improve the description to be clear, professional, and customer-friendly (this will be shown to the customer)
+2. Suggest next actions/questions that should be asked to gather more information
+3. Suggest potential solutions if enough information is available
+
+Original Ticket:
+Subject: {subject}
+Description: {description}
+{customer_context}
+
+Provide your response in JSON format:
+{{
+    "improved_description": "The improved, professional description",
+    "suggestions": {{
+        "next_actions": ["action 1", "action 2"],
+        "questions": ["question 1", "question 2"],
+        "solutions": ["solution 1", "solution 2"]
+    }}
+}}"""
+
+            # Use database-driven AI prompt if available, otherwise use fallback
+            result = await self.ai_service.generate_with_rendered_prompts(
+                category=PromptCategory.CUSTOMER_SERVICE,
+                variables={
+                    "ticket_subject": subject,
+                    "ticket_description": description,
+                    "customer_context": customer_context
+                },
+                fallback_prompt=prompt,
+                model_preference=None,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            if result and result.get("content"):
+                import json
+                try:
+                    # Try to parse JSON response
+                    content = result["content"].strip()
+                    # Remove markdown code blocks if present
+                    if content.startswith("```"):
+                        content = content.split("```")[1]
+                        if content.startswith("json"):
+                            content = content[4:]
+                    content = content.strip()
+                    
+                    analysis = json.loads(content)
+                    return {
+                        "improved_description": analysis.get("improved_description", description),
+                        "suggestions": analysis.get("suggestions", {})
+                    }
+                except json.JSONDecodeError:
+                    # If not JSON, try to extract improved description from text
+                    lines = result["content"].split("\n")
+                    improved = description
+                    for line in lines:
+                        if "improved" in line.lower() or "description" in line.lower():
+                            # Try to extract the improved description
+                            if ":" in line:
+                                improved = line.split(":", 1)[1].strip()
+                                break
+                    
+                    return {
+                        "improved_description": improved,
+                        "suggestions": {}
+                    }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in AI ticket analysis: {str(e)}")
+            return None
 
