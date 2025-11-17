@@ -17,7 +17,8 @@ celery_app = Celery(
         "app.tasks.lead_generation_tasks",
         "app.tasks.campaign_monitor_tasks",
         "app.tasks.planning_tasks",
-        "app.tasks.contract_renewal_tasks"
+        "app.tasks.contract_renewal_tasks",
+        "app.tasks.sla_tasks"
     ]  # Import task modules
 )
 
@@ -57,6 +58,14 @@ celery_app.conf.update(
         'process-auto-renewals': {
             'task': 'contract_renewal.process_auto_renewals',
             'schedule': 86400.0,  # Daily at midnight
+        },
+        'check-sla-violations': {
+            'task': 'check_sla_violations',
+            'schedule': 300.0,  # Every 5 minutes
+        },
+        'auto-escalate-sla-violations': {
+            'task': 'auto_escalate_sla_violations',
+            'schedule': 900.0,  # Every 15 minutes
         },
     }
 )

@@ -44,24 +44,43 @@ def check_sla_violations_task(tenant_id: str):
 
 
 @shared_task(name="auto_escalate_sla_violations")
-def auto_escalate_sla_violations_task(tenant_id: str):
+def auto_escalate_sla_violations_task(tenant_id: str = None):
     """
     Automatically escalate tickets with SLA violations
     
     Args:
-        tenant_id: Tenant ID
+        tenant_id: Tenant ID (if None, process all tenants)
     
     Returns:
         Dictionary with escalation results
     """
     db: Session = SessionLocal()
     try:
-        service = SLAService(db, tenant_id)
-        result = service.auto_escalate_violations()
+        from app.models.tenant import Tenant
         
-        logger.info(f"Auto-escalated {result['escalated']} tickets for tenant {tenant_id}")
+        if tenant_id:
+            tenants = [db.query(Tenant).filter(Tenant.id == tenant_id).first()]
+        else:
+            tenants = db.query(Tenant).all()
         
-        return result
+        total_escalated = 0
+        total_violations = 0
+        
+        for tenant in tenants:
+            if not tenant:
+                continue
+            service = SLAService(db, tenant.id)
+            result = service.auto_escalate_violations()
+            
+            total_escalated += result.get('escalated', 0)
+            total_violations += result.get('violations_found', 0)
+            
+            logger.info(f"Auto-escalated {result['escalated']} tickets for tenant {tenant.id}")
+        
+        return {
+            'total_violations_found': total_violations,
+            'total_escalated': total_escalated
+        }
     except Exception as e:
         logger.error(f"Error auto-escalating SLA violations: {e}")
         raise
