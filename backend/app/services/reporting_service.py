@@ -12,8 +12,8 @@ from decimal import Decimal
 import logging
 
 from app.models.quotes import Quote, QuoteStatus
-from app.models.customer import Customer, CustomerStatus
-from app.models.lead import Lead, LeadStatus
+from app.models.crm import Customer, CustomerStatus
+from app.models.leads import Lead, LeadStatus
 from app.models.helpdesk import Ticket, TicketStatus
 from app.models.sales import SalesActivity
 from app.models.support_contract import SupportContract
