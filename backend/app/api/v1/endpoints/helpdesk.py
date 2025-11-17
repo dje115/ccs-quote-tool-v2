@@ -171,6 +171,24 @@ async def list_tickets(
         )
 
 
+@router.get("/tickets/stats")
+async def get_ticket_stats(
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """Get ticket statistics"""
+    try:
+        service = HelpdeskService(db, current_user.tenant_id)
+        stats = service.get_ticket_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting stats: {str(e)}"
+        )
+
+
 @router.get("/tickets/{ticket_id}")
 async def get_ticket(
     ticket_id: str,
