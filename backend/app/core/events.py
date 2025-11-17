@@ -304,6 +304,13 @@ class EventPublisher:
         self._publish_sync(tenant_id, "activity.suggestions_updated", {
             "customer_id": customer_id
         })
+    
+    def publish_quote_updated_sync(self, tenant_id: str, quote_id: str, quote_data: Dict[str, Any]):
+        """Synchronous wrapper for Celery tasks"""
+        self._publish_sync(tenant_id, "quote.updated", {
+            "quote_id": quote_id,
+            "quote": quote_data
+        })
 
 
 # Global event publisher instance

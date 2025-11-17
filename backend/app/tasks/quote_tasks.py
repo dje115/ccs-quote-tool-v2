@@ -99,6 +99,20 @@ def analyze_quote_requirements_task(
                 
                 db.commit()
                 print(f"✅ Quote {quote_id} updated with analysis results")
+                
+                # Publish quote analysis completed event
+                from app.core.events import get_event_publisher
+                event_publisher = get_event_publisher()
+                event_publisher.publish_quote_updated_sync(
+                    tenant_id=tenant_id,
+                    quote_id=quote_id,
+                    quote_data={
+                        'id': quote.id,
+                        'quote_number': quote.quote_number,
+                        'ai_analysis': analysis,
+                        'status': quote.status.value if hasattr(quote.status, 'value') else str(quote.status)
+                    }
+                )
         
         return result
         
