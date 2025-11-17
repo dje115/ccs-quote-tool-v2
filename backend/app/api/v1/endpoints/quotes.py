@@ -5,6 +5,7 @@ Quote management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from decimal import Decimal
