@@ -17,52 +17,57 @@ from app.core.database import init_db
 from app.core.redis import init_redis
 from app.core.celery import init_celery
 from app.core.middleware import TenantMiddleware, LoggingMiddleware
+from app.core.logging import setup_logging, get_logger
 from app.api.v1.api import api_router
 from app.api.v1.endpoints.version import get_version
+
+# Setup logging first
+setup_logging(level="INFO" if settings.ENVIRONMENT == "production" else "DEBUG")
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
-    print("🚀 Starting CCS Quote Tool v2...")
+    logger.info("Starting CCS Quote Tool v2", extra={'version': APP_VERSION})
     
     # Initialize database
     await init_db()
-    print("✅ Database initialized")
+    logger.info("Database initialized")
     
     # Set up row-level security for tenant isolation
     from app.core.database import setup_row_level_security
     try:
         await setup_row_level_security()
-        print("✅ Row-level security configured")
+        logger.info("Row-level security configured")
     except Exception as e:
-        print(f"⚠️ Warning: Could not set up row-level security: {e}")
-        print("   Tenant isolation will rely on application-level filtering")
+        logger.warning("Could not set up row-level security", extra={'error': str(e)})
+        logger.info("Tenant isolation will rely on application-level filtering")
     
     # Initialize Redis
     await init_redis()
-    print("✅ Redis initialized")
+    logger.info("Redis initialized")
     
     # Initialize Celery
     init_celery()
-    print("✅ Celery initialized")
+    logger.info("Celery initialized")
     
     # Cleanup any stuck AI analysis tasks from previous runs
     from app.startup_cleanup import cleanup_stuck_ai_tasks
     cleanup_stuck_ai_tasks()
     
-    print("🎉 CCS Quote Tool v2 is ready!")
+    logger.info("CCS Quote Tool v2 is ready")
     
     yield
     
     # Shutdown - cleanup resources
-    print("🛑 Shutting down CCS Quote Tool v2...")
+    logger.info("Shutting down CCS Quote Tool v2...")
     
     # Close Redis connections
     from app.core.redis import close_redis
     await close_redis()
-    print("✅ Redis connections closed")
+    logger.info("Redis connections closed")
     
     # Close EventPublisher Redis connection
     from app.core.events import get_event_publisher
@@ -78,9 +83,9 @@ async def lifespan(app: FastAPI):
     from app.core.database import engine, async_engine
     engine.dispose()
     await async_engine.dispose()
-    print("✅ Database connections closed")
+    logger.info("Database connections closed")
     
-    print("✅ Cleanup complete")
+    logger.info("Cleanup complete")
 
 
 # Get version from VERSION file or environment
@@ -165,10 +170,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers = {}
     
     # Log the error for debugging
-    if settings.ENVIRONMENT == "development":
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    logger.error("Unhandled exception", extra={'exception': str(exc)}, exc_info=True)
     
     return JSONResponse(
         status_code=500,

@@ -39,12 +39,11 @@ def analyze_quote_requirements_task(
     db = SessionLocal()
     
     try:
-        print(f"\n{'='*80}")
-        print(f"🤖 ANALYZING QUOTE REQUIREMENTS (Background Task)")
-        print(f"Task ID: {self.request.id}")
-        print(f"Quote ID: {quote_id}")
-        print(f"Tenant ID: {tenant_id}")
-        print(f"{'='*80}\n")
+        logger.info("Analyzing quote requirements (background task)", extra={
+            'task_id': self.request.id,
+            'quote_id': quote_id,
+            'tenant_id': tenant_id
+        })
         
         # Get tenant
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
@@ -98,7 +97,7 @@ def analyze_quote_requirements_task(
                     quote.ai_raw_response = result['raw_response']
                 
                 db.commit()
-                print(f"✅ Quote {quote_id} updated with analysis results")
+                logger.info("Quote updated with analysis results", extra={'quote_id': quote_id})
                 
                 # Publish quote analysis completed event
                 from app.core.events import get_event_publisher
@@ -117,7 +116,7 @@ def analyze_quote_requirements_task(
         return result
         
     except Exception as e:
-        print(f"❌ Error in analyze_quote_requirements_task: {e}")
+        logger.error("Error in analyze_quote_requirements_task", extra={'quote_id': quote_id, 'error': str(e)}, exc_info=True)
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}

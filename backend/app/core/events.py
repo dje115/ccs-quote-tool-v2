@@ -33,9 +33,9 @@ class EventPublisher:
             try:
                 await self.redis_client.close()
                 self.redis_client = None
-                print("✅ EventPublisher: Redis connection closed")
+                logger.info("EventPublisher: Redis connection closed")
             except Exception as e:
-                print(f"⚠️ EventPublisher: Error closing Redis connection: {e}")
+                logger.error("EventPublisher: Error closing Redis connection", extra={'error': str(e)})
     
     async def _connect(self):
         """Connect to Redis asynchronously"""
@@ -52,7 +52,7 @@ class EventPublisher:
                 # Test connection
                 await self.redis_client.ping()
             except Exception as e:
-                print(f"⚠️ EventPublisher: Redis connection failed: {e}")
+                logger.error("EventPublisher: Redis connection failed", extra={'error': str(e)})
                 self.redis_client = None
     
     async def _publish(self, tenant_id: str, event_type: str, data: Dict[str, Any]):
@@ -67,7 +67,7 @@ class EventPublisher:
         if not self.redis_client:
             await self._connect()
             if not self.redis_client:
-                print(f"⚠️ EventPublisher: Cannot publish event, Redis not available")
+                logger.warning("EventPublisher: Cannot publish event, Redis not available")
                 return
         
         try:
@@ -80,9 +80,9 @@ class EventPublisher:
             }
             
             await self.redis_client.publish(channel, json.dumps(event))
-            print(f"📡 Published event: {event_type} to {channel}")
+            logger.debug("Published event", extra={'event_type': event_type, 'channel': channel})
         except Exception as e:
-            print(f"❌ EventPublisher: Failed to publish event: {e}")
+            logger.error("EventPublisher: Failed to publish event", extra={'event_type': event_type, 'error': str(e)})
     
     def _publish_sync(self, tenant_id: str, event_type: str, data: Dict[str, Any]):
         """
@@ -107,7 +107,7 @@ class EventPublisher:
                 # No event loop exists, create one
                 asyncio.run(self._publish(tenant_id, event_type, data))
         except Exception as e:
-            print(f"❌ EventPublisher: Failed to publish event (sync wrapper): {e}")
+            logger.error("EventPublisher: Failed to publish event (sync wrapper)", extra={'event_type': event_type, 'error': str(e)})
     
     # Customer Events
     async def publish_customer_created(self, tenant_id: str, customer_id: str, customer_data: Dict[str, Any]):
