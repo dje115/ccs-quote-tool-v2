@@ -105,6 +105,7 @@ async def list_quotes(
     skip: int = 0,
     limit: int = 20,
     status: QuoteStatus | None = None,
+    customer_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -117,6 +118,9 @@ async def list_quotes(
         
         if status:
             query = query.filter_by(status=status)
+        
+        if customer_id:
+            query = query.filter_by(customer_id=customer_id)
         
         quotes = query.order_by(Quote.created_at.desc()).offset(skip).limit(limit).all()
         
