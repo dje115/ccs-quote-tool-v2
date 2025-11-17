@@ -17,8 +17,15 @@ const GlobalAIMonitor: React.FC = () => {
   const { subscribe, isConnected } = useWebSocketContext();
   const runningAnalysesRef = useRef<any[]>([]);
 
-  // Initial load of running analyses
+  // Initial load of running analyses - only if authenticated
   useEffect(() => {
+    // Check if user is authenticated before making API calls
+    const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+    if (!token) {
+      // Not authenticated, skip API call
+      return;
+    }
+
     const loadRunningAnalyses = async () => {
       try {
         const response = await customerAPI.list({ limit: 1000 });
@@ -31,6 +38,7 @@ const GlobalAIMonitor: React.FC = () => {
         setRunningAnalyses(activeAnalyses);
         runningAnalysesRef.current = activeAnalyses;
       } catch (error: any) {
+        // Silently ignore 401/403 errors (user not authenticated)
         if (error?.response?.status !== 401 && error?.response?.status !== 403) {
           console.error('[GlobalAIMonitor] Error loading analyses:', error);
         }

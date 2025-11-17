@@ -30,7 +30,7 @@ def get_version() -> str:
             version = version_file.read_text().strip()
         else:
             # Fallback to default
-            version = "2.5.0"
+            version = "2.24.0"
     
     return version
 
