@@ -523,4 +523,13 @@ class HelpdeskService:
             changed_by_id=changed_by_id
         )
         self.db.add(history)
+    
+    def get_sla_policy(
+        self,
+        priority: TicketPriority,
+        ticket_type: TicketType,
+        customer_id: Optional[str]
+    ) -> Optional[SLAPolicy]:
+        """Get applicable SLA policy (public method)"""
+        return self._get_sla_policy(priority, ticket_type, customer_id)
 
