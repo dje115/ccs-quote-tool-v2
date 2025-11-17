@@ -14,7 +14,13 @@ import {
   Chip,
   IconButton,
   TextField,
-  InputAdornment
+  InputAdornment,
+  Pagination,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  CircularProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -29,16 +35,35 @@ const Quotes: React.FC = () => {
   const [quotes, setQuotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     loadQuotes();
-  }, []);
+  }, [page, pageSize, searchTerm]);
 
   const loadQuotes = async () => {
     try {
       setLoading(true);
-      const response = await quoteAPI.list();
-      setQuotes(response.data);
+      const skip = (page - 1) * pageSize;
+      const response = await quoteAPI.list({
+        skip,
+        limit: pageSize,
+        search: searchTerm || undefined
+      });
+      
+      // Handle both old format (array) and new format (paginated response)
+      if (Array.isArray(response.data)) {
+        setQuotes(response.data);
+        setTotal(response.data.length);
+        setTotalPages(1);
+      } else {
+        setQuotes(response.data.items || []);
+        setTotal(response.data.total || 0);
+        setTotalPages(response.data.total_pages || 1);
+      }
     } catch (error) {
       console.error('Error loading quotes:', error);
     } finally {
@@ -46,10 +71,19 @@ const Quotes: React.FC = () => {
     }
   };
 
-  const filteredQuotes = quotes.filter(quote =>
-    quote.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quote.quote_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setPage(1); // Reset to first page on search
+  };
+
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value);
+  };
+
+  const handlePageSizeChange = (e: any) => {
+    setPageSize(e.target.value);
+    setPage(1); // Reset to first page when changing page size
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -97,19 +131,34 @@ const Quotes: React.FC = () => {
       </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>
-        <TextField
-          fullWidth
-          placeholder="Search quotes..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <TextField
+            fullWidth
+            placeholder="Search quotes by title, quote number, or project..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <FormControl sx={{ minWidth: 120 }}>
+            <InputLabel>Page Size</InputLabel>
+            <Select
+              value={pageSize}
+              label="Page Size"
+              onChange={handlePageSizeChange}
+            >
+              <MenuItem value={10}>10</MenuItem>
+              <MenuItem value={20}>20</MenuItem>
+              <MenuItem value={50}>50</MenuItem>
+              <MenuItem value={100}>100</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
       </Paper>
 
       <TableContainer component={Paper}>
@@ -130,17 +179,17 @@ const Quotes: React.FC = () => {
             {loading ? (
               <TableRow>
                 <TableCell colSpan={8} align="center">
-                  Loading...
+                  <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
-            ) : filteredQuotes.length === 0 ? (
+            ) : quotes.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} align="center">
                   No quotes found. Create your first quote!
                 </TableCell>
               </TableRow>
             ) : (
-              filteredQuotes.map((quote) => (
+              quotes.map((quote) => (
                 <TableRow key={quote.id} hover>
                   <TableCell>{quote.quote_number}</TableCell>
                   <TableCell>{quote.title}</TableCell>
@@ -178,10 +227,20 @@ const Quotes: React.FC = () => {
         </Table>
       </TableContainer>
 
-      <Box sx={{ mt: 2 }}>
+      <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          Total: {filteredQuotes.length} quotes
+          Showing {quotes.length > 0 ? (page - 1) * pageSize + 1 : 0} - {Math.min(page * pageSize, total)} of {total} quotes
         </Typography>
+        {totalPages > 1 && (
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            showFirstButton
+            showLastButton
+          />
+        )}
       </Box>
     </Container>
   );

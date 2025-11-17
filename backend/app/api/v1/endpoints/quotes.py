@@ -101,16 +101,26 @@ class QuoteCalculatePricingRequest(BaseModel):
     quote_id: str
 
 
-@router.get("/", response_model=List[QuoteResponse])
+class PaginatedQuoteResponse(BaseModel):
+    """Paginated quotes response"""
+    items: List[QuoteResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+@router.get("/", response_model=PaginatedQuoteResponse)
 async def list_quotes(
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     status: QuoteStatus | None = None,
     customer_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """List quotes for current tenant"""
+    """List quotes for current tenant with pagination"""
     try:
         query = db.query(Quote).filter_by(
             tenant_id=current_user.tenant_id,
@@ -123,10 +133,29 @@ async def list_quotes(
         if customer_id:
             query = query.filter_by(customer_id=customer_id)
         
+        # Apply search filter if provided
+        if search:
+            search_filter = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Quote.title.ilike(search_filter),
+                    Quote.quote_number.ilike(search_filter),
+                    Quote.project_title.ilike(search_filter)
+                )
+            )
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Apply pagination
         quotes = query.order_by(Quote.created_at.desc()).offset(skip).limit(limit).all()
         
+        # Calculate total pages
+        total_pages = (total + limit - 1) // limit if limit > 0 else 1
+        current_page = (skip // limit) + 1 if limit > 0 else 1
+        
         # Convert to response format
-        return [
+        items = [
             QuoteResponse(
                 id=quote.id,
                 customer_id=quote.customer_id,
@@ -138,6 +167,14 @@ async def list_quotes(
             )
             for quote in quotes
         ]
+        
+        return PaginatedQuoteResponse(
+            items=items,
+            total=total,
+            page=current_page,
+            page_size=limit,
+            total_pages=total_pages
+        )
     except Exception as e:
         import traceback
         traceback.print_exc()
