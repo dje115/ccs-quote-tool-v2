@@ -132,7 +132,9 @@ const CustomerDetail: React.FC = () => {
       setCustomer(customerRes.data);
       setContacts(contactsRes.data);
       setQuotes(quotesRes.data || []);
-      setTickets(ticketsRes.data?.tickets || ticketsRes.data || []);
+      // Handle tickets response - it can be {tickets: [...]} or just [...]
+      const ticketsData = ticketsRes.data?.tickets || ticketsRes.data || [];
+      setTickets(Array.isArray(ticketsData) ? ticketsData : []);
     } catch (error) {
       console.error('Error loading customer data:', error);
     } finally {
@@ -653,7 +655,7 @@ const CustomerDetail: React.FC = () => {
       <Paper sx={{ mb: 3 }}>
         {/* First Row of Tabs - Intelligence & Data */}
         <Tabs 
-          value={currentTab > 7 ? false : currentTab} 
+          value={currentTab >= 7 ? false : currentTab} 
           onChange={(e, newValue) => {
             setCurrentTab(newValue);
             localStorage.setItem('customerDetailTab', String(newValue));
@@ -685,9 +687,9 @@ const CustomerDetail: React.FC = () => {
         
         {/* Second Row of Tabs - Activity & Documents */}
         <Tabs
-          value={currentTab > 7 ? currentTab - 8 : false}
+          value={currentTab >= 7 ? currentTab - 7 : false}
           onChange={(e, newValue) => {
-            const tabIndex = newValue + 8;
+            const tabIndex = newValue + 7;
             setCurrentTab(tabIndex);
             localStorage.setItem('customerDetailTab', String(tabIndex));
           }}
