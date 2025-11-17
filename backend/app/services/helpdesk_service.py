@@ -32,7 +32,7 @@ class HelpdeskService:
         self.tenant_id = tenant_id
         self.ai_service = AIProviderService(db, tenant_id=tenant_id)
     
-    def create_ticket(
+    async def create_ticket(
         self,
         subject: str,
         description: str,
