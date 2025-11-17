@@ -69,6 +69,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI, helpdeskAPI } from '../services/api';
+import { useAbortController } from '../hooks/useAbortController';
 
 // Get API base URL (works in both React and Vite)
 const getApiBaseUrl = () => {
@@ -117,17 +118,38 @@ const CustomerDetail: React.FC = () => {
   const { subscribe, isConnected } = useWebSocketContext();
 
   // Define loadCustomerData using useCallback to avoid dependency issues
-  const loadCustomerData = useCallback(async () => {
+  const loadCustomerData = useCallback(async (signal?: AbortSignal) => {
     if (!id) return;
     
     try {
       setLoading(true);
+      
+      // Create axios cancel tokens for each request
+      const customerCancelToken = axios.CancelToken.source();
+      const contactsCancelToken = axios.CancelToken.source();
+      const quotesCancelToken = axios.CancelToken.source();
+      const ticketsCancelToken = axios.CancelToken.source();
+      
+      // Abort all requests if signal is aborted
+      if (signal?.aborted) {
+        customerCancelToken.cancel('Component unmounted');
+        contactsCancelToken.cancel('Component unmounted');
+        quotesCancelToken.cancel('Component unmounted');
+        ticketsCancelToken.cancel('Component unmounted');
+        return;
+      }
+      
       const [customerRes, contactsRes, quotesRes, ticketsRes] = await Promise.all([
-        customerAPI.get(id),
-        contactAPI.list(id),
-        quoteAPI.list({ customer_id: id }),
-        helpdeskAPI.getTickets({ customer_id: id })
+        customerAPI.get(id, { cancelToken: customerCancelToken.token }),
+        contactAPI.list(id, { cancelToken: contactsCancelToken.token }),
+        quoteAPI.list({ customer_id: id }, { cancelToken: quotesCancelToken.token }),
+        helpdeskAPI.getTickets({ customer_id: id }, { cancelToken: ticketsCancelToken.token })
       ]);
+
+      // Check if request was cancelled before updating state
+      if (signal?.aborted) {
+        return;
+      }
 
       setCustomer(customerRes.data);
       setContacts(contactsRes.data);
@@ -135,18 +157,31 @@ const CustomerDetail: React.FC = () => {
       // Handle tickets response - it can be {tickets: [...]} or just [...]
       const ticketsData = ticketsRes.data?.tickets || ticketsRes.data || [];
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
-    } catch (error) {
+    } catch (error: any) {
+      // Ignore cancellation errors
+      if (axios.isCancel(error) || error.name === 'CanceledError') {
+        return;
+      }
       console.error('Error loading customer data:', error);
     } finally {
-      setLoading(false);
+      // Only update loading state if not cancelled
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [id]);
 
   // Load customer data on mount or when id changes
   useEffect(() => {
-    if (id) {
-      loadCustomerData();
-    }
+    if (!id) return;
+    
+    const abortController = new AbortController();
+    loadCustomerData(abortController.signal);
+    
+    // Cleanup: abort requests when component unmounts or id changes
+    return () => {
+      abortController.abort();
+    };
   }, [id, loadCustomerData]);
   
   // Subscribe to WebSocket events
