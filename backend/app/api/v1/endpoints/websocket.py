@@ -23,7 +23,7 @@ async def authenticate_websocket(websocket: WebSocket, token: str) -> tuple[str,
         tuple: (tenant_id, user_id)
     
     Raises:
-        HTTPException: If authentication fails
+        Exception: If authentication fails (will be caught and connection closed)
     """
     db = SessionLocal()
     try:
@@ -36,33 +36,21 @@ async def authenticate_websocket(websocket: WebSocket, token: str) -> tuple[str,
         
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
-            )
+            raise ValueError("Invalid token: missing user ID")
         
         # Get user from database
         user = db.query(User).filter(User.id == user_id).first()
         if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
-            )
+            raise ValueError("User not found")
         
         if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Inactive user"
-            )
+            raise ValueError("Inactive user")
         
         # Return tenant_id and user_id
         return (user.tenant_id, user_id)
     
     except jwt.JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        raise ValueError("Invalid token: JWT decode error")
     finally:
         db.close()
 
@@ -101,24 +89,30 @@ async def websocket_endpoint(
                 auth_message = json.loads(auth_data)
                 if auth_message.get("type") == "auth":
                     token = auth_message.get("token")
+                    if not token:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token in auth message")
+                        return
                 else:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="First message must be auth message"
-                    )
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="First message must be auth message")
+                    return
             except asyncio.TimeoutError:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication timeout"
-                )
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication timeout")
+                return
             except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid auth message format"
-                )
+                await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid auth message format")
+                return
+        
+        if not token:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="No authentication token provided")
+            return
         
         # Authenticate connection
-        tenant_id, user_id = await authenticate_websocket(websocket, token)
+        try:
+            tenant_id, user_id = await authenticate_websocket(websocket, token)
+        except ValueError as e:
+            # Authentication failed - close connection with appropriate code
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+            return
         
         # Connect to WebSocket manager
         manager = get_websocket_manager()
@@ -160,14 +154,10 @@ async def websocket_endpoint(
             # Outer catch for disconnect
             pass
     
-    except HTTPException as e:
-        # Send error and close connection
+    except ValueError as e:
+        # Authentication error - already handled above, but catch here for safety
         try:
-            await websocket.send_json({
-                "type": "error",
-                "message": e.detail
-            })
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
         except:
             pass
     
