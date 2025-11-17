@@ -736,7 +736,7 @@ async def approve_quote(
             quote_id=quote.id,
             old_status="pending",
             new_status="accepted"
-        )
+        ))
         
         return {
             'success': True,
@@ -786,7 +786,7 @@ async def reject_quote(
             quote_id=quote.id,
             old_status="pending",
             new_status="rejected"
-        )
+        ))
         
         return {
             'success': True,
