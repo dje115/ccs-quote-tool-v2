@@ -85,6 +85,12 @@ export const authAPI = {
     }),
   getCurrentUser: () => apiClient.get('/auth/me'),
   refresh: (refreshToken: string) => apiClient.post('/auth/refresh', { refresh_token: refreshToken }),
+  logout: () => apiClient.post('/auth/logout'),
+};
+
+// AI Analysis API
+export const aiAnalysisAPI = {
+  getStatus: () => apiClient.get('/ai-analysis/status'),
 };
 
 // Tenant API
