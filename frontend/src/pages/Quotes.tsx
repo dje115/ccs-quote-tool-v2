@@ -29,10 +29,11 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { quoteAPI } from '../services/api';
+import { Quote, PaginatedQuoteResponse } from '../types';
 
 const Quotes: React.FC = () => {
   const navigate = useNavigate();
-  const [quotes, setQuotes] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
@@ -56,13 +57,14 @@ const Quotes: React.FC = () => {
       
       // Handle both old format (array) and new format (paginated response)
       if (Array.isArray(response.data)) {
-        setQuotes(response.data);
+        setQuotes(response.data as Quote[]);
         setTotal(response.data.length);
         setTotalPages(1);
       } else {
-        setQuotes(response.data.items || []);
-        setTotal(response.data.total || 0);
-        setTotalPages(response.data.total_pages || 1);
+        const paginatedData = response.data as PaginatedQuoteResponse;
+        setQuotes(paginatedData.items || []);
+        setTotal(paginatedData.total || 0);
+        setTotalPages(paginatedData.total_pages || 1);
       }
     } catch (error) {
       console.error('Error loading quotes:', error);
@@ -80,8 +82,8 @@ const Quotes: React.FC = () => {
     setPage(value);
   };
 
-  const handlePageSizeChange = (e: any) => {
-    setPageSize(e.target.value);
+  const handlePageSizeChange = (e: React.ChangeEvent<{ value: unknown }>) => {
+    setPageSize(e.target.value as number);
     setPage(1); // Reset to first page when changing page size
   };
 
