@@ -33,7 +33,11 @@ import {
   Tabs,
   Tab,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -101,6 +105,8 @@ const CustomerDetail: React.FC = () => {
   const [aiAnalysisDialogOpen, setAiAnalysisDialogOpen] = useState(false);
   const [updateFinancialData, setUpdateFinancialData] = useState(false);
   const [updateAddresses, setUpdateAddresses] = useState(false);
+  const [createTicketDialogOpen, setCreateTicketDialogOpen] = useState(false);
+  const [newTicket, setNewTicket] = useState({ subject: '', description: '', priority: 'medium' });
   const [currentTab, setCurrentTab] = useState(() => {
     // Restore tab from localStorage on component mount
     const savedTab = localStorage.getItem('customerDetailTab');
@@ -1958,32 +1964,148 @@ const CustomerDetail: React.FC = () => {
       {/* Tab Panel 8: Quotes */}
       {currentTab === 8 && (
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DescriptionIcon /> Quotes
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Create, manage, and track quotes for this customer.
-          </Typography>
-          
-          <Alert severity="info" sx={{ mb: 3 }}>
-            <Typography variant="body2">
-              Quote management system coming soon. Features will include:
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <DescriptionIcon /> Quotes
             </Typography>
-            <Box component="ul" sx={{ mt: 1, mb: 0 }}>
-              <li>AI-powered quote generation</li>
-              <li>Product/service catalog integration</li>
-              <li>Quote templates</li>
-              <li>Version control</li>
-              <li>Approval workflows</li>
-              <li>PDF generation and email delivery</li>
-              <li>Quote status tracking</li>
-              <li>Win/loss analysis</li>
-            </Box>
-          </Alert>
-
-          <Button variant="outlined" startIcon={<AddIcon />} disabled>
-            Create New Quote
-          </Button>
+            <Button 
+              variant="contained" 
+              startIcon={<AddIcon />}
+              onClick={() => navigate(`/quotes/new?customer_id=${id}`)}
+            >
+              Create New Quote
+            </Button>
+          </Box>
+          
+          {quotes.length === 0 ? (
+            <Alert severity="info">
+              No quotes found for this customer. Create a new quote to get started.
+            </Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell><strong>Quote #</strong></TableCell>
+                    <TableCell><strong>Title</strong></TableCell>
+                    <TableCell><strong>Status</strong></TableCell>
+                    <TableCell><strong>Total</strong></TableCell>
+                    <TableCell><strong>Created</strong></TableCell>
+                    <TableCell><strong>Actions</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {quotes.map((quote: any) => (
+                    <TableRow key={quote.id} hover>
+                      <TableCell>{quote.quote_number}</TableCell>
+                      <TableCell>{quote.title}</TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={quote.status} 
+                          size="small"
+                          color={
+                            quote.status === 'accepted' ? 'success' :
+                            quote.status === 'sent' ? 'info' :
+                            quote.status === 'draft' ? 'default' :
+                            quote.status === 'rejected' ? 'error' : 'default'
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>£{parseFloat(quote.total_amount || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell>{new Date(quote.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          onClick={() => navigate(`/quotes/${quote.id}`)}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      )}
+      
+      {/* Tab Panel 9: Tickets */}
+      {currentTab === 9 && (
+        <Paper sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SupportIcon /> Support Tickets
+            </Typography>
+            <Button 
+              variant="contained" 
+              startIcon={<AddIcon />}
+              onClick={() => setCreateTicketDialogOpen(true)}
+            >
+              Create New Ticket
+            </Button>
+          </Box>
+          
+          {tickets.length === 0 ? (
+            <Alert severity="info">
+              No tickets found for this customer. Create a new ticket to get started.
+            </Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell><strong>Ticket #</strong></TableCell>
+                    <TableCell><strong>Subject</strong></TableCell>
+                    <TableCell><strong>Status</strong></TableCell>
+                    <TableCell><strong>Priority</strong></TableCell>
+                    <TableCell><strong>Created</strong></TableCell>
+                    <TableCell><strong>Actions</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {tickets.map((ticket: any) => (
+                    <TableRow key={ticket.id} hover>
+                      <TableCell>{ticket.ticket_number}</TableCell>
+                      <TableCell>{ticket.subject}</TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={ticket.status} 
+                          size="small"
+                          color={
+                            ticket.status === 'open' ? 'error' :
+                            ticket.status === 'in_progress' ? 'warning' :
+                            ticket.status === 'resolved' ? 'success' :
+                            ticket.status === 'closed' ? 'default' : 'default'
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={ticket.priority} 
+                          size="small"
+                          color={
+                            ticket.priority === 'urgent' ? 'error' :
+                            ticket.priority === 'high' ? 'warning' :
+                            ticket.priority === 'medium' ? 'info' : 'default'
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>{new Date(ticket.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          onClick={() => navigate(`/helpdesk/${ticket.id}`)}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </Paper>
       )}
       {/* Contact Dialog */}
@@ -1994,6 +2116,74 @@ const CustomerDetail: React.FC = () => {
         contact={editingContact}
         customerId={id!}
       />
+      
+      {/* Create Ticket Dialog */}
+      <Dialog open={createTicketDialogOpen} onClose={() => setCreateTicketDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Create New Ticket</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <TextField
+              fullWidth
+              label="Subject"
+              value={newTicket.subject}
+              onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Description"
+              value={newTicket.description}
+              onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
+              margin="normal"
+              multiline
+              rows={6}
+              required
+              helperText="AI will improve this description and suggest next actions"
+            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Priority</InputLabel>
+              <Select
+                value={newTicket.priority}
+                label="Priority"
+                onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
+              >
+                <MenuItem value="low">Low</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="high">High</MenuItem>
+                <MenuItem value="urgent">Urgent</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateTicketDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={async () => {
+              try {
+                await helpdeskAPI.createTicket({
+                  subject: newTicket.subject,
+                  description: newTicket.description,
+                  priority: newTicket.priority,
+                  customer_id: id
+                });
+                setCreateTicketDialogOpen(false);
+                setNewTicket({ subject: '', description: '', priority: 'medium' });
+                await loadCustomerData();
+                setAiAnalysisSuccess('Ticket created successfully! AI is analyzing and improving the description.');
+                setTimeout(() => setAiAnalysisSuccess(null), 5000);
+              } catch (error: any) {
+                setAiAnalysisError(error.response?.data?.detail || 'Failed to create ticket');
+                setTimeout(() => setAiAnalysisError(null), 5000);
+              }
+            }}
+            variant="contained"
+            disabled={!newTicket.subject || !newTicket.description}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
