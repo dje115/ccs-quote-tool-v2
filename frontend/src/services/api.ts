@@ -266,8 +266,8 @@ export const helpdeskAPI = {
   getTicket: (id: string) => apiClient.get(`/helpdesk/tickets/${id}`),
   createTicket: (data: any) => apiClient.post('/helpdesk/tickets', data),
   updateTicket: (id: string, data: any) => apiClient.put(`/helpdesk/tickets/${id}`, data),
-  addComment: (id: string, comment: string, isInternal: boolean = false) => 
-    apiClient.post(`/helpdesk/tickets/${id}/comments`, { comment, is_internal: isInternal }),
+  addComment: (ticketId: string, data: { comment: string; is_internal?: boolean }) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/comments`, data),
   updateStatus: (id: string, status: string) => 
     apiClient.patch(`/helpdesk/tickets/${id}/status`, { status }),
   assignTicket: (id: string, userId: string) => 

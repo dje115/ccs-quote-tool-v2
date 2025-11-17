@@ -37,6 +37,7 @@ import Settings from './pages/Settings';
 import Suppliers from './pages/Suppliers';
 import PromptManagement from './pages/PromptManagement';
 import Helpdesk from './pages/Helpdesk';
+import TicketDetail from './pages/TicketDetail';
 
 const theme = createTheme({
   palette: {
@@ -246,6 +247,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Helpdesk />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/:id"
+            element={
+              <ProtectedRoute>
+                <TicketDetail />
               </ProtectedRoute>
             }
           />
