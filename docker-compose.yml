@@ -132,6 +132,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=ccs_super_secret_key_2025_change_in_production
       - DEFAULT_TENANT=ccs
+      - SUPER_ADMIN_EMAIL=admin@ccs.com
+      - SUPER_ADMIN_PASSWORD=admin123
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
@@ -165,6 +167,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=ccs_super_secret_key_2025_change_in_production
       - DEFAULT_TENANT=ccs
+      - SUPER_ADMIN_EMAIL=admin@ccs.com
+      - SUPER_ADMIN_PASSWORD=admin123
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
