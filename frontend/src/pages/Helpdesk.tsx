@@ -36,7 +36,7 @@ import {
   Visibility as ViewIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { helpdeskAPI } from '../services/api';
+import { helpdeskAPI, customerAPI } from '../services/api';
 
 interface Ticket {
   id: string;
@@ -66,11 +66,14 @@ const Helpdesk: React.FC = () => {
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [newTicket, setNewTicket] = useState({
     subject: '',
     description: '',
     priority: 'medium',
-    category: ''
+    category: '',
+    customer_id: ''
   });
   const [stats, setStats] = useState({
     total: 0,
@@ -84,6 +87,24 @@ const Helpdesk: React.FC = () => {
     loadTickets();
     loadStats();
   }, [filterStatus, filterPriority]);
+
+  useEffect(() => {
+    if (createDialogOpen) {
+      loadCustomers();
+    }
+  }, [createDialogOpen]);
+
+  const loadCustomers = async () => {
+    try {
+      setLoadingCustomers(true);
+      const response = await customerAPI.list();
+      setCustomers(response.data || []);
+    } catch (err) {
+      console.error('Error loading customers:', err);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
 
   const loadTickets = async () => {
     try {
@@ -135,11 +156,12 @@ const Helpdesk: React.FC = () => {
         subject: newTicket.subject,
         description: newTicket.description,
         priority: newTicket.priority,
-        category: newTicket.category || undefined
+        category: newTicket.category || undefined,
+        customer_id: newTicket.customer_id || undefined
       });
       
       setCreateDialogOpen(false);
-      setNewTicket({ subject: '', description: '', priority: 'medium', category: '' });
+      setNewTicket({ subject: '', description: '', priority: 'medium', category: '', customer_id: '' });
       loadTickets();
       loadStats();
     } catch (err: any) {
@@ -415,6 +437,24 @@ const Helpdesk: React.FC = () => {
                 <MenuItem value="medium">Medium</MenuItem>
                 <MenuItem value="high">High</MenuItem>
                 <MenuItem value="urgent">Urgent</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Customer (Optional)</InputLabel>
+              <Select
+                value={newTicket.customer_id}
+                label="Customer (Optional)"
+                onChange={(e) => setNewTicket({ ...newTicket, customer_id: e.target.value })}
+                disabled={loadingCustomers}
+              >
+                <MenuItem value="">
+                  <em>Select a customer...</em>
+                </MenuItem>
+                {customers.map((customer) => (
+                  <MenuItem key={customer.id} value={customer.id}>
+                    {customer.company_name} {customer.status ? `(${customer.status})` : ''}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
             <FormControl fullWidth margin="normal">
