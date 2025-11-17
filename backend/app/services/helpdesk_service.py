@@ -126,7 +126,7 @@ class HelpdeskService:
         
         return ticket
     
-    def add_comment(
+    async def add_comment(
         self,
         ticket_id: str,
         comment: str,
@@ -137,7 +137,7 @@ class HelpdeskService:
         status_change: Optional[str] = None
     ) -> TicketComment:
         """
-        Add a comment to a ticket
+        Add a comment to a ticket and trigger AI analysis
         
         Args:
             ticket_id: Ticket ID
@@ -192,6 +192,13 @@ class HelpdeskService:
         
         self.db.commit()
         self.db.refresh(comment_obj)
+        
+        # Trigger AI analysis with full ticket history after comment is added
+        try:
+            await self._analyze_ticket_with_full_history(ticket)
+        except Exception as e:
+            logger.warning(f"AI analysis failed after adding comment to ticket {ticket.ticket_number}: {str(e)}")
+            # Continue even if AI analysis fails
         
         return comment_obj
     
@@ -567,7 +574,7 @@ class HelpdeskService:
         customer_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Analyze ticket with AI to improve description and suggest actions
+        Analyze ticket with AI to improve description and suggest actions (initial creation)
         
         Returns:
             Dictionary with improved_description and suggestions
@@ -615,7 +622,8 @@ Provide your response in JSON format:
                 variables={
                     "ticket_subject": subject,
                     "ticket_description": description,
-                    "customer_context": customer_context
+                    "customer_context": customer_context,
+                    "ticket_history": ""  # No history on initial creation
                 },
                 fallback_prompt=prompt,
                 model_preference=None,
@@ -661,4 +669,150 @@ Provide your response in JSON format:
         except Exception as e:
             logger.error(f"Error in AI ticket analysis: {str(e)}")
             return None
+    
+    async def _analyze_ticket_with_full_history(
+        self,
+        ticket: Ticket
+    ) -> None:
+        """
+        Analyze ticket with full history (comments, status changes) and update AI suggestions
+        
+        This runs after comments are added to provide updated next actions/solutions
+        based on the complete ticket context.
+        """
+        try:
+            # Get all comments (excluding system comments)
+            comments = self.db.query(TicketComment).filter(
+                TicketComment.ticket_id == ticket.id,
+                TicketComment.is_system == False
+            ).order_by(TicketComment.created_at).all()
+            
+            # Get all history entries
+            history = self.db.query(TicketHistory).filter(
+                TicketHistory.ticket_id == ticket.id
+            ).order_by(TicketHistory.created_at).all()
+            
+            # Build ticket history context
+            ticket_history = ""
+            if comments or history:
+                ticket_history = "\n\n=== TICKET HISTORY ===\n"
+                
+                # Add status changes
+                if history:
+                    ticket_history += "\nStatus Changes:\n"
+                    for hist in history:
+                        if hist.field_name == "status":
+                            ticket_history += f"- {hist.created_at.strftime('%Y-%m-%d %H:%M')}: Changed from {hist.old_value or 'N/A'} to {hist.new_value}\n"
+                
+                # Add comments
+                if comments:
+                    ticket_history += "\nComments:\n"
+                    for comment in comments:
+                        author = comment.author_name or comment.author_email or (f"User {comment.author_id}" if comment.author_id else "System")
+                        internal_note = " [INTERNAL]" if comment.is_internal else ""
+                        ticket_history += f"- {comment.created_at.strftime('%Y-%m-%d %H:%M')} by {author}{internal_note}: {comment.comment[:200]}\n"
+            
+            # Get customer context if available
+            customer_context = ""
+            if ticket.customer_id:
+                customer = self.db.query(Customer).filter(
+                    Customer.id == ticket.customer_id,
+                    Customer.tenant_id == self.tenant_id
+                ).first()
+                if customer:
+                    customer_context = f"\n\nCustomer: {customer.company_name}"
+                    if customer.business_sector:
+                        customer_context += f"\nBusiness Sector: {customer.business_sector.value}"
+                    if customer.description:
+                        customer_context += f"\nCustomer Description: {customer.description[:200]}"
+            
+            # Build enhanced prompt with history
+            prompt = f"""You are a customer service assistant. Analyze this support ticket with its complete history and:
+
+1. Review the improved description (keep it updated if new information changes the context)
+2. Based on ALL ticket history (comments, status changes), suggest NEXT ACTIONS that should be taken NOW
+3. Suggest QUESTIONS that should be asked to gather more information or clarify the situation
+4. Suggest SOLUTIONS based on the complete ticket history - if enough information is available, provide specific solutions
+
+Original Ticket:
+Subject: {ticket.subject}
+Original Description: {ticket.original_description or ticket.description}
+Current Status: {ticket.status.value}
+Priority: {ticket.priority.value}
+{customer_context}
+{ticket_history}
+
+IMPORTANT:
+- Analyze the COMPLETE ticket history to understand what has been tried, what information has been gathered, and what the current state is
+- Provide NEXT ACTIONS based on what needs to happen next given the current state
+- If solutions have been attempted (mentioned in comments), suggest alternative solutions
+- If the ticket is progressing well, suggest next steps to resolution
+- If information is missing, suggest questions to gather it
+- Base your suggestions on the FULL context, not just the initial description
+
+Provide your response in JSON format:
+{{
+    "improved_description": "The improved description (update if history changes context)",
+    "suggestions": {{
+        "next_actions": [
+            "Specific next action 1 based on ticket history",
+            "Specific next action 2 based on current state"
+        ],
+        "questions": [
+            "Question 1 to gather missing information or clarify",
+            "Question 2 based on what's been discussed"
+        ],
+        "solutions": [
+            "Solution 1 if enough info is available from history",
+            "Solution 2 if applicable based on what's been tried"
+        ]
+    }}
+}}"""
+
+            # Use database-driven AI prompt if available, otherwise use fallback
+            result = await self.ai_service.generate_with_rendered_prompts(
+                category=PromptCategory.CUSTOMER_SERVICE,
+                variables={
+                    "ticket_subject": ticket.subject,
+                    "ticket_description": ticket.original_description or ticket.description,
+                    "customer_context": customer_context,
+                    "ticket_history": ticket_history
+                },
+                fallback_prompt=prompt,
+                model_preference=None,
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            if result and result.get("content"):
+                import json
+                try:
+                    # Try to parse JSON response
+                    content = result["content"].strip()
+                    # Remove markdown code blocks if present
+                    if content.startswith("```"):
+                        content = content.split("```")[1]
+                        if content.startswith("json"):
+                            content = content[4:]
+                    content = content.strip()
+                    
+                    analysis = json.loads(content)
+                    
+                    # Update ticket with new AI analysis
+                    if analysis.get("improved_description"):
+                        ticket.improved_description = analysis.get("improved_description")
+                    ticket.ai_suggestions = analysis.get("suggestions", {})
+                    ticket.ai_analysis_date = datetime.now(timezone.utc)
+                    
+                    self.db.commit()
+                    logger.info(f"Updated AI analysis for ticket {ticket.ticket_number}")
+                    
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse AI response for ticket {ticket.ticket_number}: {str(e)}")
+                    # Don't update if parsing fails
+            
+        except Exception as e:
+            logger.error(f"Error in AI ticket analysis with history: {str(e)}")
+            import traceback
+            traceback.print_exc()
 

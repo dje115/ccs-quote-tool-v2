@@ -120,7 +120,7 @@ async def create_customer_ticket(
         )
         
         # Add initial comment from customer
-        service.add_comment(
+        await service.add_comment(
             ticket_id=ticket.id,
             comment=ticket_data.description,
             author_name=ticket_data.contact_name,
@@ -292,10 +292,10 @@ async def add_comment(
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Add a comment to a ticket"""
+    """Add a comment to a ticket and trigger AI analysis"""
     try:
         service = HelpdeskService(db, current_user.tenant_id)
-        comment = service.add_comment(
+        comment = await service.add_comment(
             ticket_id=ticket_id,
             comment=comment_data.comment,
             author_id=current_user.id,
