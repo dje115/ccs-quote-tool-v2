@@ -240,10 +240,10 @@ All critical bugs have been fixed:
 - **Phase 2**: ⏳ 80% Complete (4/5 items)
 - **Phase 3**: ⏳ 30% Complete (0.3/4 items)
 - **Phase 4**: ✅ 80% Complete (3.2/4 items)
-- **Phase 5**: ⏳ 5% Complete (0.2/4 items)
-- **Phase 6**: ⏳ 0% Complete (0/5 items)
+- **Phase 5**: ⏳ 50% Complete (2/4 items)
+- **Phase 6**: ⏳ 20% Complete (1/5 items)
 
-### Total Progress: ~52% Complete
+### Total Progress: ~65% Complete
 
 ---
 
