@@ -272,6 +272,7 @@ export const helpdeskAPI = {
     apiClient.patch(`/helpdesk/tickets/${id}/status`, { status }),
   assignTicket: (id: string, userId: string) => 
     apiClient.post(`/helpdesk/tickets/${id}/assign`, { user_id: userId }),
+  analyzeTicket: (id: string) => apiClient.post(`/helpdesk/tickets/${id}/analyze`),
   getTicketStats: () => apiClient.get('/helpdesk/tickets/stats'),
   searchKnowledgeBase: (query: string, category?: string) => 
     apiClient.get('/helpdesk/knowledge-base/search', { params: { query, category } }),

@@ -312,6 +312,49 @@ async def add_comment(
         )
 
 
+@router.post("/tickets/{ticket_id}/analyze")
+async def analyze_ticket(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """Manually trigger AI analysis for a ticket"""
+    try:
+        from app.models.helpdesk import Ticket
+        ticket = db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_user.tenant_id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        service = HelpdeskService(db, current_user.tenant_id)
+        await service._analyze_ticket_with_full_history(ticket)
+        
+        # Reload ticket to get updated AI analysis
+        db.refresh(ticket)
+        
+        return {
+            "success": True,
+            "message": "AI analysis completed successfully",
+            "ticket": {
+                "id": ticket.id,
+                "ai_suggestions": ticket.ai_suggestions,
+                "improved_description": ticket.improved_description,
+                "ai_analysis_date": ticket.ai_analysis_date.isoformat() if ticket.ai_analysis_date else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing ticket: {str(e)}"
+        )
+
+
 @router.post("/tickets/{ticket_id}/assign")
 async def assign_ticket(
     ticket_id: str,
