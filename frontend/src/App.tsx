@@ -1,43 +1,58 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { CircularProgress, Box } from '@mui/material';
 
 // Initialize i18n
 import './i18n';
 
-// Components
+// Components (keep as regular imports - needed immediately)
 import Layout from './components/Layout';
 import GlobalAIMonitor from './components/GlobalAIMonitor';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 
-// Pages
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import Customers from './pages/Customers';
-import Competitors from './pages/Competitors';
-import CustomerDetail from './pages/CustomerDetail';
-import CustomerEdit from './pages/CustomerEdit';
-import CustomerNew from './pages/CustomerNew';
-import CustomerAnalysis from './pages/CustomerAnalysis';
-import Leads from './pages/Leads';
-import LeadDetail from './pages/LeadDetail';
-import Campaigns from './pages/Campaigns';
-import PlanningApplications from './pages/PlanningApplications';
-import CampaignCreate from './pages/CampaignCreate';
-import DynamicBusinessSearch from './pages/DynamicBusinessSearch';
-import CompanyListImportCampaign from './pages/CompanyListImportCampaign';
-import CampaignDetail from './pages/CampaignDetail';
-import Quotes from './pages/Quotes';
-import QuoteNew from './pages/QuoteNew';
-import QuoteDetail from './pages/QuoteDetail';
-import Users from './pages/Users';
-import Settings from './pages/Settings';
-import Suppliers from './pages/Suppliers';
-import PromptManagement from './pages/PromptManagement';
-import Helpdesk from './pages/Helpdesk';
-import TicketDetail from './pages/TicketDetail';
+// Pages - Lazy load for code splitting (reduces initial bundle size)
+const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Competitors = lazy(() => import('./pages/Competitors'));
+const CustomerDetail = lazy(() => import('./pages/CustomerDetail'));
+const CustomerEdit = lazy(() => import('./pages/CustomerEdit'));
+const CustomerNew = lazy(() => import('./pages/CustomerNew'));
+const CustomerAnalysis = lazy(() => import('./pages/CustomerAnalysis'));
+const Leads = lazy(() => import('./pages/Leads'));
+const LeadDetail = lazy(() => import('./pages/LeadDetail'));
+const Campaigns = lazy(() => import('./pages/Campaigns'));
+const PlanningApplications = lazy(() => import('./pages/PlanningApplications'));
+const CampaignCreate = lazy(() => import('./pages/CampaignCreate'));
+const DynamicBusinessSearch = lazy(() => import('./pages/DynamicBusinessSearch'));
+const CompanyListImportCampaign = lazy(() => import('./pages/CompanyListImportCampaign'));
+const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
+const Quotes = lazy(() => import('./pages/Quotes'));
+const QuoteNew = lazy(() => import('./pages/QuoteNew'));
+const QuoteDetail = lazy(() => import('./pages/QuoteDetail'));
+const Users = lazy(() => import('./pages/Users'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Suppliers = lazy(() => import('./pages/Suppliers'));
+const PromptManagement = lazy(() => import('./pages/PromptManagement'));
+const Helpdesk = lazy(() => import('./pages/Helpdesk'));
+const TicketDetail = lazy(() => import('./pages/TicketDetail'));
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <Box
+    sx={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+    }}
+  >
+    <CircularProgress />
+  </Box>
+);
 
 const theme = createTheme({
   palette: {
