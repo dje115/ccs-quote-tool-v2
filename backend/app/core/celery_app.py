@@ -18,7 +18,8 @@ celery_app = Celery(
         "app.tasks.campaign_monitor_tasks",
         "app.tasks.planning_tasks",
         "app.tasks.contract_renewal_tasks",
-        "app.tasks.sla_tasks"
+        "app.tasks.sla_tasks",
+        "app.tasks.quote_tasks"
     ]  # Import task modules
 )
 
