@@ -5,6 +5,7 @@ All long-running quote operations should be executed as Celery tasks
 """
 import asyncio
 import json
+import logging
 from typing import Dict, Any, Optional, List
 from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
@@ -12,6 +13,8 @@ from app.core.api_keys import get_api_keys
 from app.models.quotes import Quote
 from app.models.tenant import Tenant
 from app.services.quote_analysis_service import QuoteAnalysisService
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name='analyze_quote_requirements', bind=True)
