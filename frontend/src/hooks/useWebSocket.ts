@@ -50,21 +50,37 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
     // Get WebSocket URL from environment or construct from API URL
     // SECURITY: Token will be sent as first message, not in URL (prevents logging/caching)
-    let wsBaseUrl = '';
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_WS_URL) {
-      // Use dedicated WebSocket URL if configured
-      wsBaseUrl = import.meta.env.VITE_WS_URL;
-    } else if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
-      // Construct from API URL
-      wsBaseUrl = import.meta.env.VITE_API_URL.replace(/^http/, 'ws');
-    } else if (typeof window !== 'undefined') {
-      // Fallback: construct from current origin
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host.replace(':3000', ':8000');
-      wsBaseUrl = `${protocol}//${host}`;
-    } else {
-      wsBaseUrl = 'ws://localhost:8000';
-    }
+    // Use same base URL logic as api.ts for consistency
+    const getWebSocketUrl = (): string => {
+      // 1. Check for dedicated WebSocket URL environment variable
+      if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_WS_URL) {
+        return import.meta.env.VITE_WS_URL;
+      }
+      
+      // 2. Construct from API URL (same source as api.ts)
+      const API_BASE_URL = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
+        ? import.meta.env.VITE_API_URL
+        : 'http://localhost:8000';
+      
+      // Convert HTTP/HTTPS to WS/WSS properly
+      if (API_BASE_URL.startsWith('https://')) {
+        return API_BASE_URL.replace(/^https/, 'wss');
+      } else if (API_BASE_URL.startsWith('http://')) {
+        return API_BASE_URL.replace(/^http/, 'ws');
+      }
+      
+      // 3. Fallback: construct from current window location
+      if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host.replace(':3000', ':8000');
+        return `${protocol}//${host}`;
+      }
+      
+      // 4. Final fallback
+      return 'ws://localhost:8000';
+    };
+    
+    const wsBaseUrl = getWebSocketUrl();
     const wsUrl = `${wsBaseUrl}/api/v1/ws`;
 
     try {
