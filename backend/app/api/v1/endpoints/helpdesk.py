@@ -65,7 +65,7 @@ async def create_ticket(
     """Create a new support ticket"""
     try:
         service = HelpdeskService(db, current_user.tenant_id)
-        ticket = service.create_ticket(
+        ticket = await service.create_ticket(
             subject=ticket_data.subject,
             description=ticket_data.description,
             customer_id=ticket_data.customer_id,
@@ -110,7 +110,7 @@ async def create_customer_ticket(
         
         customer_id = customer.id if customer else None
         
-        ticket = service.create_ticket(
+        ticket = await service.create_ticket(
             subject=ticket_data.subject,
             description=ticket_data.description,
             customer_id=customer_id,

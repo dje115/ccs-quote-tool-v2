@@ -339,7 +339,7 @@ async def create_ticket(
         
         from app.models.helpdesk import TicketType
         
-        ticket = service.create_ticket(
+        ticket = await service.create_ticket(
             subject=subject,
             description=description,
             customer_id=customer.id,

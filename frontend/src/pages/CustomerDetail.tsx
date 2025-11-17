@@ -60,10 +60,11 @@ import {
   TrendingDown as TrendingDownIcon,
   Info as InfoIcon,
   Lightbulb as LightbulbIcon,
-  AutoAwesome as SparkleIcon
+  AutoAwesome as SparkleIcon,
+  Support as SupportIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { customerAPI, contactAPI, quoteAPI } from '../services/api';
+import { customerAPI, contactAPI, quoteAPI, helpdeskAPI } from '../services/api';
 
 // Get API base URL (works in both React and Vite)
 const getApiBaseUrl = () => {
@@ -90,6 +91,7 @@ const CustomerDetail: React.FC = () => {
   const [customer, setCustomer] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<any>(null);
