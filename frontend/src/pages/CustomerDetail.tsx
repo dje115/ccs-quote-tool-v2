@@ -116,15 +116,17 @@ const CustomerDetail: React.FC = () => {
     
     try {
       setLoading(true);
-      const [customerRes, contactsRes, quotesRes] = await Promise.all([
+      const [customerRes, contactsRes, quotesRes, ticketsRes] = await Promise.all([
         customerAPI.get(id),
         contactAPI.list(id),
-        quoteAPI.list({ customer_id: id })
+        quoteAPI.list({ customer_id: id }),
+        helpdeskAPI.getTickets({ customer_id: id })
       ]);
 
       setCustomer(customerRes.data);
       setContacts(contactsRes.data);
-      setQuotes(quotesRes.data);
+      setQuotes(quotesRes.data || []);
+      setTickets(ticketsRes.data?.tickets || ticketsRes.data || []);
     } catch (error) {
       console.error('Error loading customer data:', error);
     } finally {
@@ -645,7 +647,7 @@ const CustomerDetail: React.FC = () => {
       <Paper sx={{ mb: 3 }}>
         {/* First Row of Tabs - Intelligence & Data */}
         <Tabs 
-          value={currentTab > 6 ? false : currentTab} 
+          value={currentTab > 7 ? false : currentTab} 
           onChange={(e, newValue) => {
             setCurrentTab(newValue);
             localStorage.setItem('customerDetailTab', String(newValue));
@@ -677,9 +679,9 @@ const CustomerDetail: React.FC = () => {
         
         {/* Second Row of Tabs - Activity & Documents */}
         <Tabs
-          value={currentTab > 6 ? currentTab - 7 : false}
+          value={currentTab > 7 ? currentTab - 8 : false}
           onChange={(e, newValue) => {
-            const tabIndex = newValue + 7;
+            const tabIndex = newValue + 8;
             setCurrentTab(tabIndex);
             localStorage.setItem('customerDetailTab', String(tabIndex));
           }}
@@ -703,6 +705,7 @@ const CustomerDetail: React.FC = () => {
         >
           <Tab icon={<PhoneIcon />} iconPosition="start" label="Activity" />
           <Tab icon={<DescriptionIcon />} iconPosition="start" label="Quotes" />
+          <Tab icon={<SupportIcon />} iconPosition="start" label="Tickets" />
         </Tabs>
       </Paper>
       {/* Tab Panel 0: Overview - World-Class AI-Powered CRM */}
