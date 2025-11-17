@@ -384,16 +384,23 @@ async def delete_quote(
     return None
 
 
-@router.post("/analyze")
+@router.post("/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze_quote_requirements(
     request: QuoteAnalyzeRequest,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Analyze quote requirements using AI (can analyze before or after quote creation)"""
+    """
+    Analyze quote requirements using AI (queued as background task)
+    
+    Returns 202 Accepted with task ID. Analysis runs in background via Celery.
+    Results will be available via WebSocket events or by polling the quote.
+    """
     try:
-        # Get API keys
+        from app.core.celery_app import celery_app
+        
+        # Get API keys to validate configuration
         api_keys = get_api_keys(db, current_tenant)
         if not api_keys.openai:
             raise HTTPException(
@@ -443,57 +450,33 @@ async def analyze_quote_requirements(
                 'special_requirements': request.special_requirements,
                 'quote_type': request.quote_type
             }
-            quote = None
         
-        # Analyze requirements
-        analysis_service = QuoteAnalysisService(
-            db=db,
-            tenant_id=current_user.tenant_id,
-            openai_api_key=api_keys.openai
+        # Queue analysis task to Celery
+        task = celery_app.send_task(
+            'analyze_quote_requirements',
+            args=[
+                request.quote_id,
+                str(current_user.tenant_id),
+                quote_data,
+                request.clarification_answers,
+                request.questions_only
+            ]
         )
         
-        result = await analysis_service.analyze_requirements(
-            quote_data=quote_data,
-            clarification_answers=request.clarification_answers,
-            questions_only=request.questions_only
-        )
-        
-        if not result.get('success'):
-            raise HTTPException(
-                status_code=500,
-                detail=result.get('error', 'Analysis failed')
-            )
-        
-        # Update quote with analysis results (if not questions_only and quote exists)
-        if quote and not request.questions_only and result.get('analysis'):
-            analysis = result['analysis']
-            quote.ai_analysis = analysis
-            quote.recommended_products = analysis.get('recommended_products')
-            quote.labour_breakdown = analysis.get('labour_breakdown')
-            quote.estimated_time = analysis.get('estimated_time')
-            quote.estimated_cost = analysis.get('estimated_cost')
-            quote.quotation_details = analysis.get('quotation')
-            
-            # Update travel costs if provided
-            if 'travel_distance_km' in analysis:
-                quote.travel_distance_km = analysis.get('travel_distance_km')
-                quote.travel_time_minutes = analysis.get('travel_time_minutes')
-                quote.travel_cost = analysis.get('travel_cost')
-            
-            if result.get('raw_response'):
-                quote.ai_raw_response = result['raw_response']
-            
-            db.commit()
-        
-        return result
+        return {
+            'success': True,
+            'message': 'Quote analysis queued',
+            'task_id': task.id,
+            'status': 'queued',
+            'quote_id': request.quote_id
+        }
     
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Error analyzing quote: {str(e)}"
+            detail=f"Error queueing quote analysis: {str(e)}"
         )
 
 
@@ -617,16 +600,22 @@ async def duplicate_quote(
         )
 
 
-@router.post("/{quote_id}/clarifications")
+@router.post("/{quote_id}/clarifications", status_code=status.HTTP_202_ACCEPTED)
 async def submit_clarifications(
     quote_id: str,
     clarification_answers: List[Dict[str, str]],
     current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Submit clarification answers and re-analyze quote"""
+    """
+    Submit clarification answers and re-analyze quote (queued as background task)
+    
+    Returns 202 Accepted with task ID. Analysis runs in background via Celery.
+    """
     try:
         import json
+        from app.core.celery_app import celery_app
         
         quote = db.query(Quote).filter(
             Quote.id == quote_id,
@@ -636,7 +625,7 @@ async def submit_clarifications(
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
-        # Store clarification answers
+        # Store clarification answers immediately
         clarifications_log = []
         if quote.clarifications_log:
             if isinstance(quote.clarifications_log, str):
@@ -646,8 +635,17 @@ async def submit_clarifications(
         
         clarifications_log.extend(clarification_answers)
         quote.clarifications_log = json.dumps(clarifications_log)
+        db.commit()
         
-        # Re-analyze with clarification answers
+        # Get API keys to validate configuration
+        api_keys = get_api_keys(db, current_tenant)
+        if not api_keys.openai:
+            raise HTTPException(
+                status_code=400,
+                detail="OpenAI API key not configured"
+            )
+        
+        # Build quote data for analysis
         quote_data = {
             'project_title': quote.project_title or quote.title,
             'project_description': quote.project_description or quote.description,
@@ -660,41 +658,28 @@ async def submit_clarifications(
             'wifi_requirements': quote.wifi_requirements or False,
             'cctv_requirements': quote.cctv_requirements or False,
             'door_entry_requirements': quote.door_entry_requirements or False,
-            'special_requirements': quote.special_requirements
+            'special_requirements': quote.special_requirements,
+            'quote_type': quote.quote_type
         }
         
-        api_keys = get_api_keys(db, current_user.tenant)
-        analysis_service = QuoteAnalysisService(
-            db=db,
-            tenant_id=current_user.tenant_id,
-            openai_api_key=api_keys.openai
+        # Queue re-analysis task to Celery
+        task = celery_app.send_task(
+            'analyze_quote_requirements',
+            args=[
+                quote_id,
+                str(current_user.tenant_id),
+                quote_data,
+                clarification_answers,
+                False  # questions_only
+            ]
         )
-        
-        result = await analysis_service.analyze_requirements(
-            quote_data=quote_data,
-            clarification_answers=clarification_answers,
-            questions_only=False
-        )
-        
-        if result.get('success') and result.get('analysis'):
-            analysis = result['analysis']
-            quote.ai_analysis = analysis
-            quote.recommended_products = json.dumps(analysis.get('recommended_products', []))
-            quote.labour_breakdown = json.dumps(analysis.get('labour_breakdown', []))
-            quote.estimated_time = analysis.get('estimated_time')
-            quote.estimated_cost = analysis.get('estimated_cost')
-            quote.quotation_details = json.dumps(analysis.get('quotation', {}))
-            
-            if result.get('raw_response'):
-                quote.ai_raw_response = result['raw_response']
-        
-        db.commit()
-        db.refresh(quote)
         
         return {
             'success': True,
-            'quote': quote,
-            'analysis': result.get('analysis')
+            'message': 'Clarifications submitted and analysis queued',
+            'task_id': task.id,
+            'status': 'queued',
+            'quote_id': quote_id
         }
     
     except HTTPException:
