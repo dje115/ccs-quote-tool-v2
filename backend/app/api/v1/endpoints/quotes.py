@@ -191,23 +191,17 @@ async def create_quote(
         db.commit()
         db.refresh(quote)
         
-        # Optionally trigger AI analysis if requested
+        # Optionally trigger AI analysis if requested (queued as background task)
         if quote_data.auto_analyze:
             try:
                 from app.core.api_keys import get_api_keys
-                from app.services.quote_analysis_service import QuoteAnalysisService
+                from app.core.celery_app import celery_app
                 from app.models.tenant import Tenant
                 
                 tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
                 if tenant:
                     api_keys = get_api_keys(db, tenant)
                     if api_keys.openai:
-                        analysis_service = QuoteAnalysisService(
-                            db=db,
-                            tenant_id=current_user.tenant_id,
-                            openai_api_key=api_keys.openai
-                        )
-                        
                         quote_data_dict = {
                             'project_title': quote.project_title or quote.title,
                             'project_description': quote.project_description or quote.description,
@@ -224,12 +218,21 @@ async def create_quote(
                             'quote_type': quote.quote_type
                         }
                         
-                        # Run analysis in background (don't wait for it)
-                        import asyncio
-                        asyncio.create_task(analysis_service.analyze_requirements(quote_data_dict))
+                        # Queue analysis task to Celery (non-blocking)
+                        celery_app.send_task(
+                            'analyze_quote_requirements',
+                            args=[
+                                quote.id,
+                                str(current_user.tenant_id),
+                                quote_data_dict,
+                                None,  # clarification_answers
+                                False  # questions_only
+                            ]
+                        )
+                        print(f"[QUOTE CREATION] Queued auto-analysis task for quote {quote.id}")
             except Exception as e:
                 # Don't fail quote creation if analysis fails
-                print(f"[QUOTE CREATION] Error triggering auto-analysis: {e}")
+                print(f"[QUOTE CREATION] Error queueing auto-analysis: {e}")
         
         # Publish quote.created event (async, non-blocking)
         from app.core.events import get_event_publisher
