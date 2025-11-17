@@ -17,7 +17,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [version, setVersion] = useState<string>('2.24.0');
+  const [version, setVersion] = useState<string>('2.25.0');
   const navigate = useNavigate();
 
   useEffect(() => {
