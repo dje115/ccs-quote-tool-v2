@@ -569,7 +569,71 @@ If details are missing, state the assumption you are making inside the quotation
     else:
         print("⏭️  quote_analysis prompt already exists")
     
-    # 8. Product Search Prompt (from v1)
+    # 8. Pricing Analysis Prompt (for dynamic pricing engine)
+    pricing_analysis_prompt = """Analyze pricing for the following product and provide optimal pricing recommendations.
+
+Product Name: {product_name}
+Base/Cost Price: £{base_price}
+Competitor Prices:
+{competitor_prices}
+
+Price Trends:
+{price_trends}
+
+Market Context:
+{market_context}
+
+Your task:
+1. Analyze the competitive landscape
+2. Consider price trends (increasing/decreasing/stable)
+3. Recommend an optimal price that balances competitiveness and profitability
+4. Provide reasoning for your recommendation
+
+Response format (JSON):
+{{
+    "suggested_price": <number>,
+    "reasoning": "<explanation>",
+    "confidence": <0.0-1.0>,
+    "market_position": "<below_market|at_market|above_market>",
+    "recommendations": [
+        "<specific recommendation 1>",
+        "<specific recommendation 2>"
+    ]
+}}"""
+    
+    pricing_analysis_system = """You are a pricing analyst expert. You analyze market conditions, competitor pricing, and price trends to recommend optimal pricing strategies that balance competitiveness with profitability."""
+    
+    existing_pricing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.PRICING_ANALYSIS.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing_pricing:
+        service.create_prompt(
+            name="Pricing Analysis - Optimal Price Recommendation",
+            category=PromptCategory.PRICING_ANALYSIS.value,
+            system_prompt=pricing_analysis_system,
+            user_prompt_template=pricing_analysis_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=2000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "product_name": "Product name to analyze",
+                "base_price": "Base or cost price",
+                "competitor_prices": "JSON array of competitor prices",
+                "price_trends": "JSON object with price trend data",
+                "market_context": "JSON object with market analysis context"
+            },
+            description="Analyze pricing and recommend optimal price based on market conditions"
+        )
+        print("✅ Created pricing_analysis prompt")
+    else:
+        print("⏭️  pricing_analysis prompt already exists")
+    
+    # 9. Product Search Prompt (from v1)
     product_search_prompt = """Search for {category} products related to: {query}
 
 Provide a list of specific products with:

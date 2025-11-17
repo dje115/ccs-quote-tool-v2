@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from app.models.quotes import Quote, QuoteItem
 from app.models.product import Product, PricingRule
+from app.services.dynamic_pricing_service import DynamicPricingService
 
 
 class QuotePricingService:
@@ -19,6 +20,7 @@ class QuotePricingService:
     def __init__(self, db: Session, tenant_id: str):
         self.db = db
         self.tenant_id = tenant_id
+        self.dynamic_pricing = DynamicPricingService(db, tenant_id)
     
     def calculate_quote_pricing(self, quote: Quote) -> Dict[str, Any]:
         """
@@ -213,19 +215,51 @@ class QuotePricingService:
                     total_price = 0
                 
                 # Use provided pricing or calculate
+                product_name = product.get('item') or product.get('name') or ''
+                
                 if unit_price > 0 and total_price > 0:
                     item_total = Decimal(str(total_price))
                 elif unit_price > 0:
                     item_total = Decimal(str(unit_price * quantity))
                 else:
                     # Try to get from product catalog
-                    product_name = product.get('item') or product.get('name') or ''
                     catalog_price = self._get_product_price(product_name)
                     if catalog_price:
                         unit_price = catalog_price
                         item_total = Decimal(str(catalog_price * quantity))
                     else:
                         continue  # Skip if no pricing available
+                
+                # Apply dynamic pricing rules if enabled
+                try:
+                    # Get customer ID from quote if available
+                    customer_id = None
+                    if hasattr(quote, 'customer_id'):
+                        customer_id = quote.customer_id
+                    
+                    # Calculate dynamic price
+                    dynamic_result = self.dynamic_pricing.calculate_dynamic_price(
+                        base_price=Decimal(str(unit_price)),
+                        product_name=product_name,
+                        quantity=int(quantity),
+                        customer_id=customer_id,
+                        currency="GBP",
+                        apply_rules=True
+                    )
+                    
+                    # Use dynamic price if different
+                    if dynamic_result.get('final_price') and dynamic_result['final_price'] != unit_price:
+                        unit_price = dynamic_result['final_price']
+                        item_total = Decimal(str(unit_price * quantity))
+                        # Store dynamic pricing info
+                        product['dynamic_pricing'] = {
+                            'original_price': float(unit_price),
+                            'adjustments': dynamic_result.get('adjustments', []),
+                            'rules_applied': dynamic_result.get('rules_applied', [])
+                        }
+                except Exception as e:
+                    # If dynamic pricing fails, continue with original price
+                    print(f"[QUOTE PRICING] Dynamic pricing failed for {product_name}: {e}")
                 
                 items.append({
                     'item': product.get('item') or product.get('name', ''),
