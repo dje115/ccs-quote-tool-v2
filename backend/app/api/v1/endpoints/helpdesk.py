@@ -178,10 +178,16 @@ async def get_ticket(
     current_tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
 ):
-    """Get ticket details"""
+    """Get ticket details with comments and history"""
     try:
-        from app.models.helpdesk import Ticket
-        ticket = db.query(Ticket).filter(
+        from app.models.helpdesk import Ticket, TicketComment, TicketHistory
+        from sqlalchemy.orm import joinedload
+        
+        ticket = db.query(Ticket).options(
+            joinedload(Ticket.comments),
+            joinedload(Ticket.history),
+            joinedload(Ticket.assigned_to)
+        ).filter(
             Ticket.id == ticket_id,
             Ticket.tenant_id == current_user.tenant_id
         ).first()
@@ -189,7 +195,68 @@ async def get_ticket(
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         
-        return ticket
+        # Get assigned user name if available
+        assigned_to_name = None
+        if ticket.assigned_to_id and ticket.assigned_to:
+            assigned_to_name = ticket.assigned_to.name if hasattr(ticket.assigned_to, 'name') else ticket.assigned_to.email if hasattr(ticket.assigned_to, 'email') else None
+        
+        # Parse AI suggestions if it's a string (JSON)
+        ai_suggestions = ticket.ai_suggestions
+        if isinstance(ai_suggestions, str):
+            try:
+                import json
+                ai_suggestions = json.loads(ai_suggestions)
+            except:
+                ai_suggestions = None
+        
+        # Convert to dict and include relationships
+        ticket_dict = {
+            "id": ticket.id,
+            "ticket_number": ticket.ticket_number,
+            "subject": ticket.subject,
+            "description": ticket.description,
+            "original_description": ticket.original_description,
+            "improved_description": ticket.improved_description,
+            "ai_suggestions": ai_suggestions,
+            "ai_analysis_date": ticket.ai_analysis_date.isoformat() if ticket.ai_analysis_date else None,
+            "status": ticket.status.value if ticket.status else None,
+            "priority": ticket.priority.value if ticket.priority else None,
+            "ticket_type": ticket.ticket_type.value if ticket.ticket_type else None,
+            "customer_id": ticket.customer_id,
+            "contact_id": ticket.contact_id,
+            "assigned_to_id": ticket.assigned_to_id,
+            "assigned_to_name": assigned_to_name,
+            "created_by_user_id": ticket.created_by_user_id,
+            "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+            "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None,
+            "resolved_at": ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+            "closed_at": ticket.closed_at.isoformat() if ticket.closed_at else None,
+            "first_response_at": ticket.first_response_at.isoformat() if ticket.first_response_at else None,
+            "comments": [
+                {
+                    "id": comment.id,
+                    "comment": comment.comment,
+                    "author_id": comment.author_id,
+                    "author_name": comment.author_name,
+                    "author_email": comment.author_email,
+                    "is_internal": comment.is_internal,
+                    "created_at": comment.created_at.isoformat() if comment.created_at else None
+                }
+                for comment in ticket.comments
+            ] if ticket.comments else [],
+            "history": [
+                {
+                    "id": hist.id,
+                    "field_name": hist.field_name,
+                    "old_value": hist.old_value,
+                    "new_value": hist.new_value,
+                    "created_at": hist.created_at.isoformat() if hist.created_at else None
+                }
+                for hist in ticket.history
+            ] if ticket.history else []
+        }
+        
+        return ticket_dict
     except HTTPException:
         raise
     except Exception as e:
