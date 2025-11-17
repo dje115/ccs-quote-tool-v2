@@ -422,8 +422,5 @@ class WebPricingScraper:
                 'supplier': supplier_name or 'Unknown'
             }
     
-    async def close(self):
-        """Close the HTTP session"""
-        await self.close()
 
 
