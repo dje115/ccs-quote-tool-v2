@@ -7,14 +7,18 @@ Public-facing endpoints for customers to view their contracts and manage tickets
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
+import uuid
 
 from app.core.dependencies import get_db
 from app.models.support_contract import SupportContract, ContractStatus
 from app.models.helpdesk import Ticket, TicketStatus
 from app.models.crm import Customer
+from app.models.quotes import Quote, QuoteStatus
+from app.models.orders import Order
 from app.services.support_contract_service import SupportContractService
 from app.services.helpdesk_service import HelpdeskService
+from app.services.reporting_service import ReportingService
 
 router = APIRouter(prefix="/customer-portal", tags=["Customer Portal"])
 
