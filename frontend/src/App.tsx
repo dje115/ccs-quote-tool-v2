@@ -110,7 +110,8 @@ function App() {
       <WebSocketProvider>
         <BrowserRouter>
           <GlobalAIMonitor />
-          <Routes>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route
