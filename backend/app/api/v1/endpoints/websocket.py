@@ -6,6 +6,7 @@ Provides tenant-isolated WebSocket connections for instant updates
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException, status
 from jose import jwt
+import json
 from app.core.config import settings
 from app.core.websocket import get_websocket_manager
 from app.core.database import SessionLocal
@@ -69,13 +70,14 @@ async def authenticate_websocket(websocket: WebSocket, token: str) -> tuple[str,
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(...)
+    token: str = Query(None)  # Optional for backward compatibility
 ):
     """
     WebSocket endpoint for real-time updates
     
-    Query Parameters:
-        token: JWT authentication token
+    SECURITY: Token can be provided via:
+    1. Query parameter (legacy, for backward compatibility) - NOT RECOMMENDED
+    2. First message after connection (preferred) - format: {"type": "auth", "token": "..."}
     
     The WebSocket connection is tenant-scoped - users only receive
     events for their tenant. All events are published to Redis Pub/Sub
@@ -85,6 +87,36 @@ async def websocket_endpoint(
     user_id = None
     
     try:
+        # Accept connection first
+        await websocket.accept()
+        
+        # SECURITY: Prefer token from first message over query parameter
+        # Query parameters can leak into logs, caches, and URL history
+        if not token:
+            # Wait for auth message (first message should be auth)
+            try:
+                # Set timeout for auth message
+                import asyncio
+                auth_data = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+                auth_message = json.loads(auth_data)
+                if auth_message.get("type") == "auth":
+                    token = auth_message.get("token")
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="First message must be auth message"
+                    )
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication timeout"
+                )
+            except json.JSONDecodeError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid auth message format"
+                )
+        
         # Authenticate connection
         tenant_id, user_id = await authenticate_websocket(websocket, token)
         

@@ -11,12 +11,23 @@ import uuid
 
 
 class TenantMixin:
-    """Mixin for tenant-aware models"""
+    """
+    Mixin for tenant-aware models.
+    
+    SECURITY: tenant_id MUST be provided explicitly when creating model instances.
+    Do not rely on automatic population - this ensures tenant isolation is explicit
+    and prevents accidental cross-tenant data access.
+    """
     tenant_id = Column(String(36), nullable=False, index=True)
     
     def __init__(self, **kwargs):
+        # SECURITY: Require explicit tenant_id - do not auto-populate
+        # This prevents async call issues and ensures tenant isolation is explicit
         if 'tenant_id' not in kwargs:
-            kwargs['tenant_id'] = get_current_tenant_id()
+            raise ValueError(
+                "tenant_id is required for tenant-aware models. "
+                "Provide it explicitly when creating instances."
+            )
         super().__init__(**kwargs)
 
 
@@ -41,12 +52,13 @@ class BaseModel(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     __abstract__ = True  # This is an abstract base class
 
 
-def get_current_tenant_id() -> str:
-    """Get current tenant ID from context"""
-    # This will be implemented with dependency injection
-    from app.core.dependencies import get_current_tenant
-    tenant = get_current_tenant()
-    return tenant.id if tenant else "system"
+# DEPRECATED: Do not use this function - it causes async call issues
+# Always provide tenant_id explicitly when creating model instances
+# def get_current_tenant_id() -> str:
+#     """Get current tenant ID from context"""
+#     # This function is deprecated - tenant_id must be provided explicitly
+#     # Using async dependencies synchronously causes errors
+#     pass
 
 
 def generate_uuid() -> str:

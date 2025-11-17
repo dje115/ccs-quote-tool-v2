@@ -48,16 +48,24 @@ export const useWebSocket = (): UseWebSocketReturn => {
       return;
     }
 
-    // Get API base URL from environment or default
-    // Handle both Vite (import.meta.env) and React (process.env) environments
-    let apiBaseUrl = 'http://localhost:8000';
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
-      apiBaseUrl = import.meta.env.VITE_API_URL;
+    // Get WebSocket URL from environment or construct from API URL
+    // SECURITY: Token will be sent as first message, not in URL (prevents logging/caching)
+    let wsBaseUrl = '';
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_WS_URL) {
+      // Use dedicated WebSocket URL if configured
+      wsBaseUrl = import.meta.env.VITE_WS_URL;
+    } else if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) {
+      // Construct from API URL
+      wsBaseUrl = import.meta.env.VITE_API_URL.replace(/^http/, 'ws');
     } else if (typeof window !== 'undefined') {
-      // Fallback: use window location for same-origin requests
-      apiBaseUrl = window.location.origin.replace(':3000', ':8000');
+      // Fallback: construct from current origin
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host.replace(':3000', ':8000');
+      wsBaseUrl = `${protocol}//${host}`;
+    } else {
+      wsBaseUrl = 'ws://localhost:8000';
     }
-    const wsUrl = apiBaseUrl.replace(/^http/, 'ws') + '/api/v1/ws?token=' + encodeURIComponent(token);
+    const wsUrl = `${wsBaseUrl}/api/v1/ws`;
 
     try {
       // Close existing connection if any
@@ -75,6 +83,16 @@ export const useWebSocket = (): UseWebSocketReturn => {
         console.log('[WebSocket] Connected');
         setIsConnected(true);
         reconnectAttemptsRef.current = 0;
+        
+        // SECURITY: Send token as first message instead of query parameter
+        // This prevents token from appearing in server logs, caches, or URL history
+        try {
+          ws.send(JSON.stringify({ type: 'auth', token }));
+        } catch (error) {
+          console.error('[WebSocket] Error sending auth token:', error);
+          ws.close();
+          return;
+        }
         
         // Store ping interval ID for cleanup
         const pingIntervalId = setInterval(() => {
