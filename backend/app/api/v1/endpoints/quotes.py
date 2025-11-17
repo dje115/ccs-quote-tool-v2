@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from decimal import Decimal
 import uuid
+import asyncio
 from datetime import datetime
 
 from app.core.database import get_db
@@ -230,7 +231,7 @@ async def create_quote(
                 # Don't fail quote creation if analysis fails
                 print(f"[QUOTE CREATION] Error triggering auto-analysis: {e}")
         
-        # Publish quote.created event
+        # Publish quote.created event (async, non-blocking)
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
         quote_dict = {
@@ -241,11 +242,12 @@ async def create_quote(
             "status": quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
             "total_amount": float(quote.total_amount) if quote.total_amount else 0.0,
         }
-        event_publisher.publish_quote_created(
+        # Fire and forget - don't await to avoid blocking response
+        asyncio.create_task(event_publisher.publish_quote_created(
             tenant_id=current_user.tenant_id,
             quote_id=quote.id,
             quote_data=quote_dict
-        )
+        ))
         
         return quote
         
@@ -329,7 +331,7 @@ async def update_quote(
     db.commit()
     db.refresh(quote)
     
-    # Publish quote.updated event
+    # Publish quote.updated event (async, non-blocking)
     from app.core.events import get_event_publisher
     event_publisher = get_event_publisher()
     quote_dict = {
@@ -340,20 +342,21 @@ async def update_quote(
         "status": quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
         "total_amount": float(quote.total_amount) if quote.total_amount else 0.0,
     }
-    event_publisher.publish_quote_updated(
+    # Fire and forget - don't await to avoid blocking response
+    asyncio.create_task(event_publisher.publish_quote_updated(
         tenant_id=current_user.tenant_id,
         quote_id=quote.id,
         quote_data=quote_dict
-    )
+    ))
     
     # Publish status change event if status changed
     if quote_update.status is not None and old_status != quote.status:
-        event_publisher.publish_quote_status_changed(
+        asyncio.create_task(event_publisher.publish_quote_status_changed(
             tenant_id=current_user.tenant_id,
             quote_id=quote.id,
             old_status=old_status.value if hasattr(old_status, 'value') else str(old_status),
             new_status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status)
-        )
+        ))
     
     return quote
 
@@ -724,10 +727,11 @@ async def approve_quote(
         db.commit()
         db.refresh(quote)
         
-        # Publish quote.approved event
+        # Publish quote.approved event (async, non-blocking)
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
-        await event_publisher.publish_quote_status_changed(
+        # Fire and forget - don't await to avoid blocking response
+        asyncio.create_task(event_publisher.publish_quote_status_changed(
             tenant_id=current_user.tenant_id,
             quote_id=quote.id,
             old_status="pending",
@@ -773,10 +777,11 @@ async def reject_quote(
         db.commit()
         db.refresh(quote)
         
-        # Publish quote.rejected event
+        # Publish quote.rejected event (async, non-blocking)
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
-        await event_publisher.publish_quote_status_changed(
+        # Fire and forget - don't await to avoid blocking response
+        asyncio.create_task(event_publisher.publish_quote_status_changed(
             tenant_id=current_user.tenant_id,
             quote_id=quote.id,
             old_status="pending",

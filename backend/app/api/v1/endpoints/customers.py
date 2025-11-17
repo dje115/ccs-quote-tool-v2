@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 import uuid
+import asyncio
 from datetime import datetime
 
 from app.core.database import get_db
@@ -237,7 +238,7 @@ async def create_customer(
         db.commit()
         db.refresh(customer)
         
-        # Publish customer.created event
+        # Publish customer.created event (async, non-blocking)
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
         # Convert customer to dict for event
@@ -251,11 +252,12 @@ async def create_customer(
             "business_sector": customer.business_sector.value if customer.business_sector and hasattr(customer.business_sector, 'value') else str(customer.business_sector) if customer.business_sector else None,
             "business_size": customer.business_size.value if customer.business_size and hasattr(customer.business_size, 'value') else str(customer.business_size) if customer.business_size else None,
         }
-        event_publisher.publish_customer_created(
+        # Fire and forget - don't await to avoid blocking response
+        asyncio.create_task(event_publisher.publish_customer_created(
             tenant_id=current_user.tenant_id,
             customer_id=customer.id,
             customer_data=customer_dict
-        )
+        ))
         
         return customer
         
@@ -347,7 +349,7 @@ async def update_customer(
     db.commit()
     db.refresh(customer)
     
-    # Publish customer.updated event
+    # Publish customer.updated event (async, non-blocking)
     from app.core.events import get_event_publisher
     event_publisher = get_event_publisher()
     # Convert customer to dict for event
@@ -362,11 +364,12 @@ async def update_customer(
         "business_size": customer.business_size.value if customer.business_size and hasattr(customer.business_size, 'value') else str(customer.business_size) if customer.business_size else None,
         "is_competitor": customer.is_competitor,
     }
-    event_publisher.publish_customer_updated(
+    # Fire and forget - don't await to avoid blocking response
+    asyncio.create_task(event_publisher.publish_customer_updated(
         tenant_id=current_user.tenant_id,
         customer_id=customer.id,
         customer_data=customer_dict
-    )
+    ))
     
     return customer
 
@@ -396,13 +399,14 @@ async def delete_customer(
     customer.deleted_at = datetime.utcnow()
     db.commit()
     
-    # Publish customer.deleted event
+    # Publish customer.deleted event (async, non-blocking)
     from app.core.events import get_event_publisher
     event_publisher = get_event_publisher()
-    event_publisher.publish_customer_deleted(
+    # Fire and forget - don't await to avoid blocking response
+    asyncio.create_task(event_publisher.publish_customer_deleted(
         tenant_id=current_user.tenant_id,
         customer_id=customer_id
-    )
+    ))
     
     return None
 

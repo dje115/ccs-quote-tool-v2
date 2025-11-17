@@ -69,7 +69,7 @@ def run_planning_campaign_task(self, campaign_id: str, tenant_id: str):
         # Publish started event
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
-        event_publisher.publish_campaign_started(
+        event_publisher.publish_campaign_started_sync(
             tenant_id=tenant_id,
             campaign_id=campaign_id,
             campaign_name=campaign.name,
@@ -100,7 +100,7 @@ def run_planning_campaign_task(self, campaign_id: str, tenant_id: str):
             db.commit()
             
             # Publish completed event
-            event_publisher.publish_campaign_completed(
+            event_publisher.publish_campaign_completed_sync(
                 tenant_id=tenant_id,
                 campaign_id=campaign_id,
                 campaign_name=campaign.name,
@@ -123,7 +123,7 @@ def run_planning_campaign_task(self, campaign_id: str, tenant_id: str):
             db.commit()
             
             # Publish failed event
-            event_publisher.publish_campaign_failed(
+            event_publisher.publish_campaign_failed_sync(
                 tenant_id=tenant_id,
                 campaign_id=campaign_id,
                 campaign_name=campaign.name,
@@ -150,7 +150,7 @@ def run_planning_campaign_task(self, campaign_id: str, tenant_id: str):
             # Publish failed event
             from app.core.events import get_event_publisher
             event_publisher = get_event_publisher()
-            event_publisher.publish_campaign_failed(
+            event_publisher.publish_campaign_failed_sync(
                 tenant_id=tenant_id,
                 campaign_id=campaign_id,
                 campaign_name=campaign.name,

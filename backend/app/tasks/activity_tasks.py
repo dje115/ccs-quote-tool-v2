@@ -232,10 +232,10 @@ Respond in this exact JSON format:
             print(f"✅ Successfully generated and cached suggestions for {customer.company_name}")
             print(f"{'='*80}\n")
             
-            # Publish suggestions updated event
+            # Publish suggestions updated event (sync wrapper for Celery)
             from app.core.events import get_event_publisher
             event_publisher = get_event_publisher()
-            event_publisher.publish_activity_suggestions_updated(
+            event_publisher.publish_activity_suggestions_updated_sync(
                 tenant_id=tenant_id,
                 customer_id=customer_id
             )
@@ -308,10 +308,10 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
         customer.ai_analysis_status = 'running'
         db.commit()
         
-        # Publish started event
+        # Publish started event (sync wrapper for Celery)
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
-        event_publisher.publish_ai_analysis_started(
+        event_publisher.publish_ai_analysis_started_sync(
             tenant_id=tenant_id,
             customer_id=customer_id,
             task_id=self.request.id,
@@ -474,7 +474,7 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
             print(f"[AI ANALYSIS] Final status: {customer.ai_analysis_status}")
             print(f"{'='*80}\n")
             
-            # Publish completed event
+            # Publish completed event (sync wrapper for Celery)
             result_data = {
                 'lead_score': customer.lead_score,
                 'has_phone': bool(customer.main_phone),
@@ -482,7 +482,7 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
                 'has_financial_data': bool(customer.companies_house_data),
                 'has_location_data': bool(customer.google_maps_data)
             }
-            event_publisher.publish_ai_analysis_completed(
+            event_publisher.publish_ai_analysis_completed_sync(
                 tenant_id=tenant_id,
                 customer_id=customer_id,
                 task_id=self.request.id,
@@ -512,7 +512,7 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
             if isinstance(analysis_result.get('error'), dict):
                 detailed_error = f"{error_msg} - Details: {json.dumps(analysis_result.get('error'))}"
             
-            event_publisher.publish_ai_analysis_failed(
+            event_publisher.publish_ai_analysis_failed_sync(
                 tenant_id=tenant_id,
                 customer_id=customer_id,
                 task_id=self.request.id,

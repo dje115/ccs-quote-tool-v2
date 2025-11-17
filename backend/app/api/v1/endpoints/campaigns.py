@@ -195,15 +195,17 @@ def stop_campaign(
         campaign.status = LeadGenerationStatus.CANCELLED
         db.commit()
         
-        # Publish campaign status change event (stopped)
+        # Publish campaign status change event (stopped) (async, non-blocking)
         from app.core.events import get_event_publisher
+        import asyncio
         event_publisher = get_event_publisher()
-        event_publisher.publish_campaign_failed(
+        # Fire and forget - don't await to avoid blocking response
+        asyncio.create_task(event_publisher.publish_campaign_failed(
             tenant_id=current_user.tenant_id,
             campaign_id=campaign_id,
             campaign_name=campaign.name,
             error="Campaign stopped by user"
-        )
+        ))
         
         return {"message": "Campaign stopped successfully"}
     except Exception as e:

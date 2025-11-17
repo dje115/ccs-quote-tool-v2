@@ -12,6 +12,7 @@ Handles all sales activity operations including:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import asyncio
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -105,7 +106,7 @@ async def create_activity(
         
         print(f"✓ Activity created with AI enhancement: {new_activity.id}")
         
-        # Publish activity.created event
+        # Publish activity.created event (async, non-blocking)
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
         activity_dict = {
@@ -116,11 +117,12 @@ async def create_activity(
             "notes": new_activity.notes,
             "activity_date": new_activity.activity_date.isoformat() if new_activity.activity_date else None,
         }
-        event_publisher.publish_activity_created(
+        # Fire and forget - don't await to avoid blocking response
+        asyncio.create_task(event_publisher.publish_activity_created(
             tenant_id=current_tenant.id,
             activity_id=new_activity.id,
             activity_data=activity_dict
-        )
+        ))
         
         return new_activity
         

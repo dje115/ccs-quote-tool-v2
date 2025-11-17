@@ -62,7 +62,7 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
         # Publish started event
         from app.core.events import get_event_publisher
         event_publisher = get_event_publisher()
-        event_publisher.publish_campaign_started(
+        event_publisher.publish_campaign_started_sync(
             tenant_id=tenant_id,
             campaign_id=campaign_id,
             campaign_name=campaign.name,
@@ -92,7 +92,7 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
                 'leads_created': result.get('leads_created', 0),
                 'duplicates_skipped': result.get('duplicates_skipped', 0)
             }
-            event_publisher.publish_campaign_completed(
+            event_publisher.publish_campaign_completed_sync(
                 tenant_id=tenant_id,
                 campaign_id=campaign_id,
                 campaign_name=campaign.name,
@@ -162,7 +162,7 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
                 # Publish failed event
                 from app.core.events import get_event_publisher
                 event_publisher = get_event_publisher()
-                event_publisher.publish_campaign_failed(
+                event_publisher.publish_campaign_failed_sync(
                     tenant_id=tenant_id,
                     campaign_id=campaign_id,
                     campaign_name=campaign.name,
