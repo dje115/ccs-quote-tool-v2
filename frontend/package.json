@@ -1,6 +1,6 @@
 {
   "name": "ccs-quote-tool-v2-frontend",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "CCS Quote Tool v2 - Modern CRM & Quoting Platform Frontend",
   "private": true,
   "type": "module",
