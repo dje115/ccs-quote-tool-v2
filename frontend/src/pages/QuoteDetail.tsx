@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { quoteAPI } from '../services/api';
+import QuoteAICopilot from '../components/QuoteAICopilot';
 
 const QuoteDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -206,22 +207,29 @@ const QuoteDetail: React.FC = () => {
         )}
 
         {currentTab === 2 && (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              AI Analysis
-            </Typography>
-            {quote.ai_analysis ? (
-              <Card sx={{ mt: 2 }}>
-                <CardContent>
-                  <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
-                    {typeof quote.ai_analysis === 'string' ? quote.ai_analysis : JSON.stringify(quote.ai_analysis, null, 2)}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ) : (
-              <Alert severity="info" sx={{ mt: 2 }}>No AI analysis available for this quote.</Alert>
-            )}
-          </Box>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={8}>
+              <Box>
+                <Typography variant="h6" gutterBottom>
+                  AI Analysis
+                </Typography>
+                {quote.ai_analysis ? (
+                  <Card sx={{ mt: 2 }}>
+                    <CardContent>
+                      <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
+                        {typeof quote.ai_analysis === 'string' ? quote.ai_analysis : JSON.stringify(quote.ai_analysis, null, 2)}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Alert severity="info" sx={{ mt: 2 }}>No AI analysis available for this quote.</Alert>
+                )}
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <QuoteAICopilot quoteId={quote.id} compact={true} />
+            </Grid>
+          </Grid>
         )}
 
         {currentTab === 3 && (

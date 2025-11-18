@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { campaignAPI, customerAPI, leadAPI } from '../services/api';
+import LeadIntelligence from '../components/LeadIntelligence';
 
 const LeadDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -270,6 +271,13 @@ const LeadDetail: React.FC = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Lead Intelligence Widget */}
+          {lead.id && (
+            <Box sx={{ mb: 3 }}>
+              <LeadIntelligence leadId={lead.id} compact={true} />
+            </Box>
+          )}
         </Grid>
 
         {/* Company Information - Right side */}
