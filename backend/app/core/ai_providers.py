@@ -1220,6 +1220,114 @@ class GrokProvider(AIProvider):
         return ["grok-beta", "grok-2"]
 
 
+class MicrosoftCopilotProvider(AIProvider):
+    """
+    Microsoft Copilot provider implementation
+    
+    Uses Microsoft Graph API for authentication and Microsoft Copilot Studio/Copilot Pro APIs.
+    Important for customers who want Microsoft Graph integration and data control.
+    """
+    
+    def _initialize_client(self):
+        """Initialize Microsoft Copilot client"""
+        try:
+            # Microsoft Copilot uses Microsoft Graph API
+            # The API key is actually an Azure AD app client secret or access token
+            # Base URL for Microsoft Graph API
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url or "https://api.copilot.microsoft.com/v1",  # Placeholder - actual endpoint may vary
+                timeout=300.0
+            )
+        except Exception as e:
+            print(f"[Microsoft Copilot Provider] Error initializing client: {e}")
+            self.client = None
+    
+    async def generate_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str = "copilot-pro",
+        temperature: float = 0.7,
+        max_tokens: int = 8000,
+        **kwargs
+    ) -> AIProviderResponse:
+        """
+        Generate completion using Microsoft Copilot API
+        
+        Note: Microsoft Copilot integration requires:
+        - Azure AD app registration
+        - Microsoft Graph API permissions
+        - OAuth2 authentication flow
+        - Access token management
+        """
+        
+        if not self.client:
+            raise Exception("Microsoft Copilot client not initialized")
+        
+        try:
+            # Microsoft Copilot API call
+            # Note: Actual implementation may require OAuth2 token refresh
+            # This is a placeholder implementation - actual API may differ
+            
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs
+            )
+            
+            content = response.choices[0].message.content
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0,
+                "completion_tokens": response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0,
+                "total_tokens": response.usage.total_tokens if hasattr(response.usage, 'total_tokens') else 0
+            }
+            
+            return AIProviderResponse(
+                content=content,
+                model=model,
+                usage=usage,
+                raw_response=response
+            )
+        
+        except Exception as e:
+            print(f"[Microsoft Copilot Provider] Error generating completion: {e}")
+            raise
+    
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test Microsoft Copilot API connection"""
+        try:
+            if not self.client:
+                return {"success": False, "error": "Client not initialized"}
+            
+            # Test with a simple request
+            response = self.client.chat.completions.create(
+                model="copilot-pro",
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=10
+            )
+            
+            return {
+                "success": True,
+                "message": "Microsoft Copilot API connection successful",
+                "model": "copilot-pro"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_supported_models(self) -> List[str]:
+        """Get supported Microsoft Copilot models"""
+        return ["copilot-pro", "copilot-studio"]
+
+
 # Provider Registry
 PROVIDER_REGISTRY = {
     "openai": OpenAIProvider,
@@ -1232,6 +1340,8 @@ PROVIDER_REGISTRY = {
     "ollama": OllamaProvider,
     "openai_compatible": OpenAICompatibleProvider,
     "openai-compatible": OpenAICompatibleProvider,  # Alias
+    "microsoft_copilot": MicrosoftCopilotProvider,
+    "microsoft-copilot": MicrosoftCopilotProvider,  # Alias
 }
 
 

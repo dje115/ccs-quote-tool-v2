@@ -32,33 +32,22 @@ class TranslationService:
                 tenant_id=self.tenant_id
             )
             
-            if prompt_obj:
-                # Use database prompt with AIProviderService
-                provider_response = await self.provider_service.generate(
-                    prompt=prompt_obj,
-                    variables={
-                        "source_language": source_language,
-                        "target_language": target_language,
-                        "text": text
-                    }
-                )
-                translated_text = provider_response.content.strip()
-            else:
-                # Fallback: use generate_with_rendered_prompts
-                system_prompt = "You are a professional translator. Translate accurately and naturally."
-                user_prompt = f"""Translate the following text from {source_language} to {target_language}.
-Return ONLY the translated text, no explanations.
-
-Text to translate:
-{text}"""
-                
-                provider_response = await self.provider_service.generate_with_rendered_prompts(
-                    prompt=None,
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    max_tokens=2000
-                )
-                translated_text = provider_response.content.strip()
+            # Require database prompt - no fallbacks
+            if not prompt_obj:
+                error_msg = f"Translation prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
+                print(f"[ERROR] {error_msg}")
+                raise ValueError(error_msg)
+            
+            # Use database prompt with AIProviderService
+            provider_response = await self.provider_service.generate(
+                prompt=prompt_obj,
+                variables={
+                    "source_language": source_language,
+                    "target_language": target_language,
+                    "text": text
+                }
+            )
+            translated_text = provider_response.content.strip()
             
             return {
                 'success': True,

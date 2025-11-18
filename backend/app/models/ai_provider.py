@@ -16,6 +16,7 @@ class ProviderType(str, enum.Enum):
     """AI Provider type enumeration"""
     CLOUD = "cloud"
     ON_PREMISE = "on_premise"
+    MICROSOFT_COPILOT = "microsoft_copilot"  # Microsoft Copilot (Microsoft Graph integration)
 
 
 class AIProvider(Base, TimestampMixin):

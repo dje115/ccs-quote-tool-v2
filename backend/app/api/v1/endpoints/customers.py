@@ -5,7 +5,7 @@ Customer management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr
 import uuid
 import asyncio
@@ -931,4 +931,189 @@ async def get_accounts_document_url(
         raise HTTPException(
             status_code=500,
             detail=f"Error getting document URL: {str(e)}"
+        )
+
+
+# ============================================================================
+# Customer Health Endpoints
+# ============================================================================
+
+@router.get("/{customer_id}/health")
+async def get_customer_health(
+    customer_id: str,
+    days_back: int = Query(90, ge=7, le=365),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get customer health analysis
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.customer_health_service import CustomerHealthService
+        from app.core.database import SessionLocal
+        
+        # Verify customer exists and belongs to tenant
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalar_one_or_none()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Use sync session for health service
+        sync_db = SessionLocal()
+        try:
+            health_service = CustomerHealthService(sync_db, current_user.tenant_id)
+            health_data = await health_service.analyze_customer_health(
+                customer_id,
+                days_back=days_back
+            )
+        finally:
+            sync_db.close()
+        
+        return health_data
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting customer health: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting customer health: {str(e)}"
+        )
+
+
+@router.get("/{customer_id}/timeline")
+async def get_customer_timeline(
+    customer_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    activity_types: Optional[List[str]] = Query(None),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get unified activity timeline for customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.activity_timeline_service import ActivityTimelineService
+        from app.core.database import SessionLocal
+        
+        # Verify customer exists
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalar_one_or_none()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Use sync session for timeline service
+        sync_db = SessionLocal()
+        try:
+            timeline_service = ActivityTimelineService(sync_db, current_user.tenant_id)
+            timeline = await timeline_service.get_customer_timeline(
+                customer_id,
+                limit=limit,
+                activity_types=activity_types
+            )
+        finally:
+            sync_db.close()
+        
+        return {
+            "customer_id": customer_id,
+            "customer_name": customer.company_name,
+            "timeline": timeline,
+            "count": len(timeline)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting customer timeline: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting customer timeline: {str(e)}"
+        )
+
+
+@router.get("/{customer_id}/timeline/daily-summary")
+async def get_daily_summary(
+    customer_id: str,
+    date: Optional[str] = Query(None),  # ISO date string
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get daily AI summary of customer activities
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.activity_timeline_service import ActivityTimelineService
+        from app.core.database import SessionLocal
+        from datetime import datetime as dt
+        
+        # Verify customer exists
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalar_one_or_none()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Parse date
+        summary_date = None
+        if date:
+            try:
+                summary_date = dt.fromisoformat(date.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
+        
+        # Use sync session for timeline service
+        sync_db = SessionLocal()
+        try:
+            timeline_service = ActivityTimelineService(sync_db, current_user.tenant_id)
+            summary = await timeline_service.generate_daily_summary(
+                customer_id,
+                date=summary_date
+            )
+        finally:
+            sync_db.close()
+        
+        return summary
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting daily summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting daily summary: {str(e)}"
         )

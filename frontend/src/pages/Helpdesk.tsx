@@ -37,6 +37,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { helpdeskAPI, customerAPI } from '../services/api';
+import TicketComposer from '../components/TicketComposer';
 
 interface Ticket {
   id: string;
@@ -403,87 +404,19 @@ const Helpdesk: React.FC = () => {
         </Table>
       </TableContainer>
 
-      {/* Create Ticket Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Create New Ticket</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            <TextField
-              fullWidth
-              label="Subject"
-              value={newTicket.subject}
-              onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
-              margin="normal"
-              required
-            />
-            <TextField
-              fullWidth
-              label="Description"
-              value={newTicket.description}
-              onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
-              margin="normal"
-              multiline
-              rows={4}
-              required
-            />
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Priority</InputLabel>
-              <Select
-                value={newTicket.priority}
-                label="Priority"
-                onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
-              >
-                <MenuItem value="low">Low</MenuItem>
-                <MenuItem value="medium">Medium</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="urgent">Urgent</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Customer (Optional)</InputLabel>
-              <Select
-                value={newTicket.customer_id}
-                label="Customer (Optional)"
-                onChange={(e) => setNewTicket({ ...newTicket, customer_id: e.target.value })}
-                disabled={loadingCustomers}
-              >
-                <MenuItem value="">
-                  <em>Select a customer...</em>
-                </MenuItem>
-                {customers.map((customer) => (
-                  <MenuItem key={customer.id} value={customer.id}>
-                    {customer.company_name} {customer.status ? `(${customer.status})` : ''}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Category (Optional)</InputLabel>
-              <Select
-                value={newTicket.category}
-                label="Category (Optional)"
-                onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
-              >
-                <MenuItem value="">None</MenuItem>
-                <MenuItem value="technical">Technical</MenuItem>
-                <MenuItem value="billing">Billing</MenuItem>
-                <MenuItem value="general">General</MenuItem>
-                <MenuItem value="feature_request">Feature Request</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleCreateTicket}
-            variant="contained"
-            disabled={!newTicket.subject || !newTicket.description}
-          >
-            Create
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* AI-Powered Ticket Composer */}
+      <TicketComposer
+        open={createDialogOpen}
+        onClose={() => {
+          setCreateDialogOpen(false);
+          setNewTicket({ subject: '', description: '', priority: 'medium', category: '', customer_id: '' });
+        }}
+        onSave={(ticket) => {
+          loadTickets();
+          loadStats();
+          setCreateDialogOpen(false);
+        }}
+      />
     </Container>
   );
 };

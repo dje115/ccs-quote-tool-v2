@@ -29,6 +29,8 @@ import {
   People as PeopleIcon
 } from '@mui/icons-material';
 import ContactDetailDialog from './ContactDetailDialog';
+import CustomerHealthWidget from './CustomerHealthWidget';
+import CustomerTimeline from './CustomerTimeline';
 import { useNavigate } from 'react-router-dom';
 
 interface CustomerOverviewTabProps {
@@ -702,7 +704,7 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
               <Grid size={{ xs: 6, sm: 6 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="h4" fontWeight="bold">{healthScore}%</Typography>
-                  <Typography variant="caption">Health Score</Typography>
+                  <Typography variant="caption">Data Health</Typography>
                 </Box>
               </Grid>
               <Grid size={{ xs: 6, sm: 6 }}>
@@ -731,6 +733,13 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
               </Grid>
             </Grid>
           </Paper>
+
+          {/* CUSTOMER HEALTH WIDGET */}
+          {customer?.id && (
+            <Box sx={{ mb: 3 }}>
+              <CustomerHealthWidget customerId={customer.id} daysBack={90} compact={true} />
+            </Box>
+          )}
 
           {/* AI INSIGHTS */}
           {customer?.ai_analysis_raw && (

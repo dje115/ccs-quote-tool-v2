@@ -6,9 +6,9 @@ Helpdesk API Endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from typing import List, Optional
-from pydantic import BaseModel, EmailStr
-from datetime import datetime
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, EmailStr, Field
+from datetime import datetime, timezone
 
 from app.core.dependencies import get_current_user, get_current_tenant, check_permission
 from app.core.database import get_async_db, SessionLocal
@@ -692,5 +692,295 @@ async def get_knowledge_base_article(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting article: {str(e)}"
+        )
+
+
+# ============================================================================
+# AI-Powered Helpdesk Endpoints
+# ============================================================================
+
+class TicketAIAnalysisRequest(BaseModel):
+    update_fields: Optional[Dict[str, Any]] = None
+
+
+class TicketAIAnalysisResponse(BaseModel):
+    success: bool
+    improved_description: Optional[str] = None
+    suggestions: Dict[str, List[str]] = Field(default_factory=lambda: {
+        "next_actions": [],
+        "questions": [],
+        "solutions": []
+    })
+    ticket_type_suggestion: Optional[str] = None
+    priority_suggestion: Optional[str] = None
+    sla_risk: Optional[str] = None
+    auto_assign_suggestion: Optional[str] = None
+    auto_respond_suggestion: Optional[str] = None
+    confidence: Optional[float] = None
+    error: Optional[str] = None
+
+
+@router.post("/tickets/{ticket_id}/ai/analyze", response_model=TicketAIAnalysisResponse)
+async def analyze_ticket_with_ai(
+    ticket_id: str,
+    request: Optional[TicketAIAnalysisRequest] = None,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Analyze ticket with AI and generate suggestions
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.helpdesk import Ticket
+        from app.services.helpdesk_ai_service import HelpdeskAIService
+        from sqlalchemy import select
+        
+        # Get ticket
+        stmt = select(Ticket).where(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_user.tenant_id
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Use sync session for AI service (it expects sync session)
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            ai_service = HelpdeskAIService(sync_db, current_user.tenant_id)
+            analysis = await ai_service.analyze_ticket(
+                ticket,
+                update_fields=request.update_fields if request else None
+            )
+            
+            # Update ticket with AI analysis if successful
+            if analysis.get("success"):
+                ticket.ai_suggestions = analysis.get("suggestions")
+                ticket.improved_description = analysis.get("improved_description")
+                ticket.ai_analysis_date = datetime.now(timezone.utc)
+                
+                # Update description if improved version exists
+                if analysis.get("improved_description"):
+                    if not ticket.original_description:
+                        ticket.original_description = ticket.description
+                    ticket.description = analysis.get("improved_description")
+                
+                await db.commit()
+        finally:
+            sync_db.close()
+        
+        return TicketAIAnalysisResponse(**analysis)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing ticket with AI: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing ticket: {str(e)}"
+        )
+
+
+class TicketImproveDescriptionRequest(BaseModel):
+    description: str
+
+
+class TicketImproveDescriptionResponse(BaseModel):
+    improved_description: str
+    original_description: str
+
+
+@router.post("/tickets/{ticket_id}/ai/improve-description", response_model=TicketImproveDescriptionResponse)
+async def improve_ticket_description(
+    ticket_id: str,
+    request: TicketImproveDescriptionRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Improve ticket description using AI
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.helpdesk import Ticket
+        from app.services.helpdesk_ai_service import HelpdeskAIService
+        from sqlalchemy import select
+        from datetime import timezone
+        
+        # Get ticket
+        stmt = select(Ticket).where(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_user.tenant_id
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Use sync session for AI service
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            ai_service = HelpdeskAIService(sync_db, current_user.tenant_id)
+            
+            # Temporarily set description for improvement
+            original_desc = ticket.description
+            ticket.description = request.description
+            
+            # Improve description
+            context = await ai_service._build_ticket_context(ticket)
+            improved = await ai_service._improve_description(request.description, context)
+            
+            # Restore original
+            ticket.description = original_desc
+        finally:
+            sync_db.close()
+        
+        return TicketImproveDescriptionResponse(
+            improved_description=improved,
+            original_description=request.description
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error improving description: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error improving description: {str(e)}"
+        )
+
+
+class AutoResponseRequest(BaseModel):
+    response_type: str = "acknowledgment"  # "acknowledgment", "solution", "question"
+
+
+class AutoResponseResponse(BaseModel):
+    response_text: str
+
+
+@router.post("/tickets/{ticket_id}/ai/auto-response", response_model=AutoResponseResponse)
+async def generate_auto_response(
+    ticket_id: str,
+    request: AutoResponseRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Generate auto-response for ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.helpdesk import Ticket
+        from app.services.helpdesk_ai_service import HelpdeskAIService
+        from sqlalchemy import select
+        
+        # Get ticket
+        stmt = select(Ticket).where(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_user.tenant_id
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Use sync session for AI service
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            ai_service = HelpdeskAIService(sync_db, current_user.tenant_id)
+            response_text = await ai_service.generate_auto_response(
+                ticket,
+                response_type=request.response_type
+            )
+        finally:
+            sync_db.close()
+        
+        if not response_text:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate auto-response"
+            )
+        
+        return AutoResponseResponse(response_text=response_text)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating auto-response: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating auto-response: {str(e)}"
+        )
+
+
+@router.get("/tickets/{ticket_id}/ai/knowledge-base")
+async def get_knowledge_base_suggestions(
+    ticket_id: str,
+    limit: int = Query(5, ge=1, le=20),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get AI-suggested knowledge base articles for ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.helpdesk import Ticket
+        from app.services.helpdesk_ai_service import HelpdeskAIService
+        from sqlalchemy import select
+        
+        # Get ticket
+        stmt = select(Ticket).where(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_user.tenant_id
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Use sync session for AI service
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            ai_service = HelpdeskAIService(sync_db, current_user.tenant_id)
+            articles = await ai_service.suggest_knowledge_base_articles(ticket, limit=limit)
+        finally:
+            sync_db.close()
+        
+        return {"articles": articles}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting knowledge base suggestions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting knowledge base suggestions: {str(e)}"
         )
 

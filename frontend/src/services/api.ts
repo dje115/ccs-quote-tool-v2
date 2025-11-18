@@ -357,6 +357,70 @@ export const helpdeskAPI = {
   getTicketStats: () => apiClient.get('/helpdesk/tickets/stats'),
   searchKnowledgeBase: (query: string, category?: string) => 
     apiClient.get('/helpdesk/knowledge-base/search', { params: { query, category } }),
+  // AI-powered endpoints
+  analyzeTicketWithAI: (id: string, updateFields?: any) => 
+    apiClient.post(`/helpdesk/tickets/${id}/ai/analyze`, { update_fields: updateFields }),
+  improveTicketDescription: (id: string, description: string) => 
+    apiClient.post(`/helpdesk/tickets/${id}/ai/improve-description`, { description }),
+  generateAutoResponse: (id: string, responseType: string = 'acknowledgment') => 
+    apiClient.post(`/helpdesk/tickets/${id}/ai/auto-response`, { response_type: responseType }),
+  getKnowledgeBaseSuggestions: (id: string, limit: number = 5) => 
+    apiClient.get(`/helpdesk/tickets/${id}/ai/knowledge-base`, { params: { limit } }),
+};
+
+// Customer Health API
+export const customerHealthAPI = {
+  getHealth: (customerId: string, daysBack: number = 90) => 
+    apiClient.get(`/customers/${customerId}/health`, { params: { days_back: daysBack } }),
+  getTimeline: (customerId: string, limit: number = 50, activityTypes?: string[]) => 
+    apiClient.get(`/customers/${customerId}/timeline`, { params: { limit, activity_types: activityTypes } }),
+  getDailySummary: (customerId: string, date?: string) => 
+    apiClient.get(`/customers/${customerId}/timeline/daily-summary`, { params: { date } }),
+};
+
+// Quote AI Copilot API
+export const quoteAICopilotAPI = {
+  analyzeScope: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/ai/scope-analysis`),
+  getClarifyingQuestions: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/ai/clarifying-questions`),
+  getUpsells: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/ai/upsells`),
+  getCrossSells: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/ai/cross-sells`),
+  getExecutiveSummary: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/ai/executive-summary`),
+  generateEmailCopy: (quoteId: string, emailType: string = 'send_quote') => 
+    apiClient.post(`/quotes/${quoteId}/ai/email-copy`, { email_type: emailType }),
+};
+
+// Lead Intelligence API
+export const leadIntelligenceAPI = {
+  analyzeLead: (leadId: string) => apiClient.get(`/leads/${leadId}/ai/analyze`),
+  getOutreachPlan: (leadId: string) => apiClient.get(`/leads/${leadId}/ai/outreach-plan`),
+  getSimilarLeads: (leadId: string) => apiClient.get(`/leads/${leadId}/ai/similar-leads`),
+};
+
+// Trend Detection API
+export const trendsAPI = {
+  getRecurringDefects: (daysBack: number = 30, minOccurrences: number = 3) => 
+    apiClient.get('/trends/recurring-defects', { params: { days_back: daysBack, min_occurrences: minOccurrences } }),
+  getQuoteHurdles: (daysBack: number = 30) => 
+    apiClient.get('/trends/quote-hurdles', { params: { days_back: daysBack } }),
+  getChurnSignals: (daysBack: number = 90) => 
+    apiClient.get('/trends/churn-signals', { params: { days_back: daysBack } }),
+  getTrendReport: (daysBack: number = 30) => 
+    apiClient.get('/trends/report', { params: { days_back: daysBack } }),
+};
+
+// Metrics API
+export const metricsAPI = {
+  getSLA: (startDate?: string, endDate?: string) => 
+    apiClient.get('/metrics/sla', { params: { start_date: startDate, end_date: endDate } }),
+  getAIUsage: (startDate?: string, endDate?: string) => 
+    apiClient.get('/metrics/ai-usage', { params: { start_date: startDate, end_date: endDate } }),
+  getLeadVelocity: (startDate?: string, endDate?: string) => 
+    apiClient.get('/metrics/lead-velocity', { params: { start_date: startDate, end_date: endDate } }),
+  getQuoteCycleTime: (startDate?: string, endDate?: string) => 
+    apiClient.get('/metrics/quote-cycle-time', { params: { start_date: startDate, end_date: endDate } }),
+  getCSAT: (startDate?: string, endDate?: string) => 
+    apiClient.get('/metrics/csat', { params: { start_date: startDate, end_date: endDate } }),
+  getDashboard: () => apiClient.get('/metrics/dashboard'),
 };
 
 

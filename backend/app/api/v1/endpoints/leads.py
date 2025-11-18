@@ -12,9 +12,9 @@ import uuid
 from datetime import datetime
 
 from app.core.database import get_async_db
-from app.core.dependencies import get_current_user, check_permission
+from app.core.dependencies import get_current_user, get_current_tenant, check_permission
 from app.models.leads import Lead, LeadStatus, LeadSource
-from app.models.tenant import User
+from app.models.tenant import User, Tenant
 
 router = APIRouter()
 
@@ -218,3 +218,166 @@ async def create_leads_from_competitors(
         "skipped_duplicates": skipped_duplicates,
         "message": f"Created {len(created_leads)} discovery leads from competitors"
     }
+
+
+# ============================================================================
+# Lead Intelligence Endpoints
+# ============================================================================
+
+@router.get("/{lead_id}/ai/analyze")
+async def analyze_lead_with_ai(
+    lead_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Analyze lead with AI and generate intelligence summary
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.crm import Lead
+        from app.services.lead_intelligence_service import LeadIntelligenceService
+        from app.core.database import SessionLocal
+        from sqlalchemy import select, and_
+        
+        # Get lead
+        stmt = select(Lead).where(
+            and_(
+                Lead.id == lead_id,
+                Lead.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        lead = result.scalar_one_or_none()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            intelligence_service = LeadIntelligenceService(sync_db, current_user.tenant_id)
+            analysis = await intelligence_service.analyze_lead(lead)
+        finally:
+            sync_db.close()
+        
+        return analysis
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing lead with AI: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing lead: {str(e)}"
+        )
+
+
+@router.get("/{lead_id}/ai/outreach-plan")
+async def get_outreach_plan(
+    lead_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Generate outreach plan for lead
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.crm import Lead
+        from app.services.lead_intelligence_service import LeadIntelligenceService
+        from app.core.database import SessionLocal
+        from sqlalchemy import select, and_
+        
+        # Get lead
+        stmt = select(Lead).where(
+            and_(
+                Lead.id == lead_id,
+                Lead.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        lead = result.scalar_one_or_none()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            intelligence_service = LeadIntelligenceService(sync_db, current_user.tenant_id)
+            plan = await intelligence_service.generate_outreach_plan(lead)
+        finally:
+            sync_db.close()
+        
+        return plan
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating outreach plan: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating outreach plan: {str(e)}"
+        )
+
+
+@router.get("/{lead_id}/ai/similar-leads")
+async def get_similar_converted_leads(
+    lead_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Find similar leads that recently converted
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.models.crm import Lead
+        from app.services.lead_intelligence_service import LeadIntelligenceService
+        from app.core.database import SessionLocal
+        from sqlalchemy import select, and_
+        
+        # Get lead
+        stmt = select(Lead).where(
+            and_(
+                Lead.id == lead_id,
+                Lead.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        lead = result.scalar_one_or_none()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            intelligence_service = LeadIntelligenceService(sync_db, current_user.tenant_id)
+            similar_leads = await intelligence_service.find_similar_converted_leads(lead)
+        finally:
+            sync_db.close()
+        
+        return {"similar_leads": similar_leads}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error finding similar leads: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error finding similar leads: {str(e)}"
+        )

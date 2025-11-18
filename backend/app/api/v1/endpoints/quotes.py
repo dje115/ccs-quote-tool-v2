@@ -1239,3 +1239,326 @@ async def generate_quote_document(
             status_code=500,
             detail=f"Error generating document: {str(e)}"
         )
+
+
+# ============================================================================
+# Quote AI Copilot Endpoints
+# ============================================================================
+
+@router.get("/{quote_id}/ai/scope-analysis")
+async def analyze_quote_scope(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Analyze quote scope and provide summary with risks and recommendations
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.quote_ai_copilot_service import QuoteAICopilotService
+        from app.core.database import SessionLocal
+        
+        # Get quote
+        stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            copilot_service = QuoteAICopilotService(sync_db, current_user.tenant_id)
+            analysis = await copilot_service.analyze_quote_scope(quote)
+        finally:
+            sync_db.close()
+        
+        return analysis
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing quote scope: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing quote scope: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/ai/clarifying-questions")
+async def get_clarifying_questions(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Generate clarifying questions for quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.quote_ai_copilot_service import QuoteAICopilotService
+        from app.core.database import SessionLocal
+        
+        # Get quote
+        stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            copilot_service = QuoteAICopilotService(sync_db, current_user.tenant_id)
+            questions = await copilot_service.generate_clarifying_questions(quote)
+        finally:
+            sync_db.close()
+        
+        return {"questions": questions}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating clarifying questions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating clarifying questions: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/ai/upsells")
+async def get_upsell_suggestions(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get upsell suggestions for quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.quote_ai_copilot_service import QuoteAICopilotService
+        from app.core.database import SessionLocal
+        
+        # Get quote
+        stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            copilot_service = QuoteAICopilotService(sync_db, current_user.tenant_id)
+            upsells = await copilot_service.suggest_upsells(quote)
+        finally:
+            sync_db.close()
+        
+        return {"upsells": upsells}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting upsell suggestions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting upsell suggestions: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/ai/cross-sells")
+async def get_cross_sell_suggestions(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get cross-sell suggestions for quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.quote_ai_copilot_service import QuoteAICopilotService
+        from app.core.database import SessionLocal
+        
+        # Get quote
+        stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            copilot_service = QuoteAICopilotService(sync_db, current_user.tenant_id)
+            cross_sells = await copilot_service.suggest_cross_sells(quote)
+        finally:
+            sync_db.close()
+        
+        return {"cross_sells": cross_sells}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting cross-sell suggestions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting cross-sell suggestions: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/ai/executive-summary")
+async def get_executive_summary(
+    quote_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Generate executive summary for quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.quote_ai_copilot_service import QuoteAICopilotService
+        from app.core.database import SessionLocal
+        
+        # Get quote
+        stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            copilot_service = QuoteAICopilotService(sync_db, current_user.tenant_id)
+            summary = await copilot_service.generate_executive_summary(quote)
+        finally:
+            sync_db.close()
+        
+        return {"summary": summary}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating executive summary: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating executive summary: {str(e)}"
+        )
+
+
+class EmailCopyRequest(BaseModel):
+    email_type: str = "send_quote"  # "send_quote", "follow_up", "reminder"
+
+
+class EmailCopyResponse(BaseModel):
+    subject: str
+    body: str
+
+
+@router.post("/{quote_id}/ai/email-copy", response_model=EmailCopyResponse)
+async def generate_email_copy(
+    quote_id: str,
+    request: EmailCopyRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Generate email copy for quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.quote_ai_copilot_service import QuoteAICopilotService
+        from app.core.database import SessionLocal
+        
+        # Get quote
+        stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            copilot_service = QuoteAICopilotService(sync_db, current_user.tenant_id)
+            email_copy = await copilot_service.generate_email_copy(
+                quote,
+                email_type=request.email_type
+            )
+        finally:
+            sync_db.close()
+        
+        return EmailCopyResponse(**email_copy)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating email copy: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating email copy: {str(e)}"
+        )

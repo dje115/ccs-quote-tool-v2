@@ -27,7 +27,8 @@ class Quote(BaseModel):
     __tablename__ = "quotes"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    customer_id = Column(String(36), ForeignKey("customers.id"), nullable=False, index=True)
+    customer_id = Column(String(36), ForeignKey("customers.id"), nullable=True, index=True)  # Nullable - can be for lead or customer
+    lead_id = Column(String(36), ForeignKey("leads.id"), nullable=True, index=True)  # For quotes created from leads
     
     # Quote details
     quote_number = Column(String(100), unique=True, nullable=False, index=True)

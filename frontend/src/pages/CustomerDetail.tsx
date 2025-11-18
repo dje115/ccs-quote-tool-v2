@@ -89,6 +89,7 @@ import api from '../services/api';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import CustomerOverviewTab from '../components/CustomerOverviewTab';
 import ActivityCenter from '../components/ActivityCenter';
+import CustomerTimeline from '../components/CustomerTimeline';
 import ContactDialog from '../components/ContactDialog';
 
 const CustomerDetail: React.FC = () => {
@@ -1989,9 +1990,14 @@ const CustomerDetail: React.FC = () => {
       )}
       {/* Tab Panel 7: Activity - AI-Powered Activity Center */}
       {currentTab === 7 && customer && (
-        <Paper sx={{ p: 0 }}>
-          <ActivityCenter customerId={customer.id} />
-        </Paper>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <ActivityCenter customerId={customer.id} />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <CustomerTimeline customerId={customer.id} limit={30} />
+          </Grid>
+        </Grid>
       )}
       {/* Tab Panel 8: Quotes */}
       {currentTab === 8 && (

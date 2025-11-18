@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        APP_VERSION: ${APP_VERSION:-3.0.0}
+        APP_VERSION: ${APP_VERSION:-3.0.1}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-backend
