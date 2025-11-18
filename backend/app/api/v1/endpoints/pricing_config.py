@@ -3,13 +3,15 @@ Pricing Configuration API endpoints
 Manage tenant-specific pricing: day rates, bundles, managed services
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 from decimal import Decimal
+import asyncio
 
-from app.core.database import get_db
+from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user
 from app.models.tenant import User, UserRole
 from app.models.pricing_config import TenantPricingConfig, PricingBundleItem, PricingConfigType
@@ -99,26 +101,38 @@ class BundleItemResponse(BaseModel):
 async def create_day_rate(
     data: DayRateCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a day rate configuration"""
+    """
+    Create a day rate configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    service = PricingConfigService(db, current_user.tenant_id)
-    config = service.create_day_rate(
-        name=data.name,
-        base_rate=data.base_rate,
-        engineers=data.engineers,
-        hours_per_day=data.hours_per_day,
-        includes_travel=data.includes_travel,
-        description=data.description,
-        code=data.code,
-        priority=data.priority,
-        valid_from=data.valid_from,
-        valid_until=data.valid_until
-    )
+    def _create_day_rate():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.create_day_rate(
+                name=data.name,
+                base_rate=data.base_rate,
+                engineers=data.engineers,
+                hours_per_day=data.hours_per_day,
+                includes_travel=data.includes_travel,
+                description=data.description,
+                code=data.code,
+                priority=data.priority,
+                valid_from=data.valid_from,
+                valid_until=data.valid_until
+            )
+        finally:
+            sync_db.close()
     
+    loop = asyncio.get_event_loop()
+    config = await loop.run_in_executor(None, _create_day_rate)
     return config
 
 
@@ -126,13 +140,16 @@ async def create_day_rate(
 async def create_bundle(
     data: BundleCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a bundle configuration"""
+    """
+    Create a bundle configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
-    
-    service = PricingConfigService(db, current_user.tenant_id)
     
     # Convert bundle items
     items = []
@@ -148,18 +165,26 @@ async def create_bundle(
             "data": item.data
         })
     
-    config = service.create_bundle(
-        name=data.name,
-        bundle_price=data.bundle_price,
-        items=items,
-        description=data.description,
-        code=data.code,
-        discount_percentage=data.discount_percentage,
-        priority=data.priority,
-        valid_from=data.valid_from,
-        valid_until=data.valid_until
-    )
+    def _create_bundle():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.create_bundle(
+                name=data.name,
+                bundle_price=data.bundle_price,
+                items=items,
+                description=data.description,
+                code=data.code,
+                discount_percentage=data.discount_percentage,
+                priority=data.priority,
+                valid_from=data.valid_from,
+                valid_until=data.valid_until
+            )
+        finally:
+            sync_db.close()
     
+    loop = asyncio.get_event_loop()
+    config = await loop.run_in_executor(None, _create_bundle)
     return config
 
 
@@ -168,22 +193,48 @@ async def list_configs(
     config_type: Optional[str] = Query(None, description="Filter by config type"),
     include_inactive: bool = Query(False, description="Include inactive configs"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List pricing configurations"""
-    service = PricingConfigService(db, current_user.tenant_id)
-    configs = service.list_configs(config_type=config_type, include_inactive=include_inactive)
+    """
+    List pricing configurations
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _list_configs():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.list_configs(config_type=config_type, include_inactive=include_inactive)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    configs = await loop.run_in_executor(None, _list_configs)
     return configs
 
 
 @router.get("/day-rates/active", response_model=PricingConfigResponse)
 async def get_active_day_rate(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get the active day rate configuration"""
-    service = PricingConfigService(db, current_user.tenant_id)
-    config = service.get_active_day_rate()
+    """
+    Get the active day rate configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_active_day_rate():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.get_active_day_rate()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    config = await loop.run_in_executor(None, _get_active_day_rate)
     
     if not config:
         raise HTTPException(status_code=404, detail="No active day rate configuration found")
@@ -195,11 +246,24 @@ async def get_active_day_rate(
 async def get_config(
     config_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get a specific pricing configuration"""
-    service = PricingConfigService(db, current_user.tenant_id)
-    config = service.get_config(config_id)
+    """
+    Get a specific pricing configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_config():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.get_config(config_id)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    config = await loop.run_in_executor(None, _get_config)
     
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
@@ -211,20 +275,32 @@ async def get_config(
 async def get_bundle_items(
     bundle_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get items for a bundle configuration"""
-    service = PricingConfigService(db, current_user.tenant_id)
+    """
+    Get items for a bundle configuration
     
-    # Verify bundle exists and belongs to tenant
-    config = service.get_config(bundle_id)
-    if not config:
-        raise HTTPException(status_code=404, detail="Bundle not found")
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_bundle_items():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            # Verify bundle exists and belongs to tenant
+            config = service.get_config(bundle_id)
+            if not config:
+                raise HTTPException(status_code=404, detail="Bundle not found")
+            
+            if config.config_type != PricingConfigType.BUNDLE.value:
+                raise HTTPException(status_code=400, detail="Configuration is not a bundle")
+            
+            return service.get_bundle_items(bundle_id)
+        finally:
+            sync_db.close()
     
-    if config.config_type != PricingConfigType.BUNDLE.value:
-        raise HTTPException(status_code=400, detail="Configuration is not a bundle")
-    
-    items = service.get_bundle_items(bundle_id)
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, _get_bundle_items)
     return items
 
 
@@ -237,21 +313,34 @@ async def update_config(
     is_active: Optional[bool] = None,
     priority: Optional[int] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update a pricing configuration"""
+    """
+    Update a pricing configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    service = PricingConfigService(db, current_user.tenant_id)
-    config = service.update_config(
-        config_id=config_id,
-        name=name,
-        description=description,
-        base_rate=base_rate,
-        is_active=is_active,
-        priority=priority
-    )
+    def _update_config():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.update_config(
+                config_id=config_id,
+                name=name,
+                description=description,
+                base_rate=base_rate,
+                is_active=is_active,
+                priority=priority
+            )
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    config = await loop.run_in_executor(None, _update_config)
     
     if not config:
         raise HTTPException(status_code=404, detail="Configuration not found")
@@ -263,14 +352,27 @@ async def update_config(
 async def delete_config(
     config_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Delete a pricing configuration"""
+    """
+    Delete a pricing configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    service = PricingConfigService(db, current_user.tenant_id)
-    success = service.delete_config(config_id)
+    def _delete_config():
+        sync_db = SessionLocal()
+        try:
+            service = PricingConfigService(sync_db, current_user.tenant_id)
+            return service.delete_config(config_id)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    success = await loop.run_in_executor(None, _delete_config)
     
     if not success:
         raise HTTPException(status_code=404, detail="Configuration not found")

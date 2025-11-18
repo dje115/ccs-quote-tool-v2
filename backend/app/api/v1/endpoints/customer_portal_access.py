@@ -5,13 +5,15 @@ For managing customer portal access rights from tenant dashboard
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from typing import Optional
 from pydantic import BaseModel
 import secrets
 from datetime import datetime, timezone
 
-from app.core.dependencies import get_db, get_current_user, check_permission
+from app.core.database import get_async_db
+from app.core.dependencies import get_current_user, check_permission
 from app.models.crm import Customer
 from app.models.tenant import User
 
@@ -35,14 +37,22 @@ class PortalAccessResponse(BaseModel):
 async def generate_portal_token(
     customer_id: str,
     current_user: User = Depends(check_permission("customer:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Generate a new portal access token for a customer"""
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.tenant_id == current_user.tenant_id,
-        Customer.is_deleted == False
-    ).first()
+    """
+    Generate a new portal access token for a customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Customer).where(
+        and_(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id,
+            Customer.is_deleted == False
+        )
+    )
+    result = await db.execute(stmt)
+    customer = result.scalars().first()
     
     if not customer:
         raise HTTPException(
@@ -65,8 +75,8 @@ async def generate_portal_token(
             "reporting": True
         }
     
-    db.commit()
-    db.refresh(customer)
+    await db.commit()
+    await db.refresh(customer)
     
     # Build portal login URL (will be configured based on deployment)
     portal_base_url = "http://localhost:3001"  # TODO: Get from config
@@ -85,14 +95,22 @@ async def generate_portal_token(
 async def get_portal_access(
     customer_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get customer portal access information"""
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.tenant_id == current_user.tenant_id,
-        Customer.is_deleted == False
-    ).first()
+    """
+    Get customer portal access information
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Customer).where(
+        and_(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id,
+            Customer.is_deleted == False
+        )
+    )
+    result = await db.execute(stmt)
+    customer = result.scalars().first()
     
     if not customer:
         raise HTTPException(
@@ -119,14 +137,22 @@ async def update_portal_access(
     customer_id: str,
     access_update: PortalAccessUpdate,
     current_user: User = Depends(check_permission("customer:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update customer portal access settings"""
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.tenant_id == current_user.tenant_id,
-        Customer.is_deleted == False
-    ).first()
+    """
+    Update customer portal access settings
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Customer).where(
+        and_(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id,
+            Customer.is_deleted == False
+        )
+    )
+    result = await db.execute(stmt)
+    customer = result.scalars().first()
     
     if not customer:
         raise HTTPException(
@@ -145,8 +171,8 @@ async def update_portal_access(
     if access_update.portal_permissions is not None:
         customer.portal_permissions = access_update.portal_permissions
     
-    db.commit()
-    db.refresh(customer)
+    await db.commit()
+    await db.refresh(customer)
     
     portal_login_url = None
     if customer.portal_access_token:
@@ -166,14 +192,22 @@ async def update_portal_access(
 async def revoke_portal_token(
     customer_id: str,
     current_user: User = Depends(check_permission("customer:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Revoke customer portal access token"""
-    customer = db.query(Customer).filter(
-        Customer.id == customer_id,
-        Customer.tenant_id == current_user.tenant_id,
-        Customer.is_deleted == False
-    ).first()
+    """
+    Revoke customer portal access token
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Customer).where(
+        and_(
+            Customer.id == customer_id,
+            Customer.tenant_id == current_user.tenant_id,
+            Customer.is_deleted == False
+        )
+    )
+    result = await db.execute(stmt)
+    customer = result.scalars().first()
     
     if not customer:
         raise HTTPException(
@@ -185,7 +219,7 @@ async def revoke_portal_token(
     customer.portal_access_token_generated_at = None
     customer.portal_access_enabled = False
     
-    db.commit()
+    await db.commit()
     
     return {"message": "Portal access token revoked successfully"}
 

@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import time
 import json
 import uuid
+import asyncio
 
-from app.core.dependencies import get_db, get_current_user
+from app.core.database import get_async_db, SessionLocal
+from app.core.dependencies import get_current_user
 from app.models.tenant import User, Tenant
 from app.models.leads import LeadGenerationCampaign, LeadGenerationStatus, Lead, LeadStatus
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
@@ -20,7 +23,7 @@ router = APIRouter()
 async def create_campaign(
     campaign_data: CampaignCreate,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """Create a new lead generation campaign"""
@@ -46,48 +49,56 @@ async def create_campaign(
         )
         
         db.add(campaign)
-        db.commit()
-        db.refresh(campaign)
+        await db.commit()
+        await db.refresh(campaign)
         
         return CampaignResponse.from_orm(campaign)
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create campaign: {str(e)}"
         )
 
 @router.get("/", response_model=List[CampaignResponse])
-def get_campaigns(
+async def get_campaigns(
     skip: int = 0,
     limit: int = 100,
     sort_by: str = "created_at",
     sort_order: str = "desc",
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all campaigns for the current tenant with sorting"""
+    """
+    Get all campaigns for the current tenant with sorting
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Build query with sorting
-        query = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id,
-            LeadGenerationCampaign.is_deleted == False
+        stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id,
+                LeadGenerationCampaign.is_deleted == False
+            )
         )
         
         # Apply sorting
         if sort_by == "name":
-            query = query.order_by(LeadGenerationCampaign.name.asc() if sort_order == "asc" else LeadGenerationCampaign.name.desc())
+            stmt = stmt.order_by(LeadGenerationCampaign.name.asc() if sort_order == "asc" else LeadGenerationCampaign.name.desc())
         elif sort_by == "status":
-            query = query.order_by(LeadGenerationCampaign.status.asc() if sort_order == "asc" else LeadGenerationCampaign.status.desc())
+            stmt = stmt.order_by(LeadGenerationCampaign.status.asc() if sort_order == "asc" else LeadGenerationCampaign.status.desc())
         elif sort_by == "leads_created" or sort_by == "total_leads":
-            query = query.order_by(LeadGenerationCampaign.leads_created.asc() if sort_order == "asc" else LeadGenerationCampaign.leads_created.desc())
+            stmt = stmt.order_by(LeadGenerationCampaign.leads_created.asc() if sort_order == "asc" else LeadGenerationCampaign.leads_created.desc())
         elif sort_by == "created_at":
-            query = query.order_by(LeadGenerationCampaign.created_at.asc() if sort_order == "asc" else LeadGenerationCampaign.created_at.desc())
+            stmt = stmt.order_by(LeadGenerationCampaign.created_at.asc() if sort_order == "asc" else LeadGenerationCampaign.created_at.desc())
         else:
-            query = query.order_by(LeadGenerationCampaign.created_at.desc())
+            stmt = stmt.order_by(LeadGenerationCampaign.created_at.desc())
         
-        campaigns = query.offset(skip).limit(limit).all()
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        campaigns = result.scalars().all()
         
         return [CampaignResponse.from_orm(campaign) for campaign in campaigns]
         
@@ -98,16 +109,24 @@ def get_campaigns(
         )
 
 @router.get("/{campaign_id}", response_model=CampaignResponse)
-def get_campaign(
+async def get_campaign(
     campaign_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get a specific campaign by ID"""
-    campaign = db.query(LeadGenerationCampaign).filter(
-        LeadGenerationCampaign.id == campaign_id,
-        LeadGenerationCampaign.tenant_id == current_user.tenant_id
-    ).first()
+    """
+    Get a specific campaign by ID
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(LeadGenerationCampaign).where(
+        and_(
+            LeadGenerationCampaign.id == campaign_id,
+            LeadGenerationCampaign.tenant_id == current_user.tenant_id
+        )
+    )
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
     
     if not campaign:
         raise HTTPException(
@@ -118,18 +137,26 @@ def get_campaign(
     return CampaignResponse.from_orm(campaign)
 
 @router.post("/{campaign_id}/start")
-def start_campaign(
+async def start_campaign(
     campaign_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Start a lead generation campaign"""
+    """
+    Start a lead generation campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Get the campaign from database
-        campaign = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.id == campaign_id,
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.id == campaign_id,
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        campaign = result.scalars().first()
         
         if not campaign:
             raise HTTPException(
@@ -139,7 +166,7 @@ def start_campaign(
         
         # Update campaign status to running
         campaign.status = LeadGenerationStatus.RUNNING
-        db.commit()
+        await db.commit()
         
         # Start the real lead generation campaign
         task = run_lead_generation_campaign.delay(
@@ -174,17 +201,25 @@ def start_campaign(
         )
 
 @router.post("/{campaign_id}/stop")
-def stop_campaign(
+async def stop_campaign(
     campaign_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Stop a running campaign"""
+    """
+    Stop a running campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        campaign = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.id == campaign_id,
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.id == campaign_id,
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        campaign = result.scalars().first()
         
         if not campaign:
             raise HTTPException(
@@ -193,7 +228,7 @@ def stop_campaign(
             )
         
         campaign.status = LeadGenerationStatus.CANCELLED
-        db.commit()
+        await db.commit()
         
         # Publish campaign status change event (stopped) (async, non-blocking)
         from app.core.events import get_event_publisher
@@ -215,17 +250,25 @@ def stop_campaign(
         )
 
 @router.post("/{campaign_id}/pause")
-def pause_campaign(
+async def pause_campaign(
     campaign_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Pause a running campaign"""
+    """
+    Pause a running campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        campaign = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.id == campaign_id,
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.id == campaign_id,
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        campaign = result.scalars().first()
         
         if not campaign:
             raise HTTPException(
@@ -235,7 +278,7 @@ def pause_campaign(
         
         # Note: We don't have a PAUSED status, so we'll use DRAFT
         campaign.status = LeadGenerationStatus.DRAFT
-        db.commit()
+        await db.commit()
         
         return {"message": "Campaign paused successfully"}
     except Exception as e:
@@ -245,18 +288,26 @@ def pause_campaign(
         )
 
 @router.post("/{campaign_id}/restart")
-def restart_campaign(
+async def restart_campaign(
     campaign_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Restart a paused or failed campaign"""
+    """
+    Restart a paused or failed campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Get the campaign from database
-        campaign = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.id == campaign_id,
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.id == campaign_id,
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        campaign = result.scalars().first()
         
         if not campaign:
             raise HTTPException(
@@ -266,7 +317,7 @@ def restart_campaign(
         
         # Update campaign status to running
         campaign.status = LeadGenerationStatus.RUNNING
-        db.commit()
+        await db.commit()
         
         # Start the real lead generation campaign
         task = run_lead_generation_campaign.delay(
@@ -301,19 +352,27 @@ def restart_campaign(
         )
 
 @router.delete("/{campaign_id}")
-def delete_campaign(
+async def delete_campaign(
     campaign_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a campaign"""
+    """
+    Delete a campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         print(f"🗑️ Delete campaign request: {campaign_id} for tenant: {current_user.tenant_id}")
         
-        campaign = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.id == campaign_id,
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.id == campaign_id,
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        campaign = result.scalars().first()
         
         if not campaign:
             print(f"❌ Campaign not found: {campaign_id}")
@@ -327,7 +386,7 @@ def delete_campaign(
         # Soft delete by marking as deleted
         campaign.is_deleted = True
         campaign.deleted_at = datetime.now(timezone.utc)
-        db.commit()
+        await db.commit()
         
         print(f"✅ Campaign deleted successfully: {campaign_id}")
         return {"message": "Campaign deleted successfully"}
@@ -373,15 +432,19 @@ def _safe_parse_ai_analysis(ai_analysis):
     return None
 
 @router.get("/leads/all")
-def get_all_leads(
+async def get_all_leads(
     skip: int = 0,
     limit: int = 100,
     sort_by: str = "created_at",
     sort_order: str = "desc",
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all leads (discoveries) for the current tenant with campaign information"""
+    """
+    Get all leads (discoveries) for the current tenant with campaign information
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Normalize sort_by parameter (handle truncated values like "lead_sco")
         if sort_by and sort_by.startswith("lead_sco"):
@@ -394,26 +457,30 @@ def get_all_leads(
             sort_order = "desc"
         
         # Build query with sorting
-        query = db.query(Lead).filter(
-            Lead.tenant_id == current_user.tenant_id,
-            Lead.is_deleted == False
+        stmt = select(Lead).where(
+            and_(
+                Lead.tenant_id == current_user.tenant_id,
+                Lead.is_deleted == False
+            )
         )
         
         # Apply sorting
         if sort_by == "company_name":
-            query = query.order_by(Lead.company_name.asc() if sort_order == "asc" else Lead.company_name.desc())
+            stmt = stmt.order_by(Lead.company_name.asc() if sort_order == "asc" else Lead.company_name.desc())
         elif sort_by == "lead_score":
-            query = query.order_by(Lead.lead_score.asc() if sort_order == "asc" else Lead.lead_score.desc())
+            stmt = stmt.order_by(Lead.lead_score.asc() if sort_order == "asc" else Lead.lead_score.desc())
         elif sort_by == "postcode":
-            query = query.order_by(Lead.postcode.asc() if sort_order == "asc" else Lead.postcode.desc())
+            stmt = stmt.order_by(Lead.postcode.asc() if sort_order == "asc" else Lead.postcode.desc())
         elif sort_by == "status":
-            query = query.order_by(Lead.status.asc() if sort_order == "asc" else Lead.status.desc())
+            stmt = stmt.order_by(Lead.status.asc() if sort_order == "asc" else Lead.status.desc())
         elif sort_by == "created_at":
-            query = query.order_by(Lead.created_at.asc() if sort_order == "asc" else Lead.created_at.desc())
+            stmt = stmt.order_by(Lead.created_at.asc() if sort_order == "asc" else Lead.created_at.desc())
         else:
-            query = query.order_by(Lead.created_at.desc())
+            stmt = stmt.order_by(Lead.created_at.desc())
         
-        leads = query.offset(skip).limit(limit).all()
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        leads = result.scalars().all()
         
         # Convert to response format with campaign information
         result = []
@@ -452,9 +519,11 @@ def get_all_leads(
                 # Get campaign name if campaign_id exists
                 if lead.campaign_id:
                     try:
-                        campaign = db.query(LeadGenerationCampaign).filter(
+                        campaign_stmt = select(LeadGenerationCampaign).where(
                             LeadGenerationCampaign.id == lead.campaign_id
-                        ).first()
+                        )
+                        campaign_result = await db.execute(campaign_stmt)
+                        campaign = campaign_result.scalars().first()
                         if campaign:
                             lead_data["campaign_name"] = campaign.name
                     except Exception as campaign_error:
@@ -483,20 +552,28 @@ def get_all_leads(
         )
 
 @router.get("/{campaign_id}/leads")
-def get_campaign_leads(
+async def get_campaign_leads(
     campaign_id: str,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get leads for a specific campaign"""
+    """
+    Get leads for a specific campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Verify campaign exists and belongs to tenant
-        campaign = db.query(LeadGenerationCampaign).filter(
-            LeadGenerationCampaign.id == campaign_id,
-            LeadGenerationCampaign.tenant_id == current_user.tenant_id
-        ).first()
+        campaign_stmt = select(LeadGenerationCampaign).where(
+            and_(
+                LeadGenerationCampaign.id == campaign_id,
+                LeadGenerationCampaign.tenant_id == current_user.tenant_id
+            )
+        )
+        campaign_result = await db.execute(campaign_stmt)
+        campaign = campaign_result.scalars().first()
         
         if not campaign:
             raise HTTPException(
@@ -505,13 +582,16 @@ def get_campaign_leads(
             )
         
         # Get leads for this campaign
-        leads_query = db.query(Lead).filter(
-            Lead.campaign_id == campaign_id,
-            Lead.tenant_id == current_user.tenant_id,
-            Lead.is_deleted == False
+        leads_stmt = select(Lead).where(
+            and_(
+                Lead.campaign_id == campaign_id,
+                Lead.tenant_id == current_user.tenant_id,
+                Lead.is_deleted == False
+            )
         )
-        
-        leads = leads_query.offset(skip).limit(limit).all()
+        leads_stmt = leads_stmt.offset(skip).limit(limit)
+        leads_result = await db.execute(leads_stmt)
+        leads = leads_result.scalars().all()
         
         # Convert to response format
         result = []
@@ -560,17 +640,25 @@ def get_campaign_leads(
 @router.post("/leads/{lead_id}/convert")
 async def convert_lead_to_customer(
     lead_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Convert a discovery lead to a customer record"""
+    """
+    Convert a discovery lead to a customer record
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Find the lead
-        lead = db.query(Lead).filter(
-            Lead.id == lead_id,
-            Lead.tenant_id == current_user.tenant_id,
-            Lead.is_deleted == False
-        ).first()
+        lead_stmt = select(Lead).where(
+            and_(
+                Lead.id == lead_id,
+                Lead.tenant_id == current_user.tenant_id,
+                Lead.is_deleted == False
+            )
+        )
+        lead_result = await db.execute(lead_stmt)
+        lead = lead_result.scalars().first()
         
         if not lead:
             raise HTTPException(
@@ -628,15 +716,15 @@ async def convert_lead_to_customer(
         )
         
         db.add(customer)
-        db.flush()  # Get the customer ID
+        await db.flush()  # Get the customer ID
         
         # Update the lead to reference the new customer
         lead.converted_to_customer_id = customer.id
         lead.status = LeadStatus.CONVERTED  # Update lead status
         lead.conversion_date = datetime.now(timezone.utc)
         
-        db.commit()
-        db.refresh(customer)
+        await db.commit()
+        await db.refresh(customer)
         
         return {
             "success": True,
@@ -647,7 +735,7 @@ async def convert_lead_to_customer(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to convert lead: {str(e)}"

@@ -3,12 +3,13 @@ Planning Application endpoints for UK county-based planning data monitoring
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, and_, or_, update
 from typing import List, Optional
 from datetime import datetime, timedelta
+import asyncio
 
-from app.core.database import get_db
+from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, get_current_tenant
 from app.models import User, Tenant
 from app.models.planning import (
@@ -30,11 +31,24 @@ router = APIRouter()
 @router.get("/counties", response_model=List[dict])
 async def get_available_counties(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get list of available UK counties for planning monitoring"""
-    service = PlanningApplicationService(db, current_user.tenant_id)
-    return service.get_available_counties()
+    """
+    Get list of available UK counties for planning monitoring
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_counties():
+        sync_db = SessionLocal()
+        try:
+            service = PlanningApplicationService(sync_db, current_user.tenant_id)
+            return service.get_available_counties()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _get_counties)
 
 
 @router.post("/campaigns", response_model=PlanningApplicationCampaignResponse)
@@ -42,15 +56,19 @@ async def create_planning_campaign(
     campaign_data: PlanningApplicationCampaignCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Create a new planning application campaign"""
     try:
         # Check if campaign for this county already exists
-        existing = db.query(PlanningApplicationCampaign).filter(
-            PlanningApplicationCampaign.county == campaign_data.county,
-            PlanningApplicationCampaign.tenant_id == current_tenant.id
-        ).first()
+        existing_stmt = select(PlanningApplicationCampaign).where(
+            and_(
+                PlanningApplicationCampaign.county == campaign_data.county,
+                PlanningApplicationCampaign.tenant_id == current_tenant.id
+            )
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing = existing_result.scalars().first()
         
         if existing:
             raise HTTPException(
@@ -85,15 +103,15 @@ async def create_planning_campaign(
         )
         
         db.add(campaign)
-        db.commit()
-        db.refresh(campaign)
+        await db.commit()
+        await db.refresh(campaign)
         
         return PlanningApplicationCampaignResponse.model_validate(campaign)
         
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create campaign: {str(e)}"
@@ -106,12 +124,18 @@ async def list_planning_campaigns(
     limit: int = 100,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List planning campaigns for current tenant"""
-    campaigns = db.query(PlanningApplicationCampaign).filter(
+    """
+    List planning campaigns for current tenant
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplicationCampaign).where(
         PlanningApplicationCampaign.tenant_id == current_tenant.id
-    ).order_by(PlanningApplicationCampaign.created_at.desc()).offset(skip).limit(limit).all()
+    ).order_by(PlanningApplicationCampaign.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    campaigns = result.scalars().all()
     
     return [PlanningApplicationCampaignResponse.model_validate(campaign) for campaign in campaigns]
 
@@ -121,13 +145,21 @@ async def get_planning_campaign(
     campaign_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get planning campaign by ID"""
-    campaign = db.query(PlanningApplicationCampaign).filter(
-        PlanningApplicationCampaign.id == campaign_id,
-        PlanningApplicationCampaign.tenant_id == current_tenant.id
-    ).first()
+    """
+    Get planning campaign by ID
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplicationCampaign).where(
+        and_(
+            PlanningApplicationCampaign.id == campaign_id,
+            PlanningApplicationCampaign.tenant_id == current_tenant.id
+        )
+    )
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
     
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -141,13 +173,21 @@ async def update_planning_campaign(
     campaign_update: PlanningApplicationCampaignUpdate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update planning campaign"""
-    campaign = db.query(PlanningApplicationCampaign).filter(
-        PlanningApplicationCampaign.id == campaign_id,
-        PlanningApplicationCampaign.tenant_id == current_tenant.id
-    ).first()
+    """
+    Update planning campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplicationCampaign).where(
+        and_(
+            PlanningApplicationCampaign.id == campaign_id,
+            PlanningApplicationCampaign.tenant_id == current_tenant.id
+        )
+    )
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
     
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -161,13 +201,13 @@ async def update_planning_campaign(
         campaign.updated_by = current_user.id
         campaign.updated_at = datetime.utcnow()
         
-        db.commit()
-        db.refresh(campaign)
+        await db.commit()
+        await db.refresh(campaign)
         
         return PlanningApplicationCampaignResponse.model_validate(campaign)
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update campaign: {str(e)}"
@@ -179,13 +219,22 @@ async def run_planning_campaign(
     campaign_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Run planning campaign on-demand"""
-    service = PlanningApplicationService(db, current_tenant.id)
+    """
+    Run planning campaign on-demand
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Service method is async, but service uses sync db.
+    """
+    sync_db = SessionLocal()
+    try:
+        service = PlanningApplicationService(sync_db, current_tenant.id)
+        result = await service.run_campaign(campaign_id)
+    finally:
+        sync_db.close()
     
     try:
-        result = await service.run_campaign(campaign_id)
         return {
             "message": "Campaign completed successfully",
             "result": result
@@ -202,19 +251,27 @@ async def delete_planning_campaign(
     campaign_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Delete planning campaign"""
-    campaign = db.query(PlanningApplicationCampaign).filter(
-        PlanningApplicationCampaign.id == campaign_id,
-        PlanningApplicationCampaign.tenant_id == current_tenant.id
-    ).first()
+    """
+    Delete planning campaign
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplicationCampaign).where(
+        and_(
+            PlanningApplicationCampaign.id == campaign_id,
+            PlanningApplicationCampaign.tenant_id == current_tenant.id
+        )
+    )
+    result = await db.execute(stmt)
+    campaign = result.scalars().first()
     
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    db.delete(campaign)
-    db.commit()
+    await db.delete(campaign)
+    await db.commit()
     
     return {"message": "Campaign deleted successfully"}
 
@@ -230,34 +287,64 @@ async def list_planning_applications(
     include_archived: bool = False,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List planning applications with filters"""
-    query = db.query(PlanningApplication).filter(
+    """
+    List planning applications with filters
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplication).where(
         PlanningApplication.tenant_id == current_tenant.id
     )
     
     # Apply filters
     if county:
-        query = query.filter(PlanningApplication.county == county)
+        stmt = stmt.where(PlanningApplication.county == county)
     
     if application_type:
-        query = query.filter(PlanningApplication.application_type == application_type)
+        stmt = stmt.where(PlanningApplication.application_type == application_type)
     
     if min_score is not None:
-        query = query.filter(PlanningApplication.relevance_score >= min_score)
+        stmt = stmt.where(PlanningApplication.relevance_score >= min_score)
     
     # Filter by archived status
     if include_archived:
-        query = query.filter(PlanningApplication.is_archived == True)
+        stmt = stmt.where(PlanningApplication.is_archived == True)
     else:
-        query = query.filter((PlanningApplication.is_archived == False) | (PlanningApplication.is_archived.is_(None)))
+        stmt = stmt.where(
+            or_(
+                PlanningApplication.is_archived == False,
+                PlanningApplication.is_archived.is_(None)
+            )
+        )
     
-    # Count total results
-    total = query.count()
+    # Count total results (need to create a separate count query)
+    count_stmt = select(func.count()).select_from(PlanningApplication).where(
+        PlanningApplication.tenant_id == current_tenant.id
+    )
+    if county:
+        count_stmt = count_stmt.where(PlanningApplication.county == county)
+    if application_type:
+        count_stmt = count_stmt.where(PlanningApplication.application_type == application_type)
+    if min_score is not None:
+        count_stmt = count_stmt.where(PlanningApplication.relevance_score >= min_score)
+    if include_archived:
+        count_stmt = count_stmt.where(PlanningApplication.is_archived == True)
+    else:
+        count_stmt = count_stmt.where(
+            or_(
+                PlanningApplication.is_archived == False,
+                PlanningApplication.is_archived.is_(None)
+            )
+        )
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar() or 0
     
     # Get paginated results
-    applications = query.order_by(PlanningApplication.created_at.desc()).offset(skip).limit(limit).all()
+    stmt = stmt.order_by(PlanningApplication.created_at.desc()).offset(skip).limit(limit)
+    applications_result = await db.execute(stmt)
+    applications = applications_result.scalars().all()
     
     total_pages = (total + limit - 1) // limit
     
@@ -275,13 +362,21 @@ async def get_planning_application(
     application_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get planning application by ID"""
-    application = db.query(PlanningApplication).filter(
-        PlanningApplication.id == application_id,
-        PlanningApplication.tenant_id == current_tenant.id
-    ).first()
+    """
+    Get planning application by ID
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplication).where(
+        and_(
+            PlanningApplication.id == application_id,
+            PlanningApplication.tenant_id == current_tenant.id
+        )
+    )
+    result = await db.execute(stmt)
+    application = result.scalars().first()
     
     if not application:
         raise HTTPException(status_code=404, detail="Planning application not found")
@@ -295,13 +390,21 @@ async def update_planning_application(
     application_update: PlanningApplicationUpdate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update planning application"""
-    application = db.query(PlanningApplication).filter(
-        PlanningApplication.id == application_id,
-        PlanningApplication.tenant_id == current_tenant.id
-    ).first()
+    """
+    Update planning application
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplication).where(
+        and_(
+            PlanningApplication.id == application_id,
+            PlanningApplication.tenant_id == current_tenant.id
+        )
+    )
+    result = await db.execute(stmt)
+    application = result.scalars().first()
     
     if not application:
         raise HTTPException(status_code=404, detail="Planning application not found")
@@ -312,13 +415,13 @@ async def update_planning_application(
         for field, value in update_data.items():
             setattr(application, field, value)
         
-        db.commit()
-        db.refresh(application)
+        await db.commit()
+        await db.refresh(application)
         
         return PlanningApplicationResponse.model_validate(application)
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update planning application: {str(e)}"
@@ -332,9 +435,13 @@ async def create_planning_keyword(
     keyword_data: PlanningKeywordCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a new planning keyword"""
+    """
+    Create a new planning keyword
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     keyword = PlanningApplicationKeyword(
         keyword=keyword_data.keyword,
         keyword_type=keyword_data.keyword_type,
@@ -344,8 +451,8 @@ async def create_planning_keyword(
     )
     
     db.add(keyword)
-    db.commit()
-    db.refresh(keyword)
+    await db.commit()
+    await db.refresh(keyword)
     
     return PlanningKeywordResponse.model_validate(keyword)
 
@@ -355,17 +462,23 @@ async def list_planning_keywords(
     keyword_type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List planning keywords for current tenant"""
-    query = db.query(PlanningApplicationKeyword).filter(
+    """
+    List planning keywords for current tenant
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplicationKeyword).where(
         PlanningApplicationKeyword.tenant_id == current_tenant.id
     )
     
     if keyword_type:
-        query = query.filter(PlanningApplicationKeyword.keyword_type == keyword_type)
+        stmt = stmt.where(PlanningApplicationKeyword.keyword_type == keyword_type)
     
-    keywords = query.order_by(PlanningApplicationKeyword.keyword).all()
+    stmt = stmt.order_by(PlanningApplicationKeyword.keyword)
+    result = await db.execute(stmt)
+    keywords = result.scalars().all()
     
     return [PlanningKeywordResponse.model_validate(keyword) for keyword in keywords]
 
@@ -375,19 +488,27 @@ async def delete_planning_keyword(
     keyword_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Delete planning keyword"""
-    keyword = db.query(PlanningApplicationKeyword).filter(
-        PlanningApplicationKeyword.id == keyword_id,
-        PlanningApplicationKeyword.tenant_id == current_tenant.id
-    ).first()
+    """
+    Delete planning keyword
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(PlanningApplicationKeyword).where(
+        and_(
+            PlanningApplicationKeyword.id == keyword_id,
+            PlanningApplicationKeyword.tenant_id == current_tenant.id
+        )
+    )
+    result = await db.execute(stmt)
+    keyword = result.scalars().first()
     
     if not keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
     
-    db.delete(keyword)
-    db.commit()
+    await db.delete(keyword)
+    await db.commit()
     
     return {"message": "Keyword deleted successfully"}
 
@@ -398,27 +519,48 @@ async def delete_planning_keyword(
 async def get_county_status(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get county status and configuration"""
-    service = PlanningApplicationService(db, current_tenant.id)
-    counties_data = service.get_available_counties()
+    """
+    Get county status and configuration
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_counties():
+        sync_db = SessionLocal()
+        try:
+            service = PlanningApplicationService(sync_db, current_tenant.id)
+            return service.get_available_counties()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    counties_data = await loop.run_in_executor(None, _get_counties)
     
     # Get or create county configurations for this tenant
     result = []
     for county in counties_data:
         # Check if we have a campaign for this county
-        campaign = db.query(PlanningApplicationCampaign).filter(
-            PlanningApplicationCampaign.county == county["name"],
-            PlanningApplicationCampaign.tenant_id == current_tenant.id
-        ).first()
+        campaign_stmt = select(PlanningApplicationCampaign).where(
+            and_(
+                PlanningApplicationCampaign.county == county["name"],
+                PlanningApplicationCampaign.tenant_id == current_tenant.id
+            )
+        )
+        campaign_result = await db.execute(campaign_stmt)
+        campaign = campaign_result.scalars().first()
         
         # Get recent application counts for this county
-        recent_app_count = db.query(PlanningApplication).filter(
-            PlanningApplication.county == county["name"],
-            PlanningApplication.tenant_id == current_tenant.id,
-            func.date(PlanningApplication.created_at) >= func.date(func.now() - timedelta(days=30))
-        ).count()
+        recent_app_stmt = select(func.count()).select_from(PlanningApplication).where(
+            and_(
+                PlanningApplication.county == county["name"],
+                PlanningApplication.tenant_id == current_tenant.id,
+                func.date(PlanningApplication.created_at) >= func.date(func.now() - timedelta(days=30))
+            )
+        )
+        recent_app_result = await db.execute(recent_app_stmt)
+        recent_app_count = recent_app_result.scalar() or 0
         
         result.append({
             "code": county["code"],
@@ -440,11 +582,24 @@ async def run_county_scan(
     county_code: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Run planning application scan for a specific county"""
-    service = PlanningApplicationService(db, current_tenant.id)
-    counties_data = service.get_available_counties()
+    """
+    Run planning application scan for a specific county
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_counties():
+        sync_db = SessionLocal()
+        try:
+            service = PlanningApplicationService(sync_db, current_tenant.id)
+            return service.get_available_counties()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    counties_data = await loop.run_in_executor(None, _get_counties)
     
     # Find the county by code
     county_config = next((c for c in counties_data if c["code"] == county_code), None)
@@ -453,10 +608,14 @@ async def run_county_scan(
     
     try:
         # Get or create a campaign for this county
-        campaign = db.query(PlanningApplicationCampaign).filter(
-            PlanningApplicationCampaign.county == county_config["name"],
-            PlanningApplicationCampaign.tenant_id == current_tenant.id
-        ).first()
+        campaign_stmt = select(PlanningApplicationCampaign).where(
+            and_(
+                PlanningApplicationCampaign.county == county_config["name"],
+                PlanningApplicationCampaign.tenant_id == current_tenant.id
+            )
+        )
+        campaign_result = await db.execute(campaign_stmt)
+        campaign = campaign_result.scalars().first()
         
         if not campaign:
             # Create a default campaign for this county
@@ -471,8 +630,8 @@ async def run_county_scan(
                 max_ai_analysis_per_run=20
             )
             db.add(campaign)
-            db.commit()
-            db.refresh(campaign)
+            await db.commit()
+            await db.refresh(campaign)
         
         # Start the planning campaign as a background Celery task
         task = run_planning_campaign_task.delay(campaign.id, current_tenant.id)
@@ -496,11 +655,24 @@ async def update_county_schedule(
     schedule_data: dict,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update scheduling settings for a county"""
-    service = PlanningApplicationService(db, current_tenant.id)
-    counties_data = service.get_available_counties()
+    """
+    Update scheduling settings for a county
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_counties():
+        sync_db = SessionLocal()
+        try:
+            service = PlanningApplicationService(sync_db, current_tenant.id)
+            return service.get_available_counties()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    counties_data = await loop.run_in_executor(None, _get_counties)
     
     # Find the county by code
     county_config = next((c for c in counties_data if c["code"] == county_code), None)
@@ -509,10 +681,14 @@ async def update_county_schedule(
     
     try:
         # Get or create a campaign for this county
-        campaign = db.query(PlanningApplicationCampaign).filter(
-            PlanningApplicationCampaign.county == county_config["name"],
-            PlanningApplicationCampaign.tenant_id == current_tenant.id
-        ).first()
+        campaign_stmt = select(PlanningApplicationCampaign).where(
+            and_(
+                PlanningApplicationCampaign.county == county_config["name"],
+                PlanningApplicationCampaign.tenant_id == current_tenant.id
+            )
+        )
+        campaign_result = await db.execute(campaign_stmt)
+        campaign = campaign_result.scalars().first()
         
         if not campaign:
             # Create a default campaign for this county
@@ -542,7 +718,7 @@ async def update_county_schedule(
         
         campaign.updated_by = current_user.id
         
-        db.commit()
+        await db.commit()
         
         return {
             "message": f"Scheduling updated for {county_config['name']}",
@@ -550,7 +726,7 @@ async def update_county_schedule(
             "next_run_at": campaign.next_run_at.isoformat() if campaign.next_run_at else None
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update schedule: {str(e)}"
@@ -562,11 +738,24 @@ async def stop_county_scan(
     county_code: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Stop planning application scan for a specific county"""
-    service = PlanningApplicationService(db, current_tenant.id)
-    counties_data = service.get_available_counties()
+    """
+    Stop planning application scan for a specific county
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_counties():
+        sync_db = SessionLocal()
+        try:
+            service = PlanningApplicationService(sync_db, current_tenant.id)
+            return service.get_available_counties()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    counties_data = await loop.run_in_executor(None, _get_counties)
     
     # Find the county by code
     county_config = next((c for c in counties_data if c["code"] == county_code), None)
@@ -575,16 +764,20 @@ async def stop_county_scan(
     
     try:
         # Get the campaign for this county
-        campaign = db.query(PlanningApplicationCampaign).filter(
-            PlanningApplicationCampaign.county == county_config["name"],
-            PlanningApplicationCampaign.tenant_id == current_tenant.id
-        ).first()
+        campaign_stmt = select(PlanningApplicationCampaign).where(
+            and_(
+                PlanningApplicationCampaign.county == county_config["name"],
+                PlanningApplicationCampaign.tenant_id == current_tenant.id
+            )
+        )
+        campaign_result = await db.execute(campaign_stmt)
+        campaign = campaign_result.scalars().first()
         
         if campaign:
             # Update campaign status to paused/stopped
             campaign.status = PlanningCampaignStatus.PAUSED
             campaign.updated_by = current_user.id
-            db.commit()
+            await db.commit()
         
         # TODO: Implement actual Celery task cancellation
         # This would require storing task IDs and using Celery's revoke functionality
@@ -605,19 +798,24 @@ async def archive_planning_applications(
     request: PlanningApplicationArchiveRequest,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Archive or unarchive planning applications"""
+    """
+    Archive or unarchive planning applications
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Update applications to set archived status
-        updated_count = db.query(PlanningApplication).filter(
-            PlanningApplication.id.in_(request.application_ids),
-            PlanningApplication.tenant_id == current_tenant.id
-        ).update(
-            {"is_archived": request.archived},
-            synchronize_session=False
-        )
-        db.commit()
+        stmt = update(PlanningApplication).where(
+            and_(
+                PlanningApplication.id.in_(request.application_ids),
+                PlanningApplication.tenant_id == current_tenant.id
+            )
+        ).values(is_archived=request.archived)
+        result = await db.execute(stmt)
+        updated_count = result.rowcount
+        await db.commit()
         
         action = "archived" if request.archived else "unarchived"
         return {
@@ -625,7 +823,7 @@ async def archive_planning_applications(
             "updated_count": updated_count
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update applications: {str(e)}"

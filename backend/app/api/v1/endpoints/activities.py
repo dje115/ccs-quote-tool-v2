@@ -10,14 +10,13 @@ Handles all sales activity operations including:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import asyncio
 from datetime import datetime
 from pydantic import BaseModel
 
-from app.core.dependencies import get_db, get_current_user, get_current_tenant
+from app.core.dependencies import get_current_user, get_current_tenant
 from app.core.database import get_async_db
 from app.models.tenant import User, Tenant
 from app.models.sales import SalesActivity, ActivityType, ActivityOutcome

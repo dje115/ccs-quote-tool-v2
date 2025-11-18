@@ -5,12 +5,14 @@ Public-facing endpoints for customers to view their contracts and manage tickets
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
+import asyncio
 
-from app.core.dependencies import get_db
+from app.core.database import get_async_db, SessionLocal
 from app.models.support_contract import SupportContract, ContractStatus
 from app.models.helpdesk import Ticket, TicketStatus
 from app.models.crm import Customer
@@ -23,12 +25,14 @@ from app.services.reporting_service import ReportingService
 router = APIRouter(prefix="/customer-portal", tags=["Customer Portal"])
 
 
-def get_customer_by_token(
+async def get_customer_by_token(
     x_customer_token: Optional[str] = Header(None, alias="X-Customer-Token"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> Customer:
     """
     Authenticate customer using portal access token
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     if not x_customer_token:
         raise HTTPException(
@@ -37,11 +41,15 @@ def get_customer_by_token(
         )
     
     # Find customer by portal access token
-    customer = db.query(Customer).filter(
-        Customer.portal_access_token == x_customer_token,
-        Customer.portal_access_enabled == True,
-        Customer.is_deleted == False
-    ).first()
+    stmt = select(Customer).where(
+        and_(
+            Customer.portal_access_token == x_customer_token,
+            Customer.portal_access_enabled == True,
+            Customer.is_deleted == False
+        )
+    )
+    result = await db.execute(stmt)
+    customer = result.scalars().first()
     
     if not customer:
         raise HTTPException(
@@ -56,14 +64,16 @@ def get_customer_by_token(
 async def get_customer_contracts(
     customer: Customer = Depends(get_customer_by_token),
     status_filter: Optional[str] = Query(None, alias="status"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get all support contracts for the authenticated customer"""
+    """
+    Get all support contracts for the authenticated customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = SupportContractService(db, customer.tenant_id)
-        
         # Get contracts for customer
-        query = db.query(SupportContract).filter(
+        stmt = select(SupportContract).where(
             and_(
                 SupportContract.tenant_id == customer.tenant_id,
                 SupportContract.customer_id == customer.id
@@ -73,14 +83,15 @@ async def get_customer_contracts(
         if status_filter:
             try:
                 status_enum = ContractStatus[status_filter.upper()]
-                query = query.filter(SupportContract.status == status_enum)
+                stmt = stmt.where(SupportContract.status == status_enum)
             except KeyError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid status: {status_filter}"
                 )
         
-        contracts = query.all()
+        result = await db.execute(stmt)
+        contracts = result.scalars().all()
         
         # Format response
         return {
@@ -121,12 +132,25 @@ async def get_customer_contracts(
 async def get_contract_details(
     contract_id: str,
     customer: Customer = Depends(get_customer_by_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get detailed information about a specific contract"""
+    """
+    Get detailed information about a specific contract
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = SupportContractService(db, customer.tenant_id)
-        contract = service.get_contract(contract_id)
+        def _get_contract():
+            sync_db = SessionLocal()
+            try:
+                service = SupportContractService(sync_db, customer.tenant_id)
+                return service.get_contract(contract_id)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        contract = await loop.run_in_executor(None, _get_contract)
         
         if not contract:
             raise HTTPException(
@@ -180,14 +204,16 @@ async def get_contract_details(
 async def get_customer_tickets(
     customer: Customer = Depends(get_customer_by_token),
     status_filter: Optional[str] = Query(None, alias="status"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get all tickets for the authenticated customer"""
+    """
+    Get all tickets for the authenticated customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, customer.tenant_id)
-        
         # Get tickets for customer
-        query = db.query(Ticket).filter(
+        stmt = select(Ticket).where(
             and_(
                 Ticket.tenant_id == customer.tenant_id,
                 Ticket.customer_id == customer.id
@@ -197,14 +223,16 @@ async def get_customer_tickets(
         if status_filter:
             try:
                 status_enum = TicketStatus[status_filter.upper()]
-                query = query.filter(Ticket.status == status_enum)
+                stmt = stmt.where(Ticket.status == status_enum)
             except KeyError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid status: {status_filter}"
                 )
         
-        tickets = query.order_by(Ticket.created_at.desc()).all()
+        stmt = stmt.order_by(Ticket.created_at.desc())
+        result = await db.execute(stmt)
+        tickets = result.scalars().all()
         
         # Format response
         return {
@@ -242,12 +270,25 @@ async def get_customer_tickets(
 async def get_ticket_details(
     ticket_id: str,
     customer: Customer = Depends(get_customer_by_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get detailed information about a specific ticket"""
+    """
+    Get detailed information about a specific ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = HelpdeskService(db, customer.tenant_id)
-        ticket = service.get_ticket(ticket_id)
+        def _get_ticket():
+            sync_db = SessionLocal()
+            try:
+                service = HelpdeskService(sync_db, customer.tenant_id)
+                return service.get_ticket(ticket_id)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        ticket = await loop.run_in_executor(None, _get_ticket)
         
         if not ticket:
             raise HTTPException(
@@ -264,9 +305,11 @@ async def get_ticket_details(
         
         # Get ticket history
         from app.models.helpdesk import TicketHistory
-        history = db.query(TicketHistory).filter(
+        history_stmt = select(TicketHistory).where(
             TicketHistory.ticket_id == ticket_id
-        ).order_by(TicketHistory.created_at.desc()).all()
+        ).order_by(TicketHistory.created_at.desc())
+        history_result = await db.execute(history_stmt)
+        history = history_result.scalars().all()
         
         return {
             'id': ticket.id,
@@ -309,13 +352,16 @@ async def create_ticket(
     priority: str = Query("medium", regex="^(low|medium|high|urgent)$"),
     category: Optional[str] = Query(None),
     customer: Customer = Depends(get_customer_by_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a new support ticket"""
+    """
+    Create a new support ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Service method is async, but service uses sync db.
+    """
     try:
-        from app.models.helpdesk import TicketPriority, TicketCategory
-        
-        service = HelpdeskService(db, customer.tenant_id)
+        from app.models.helpdesk import TicketPriority, TicketCategory, TicketType
         
         # Parse priority
         try:
@@ -337,15 +383,18 @@ async def create_ticket(
                     detail=f"Invalid category: {category}"
                 )
         
-        from app.models.helpdesk import TicketType
-        
-        ticket = await service.create_ticket(
-            subject=subject,
-            description=description,
-            customer_id=customer.id,
-            ticket_type=TicketType.SUPPORT,
-            priority=ticket_priority
-        )
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, customer.tenant_id)
+            ticket = await service.create_ticket(
+                subject=subject,
+                description=description,
+                customer_id=customer.id,
+                ticket_type=TicketType.SUPPORT,
+                priority=ticket_priority
+            )
+        finally:
+            sync_db.close()
         
         return {
             'id': ticket.id,
@@ -369,34 +418,47 @@ async def add_ticket_comment(
     ticket_id: str,
     comment: str,
     customer: Customer = Depends(get_customer_by_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Add a comment to a ticket"""
+    """
+    Add a comment to a ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = HelpdeskService(db, customer.tenant_id)
-        ticket = service.get_ticket(ticket_id)
+        def _get_and_add_comment():
+            sync_db = SessionLocal()
+            try:
+                service = HelpdeskService(sync_db, customer.tenant_id)
+                ticket = service.get_ticket(ticket_id)
+                
+                if not ticket:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Ticket not found"
+                    )
+                
+                # Verify ticket belongs to customer
+                if ticket.customer_id != customer.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access denied"
+                    )
+                
+                # Add comment (using customer ID as author_id for now)
+                service.add_comment(
+                    ticket_id=ticket_id,
+                    comment=comment,
+                    author_id=customer.id,
+                    author_name=customer.company_name,
+                    is_internal=False
+                )
+            finally:
+                sync_db.close()
         
-        if not ticket:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Ticket not found"
-            )
-        
-        # Verify ticket belongs to customer
-        if ticket.customer_id != customer.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied"
-            )
-        
-        # Add comment (using customer ID as author_id for now)
-        service.add_comment(
-            ticket_id=ticket_id,
-            comment=comment,
-            author_id=customer.id,
-            author_name=customer.company_name,
-            is_internal=False
-        )
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _get_and_add_comment)
         
         return {
             'success': True,

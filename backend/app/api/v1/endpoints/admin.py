@@ -1,13 +1,12 @@
 """Admin endpoints for system administration"""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 import logging
 
-from app.core.database import get_db, get_async_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user
 from app.core.config import settings
 

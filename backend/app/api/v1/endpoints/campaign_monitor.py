@@ -5,10 +5,7 @@ API endpoints for monitoring and managing campaign health.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from typing import Dict, Any, List
-
-from app.core.database import SessionLocal
 from app.models.tenant import User
 from app.core.dependencies import get_current_user
 from app.services.campaign_monitor_service import get_campaign_monitor

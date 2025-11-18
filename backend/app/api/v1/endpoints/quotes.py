@@ -4,9 +4,8 @@ Quote management endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import or_, select, func
+from sqlalchemy import or_, select, func, and_
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from decimal import Decimal
@@ -14,7 +13,7 @@ import uuid
 import asyncio
 from datetime import datetime
 
-from app.core.database import get_db, get_async_db
+from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
 from app.models.quotes import Quote, QuoteStatus
 from app.models.tenant import User, Tenant
@@ -704,31 +703,34 @@ async def duplicate_quote(
         await db.flush()
         
         # Copy quote items if any
-        # Need to load items relationship - use sync session for relationship loading
-        from app.core.database import SessionLocal
-        sync_db = SessionLocal()
-        try:
-            sync_quote = sync_db.query(Quote).filter(Quote.id == quote_id).first()
-            if sync_quote and sync_quote.items:
-                for item in sync_quote.items:
-                    from app.models.quotes import QuoteItem
-                    new_item = QuoteItem(
-                        id=str(uuid.uuid4()),
-                        tenant_id=current_user.tenant_id,
-                        quote_id=new_quote.id,
-                        description=item.description,
-                        category=item.category,
-                        quantity=item.quantity,
-                        unit_price=item.unit_price,
-                        discount_rate=item.discount_rate,
-                        discount_amount=item.discount_amount,
-                        total_price=item.total_price,
-                        notes=item.notes,
-                        sort_order=item.sort_order
-                    )
-                    db.add(new_item)
-        finally:
-            sync_db.close()
+        # Load items relationship using async query
+        from app.models.quotes import QuoteItem
+        items_stmt = select(QuoteItem).where(
+            and_(
+                QuoteItem.quote_id == quote_id,
+                QuoteItem.tenant_id == current_user.tenant_id
+            )
+        ).order_by(QuoteItem.sort_order)
+        items_result = await db.execute(items_stmt)
+        items = items_result.scalars().all()
+        
+        if items:
+            for item in items:
+                new_item = QuoteItem(
+                    id=str(uuid.uuid4()),
+                    tenant_id=current_user.tenant_id,
+                    quote_id=new_quote.id,
+                    description=item.description,
+                    category=item.category,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    discount_rate=item.discount_rate,
+                    discount_amount=item.discount_amount,
+                    total_price=item.total_price,
+                    notes=item.notes,
+                    sort_order=item.sort_order
+                )
+                db.add(new_item)
         
         await db.commit()
         await db.refresh(new_quote)
@@ -1118,20 +1120,24 @@ async def create_quote_version(
             'items': []  # Will be populated below using sync session
         }
         
-        # Need to load items relationship - use sync session for relationship loading
-        from app.core.database import SessionLocal
-        sync_db = SessionLocal()
-        try:
-            sync_quote = sync_db.query(Quote).filter(Quote.id == quote_id).first()
-            if sync_quote and sync_quote.items:
-                quote_snapshot['items'] = [{
-                    'description': item.description,
-                    'quantity': float(item.quantity),
-                    'unit_price': float(item.unit_price),
-                    'total_price': float(item.total_price)
-                } for item in sync_quote.items]
-        finally:
-            sync_db.close()
+        # Load items relationship using async query
+        from app.models.quotes import QuoteItem
+        items_stmt = select(QuoteItem).where(
+            and_(
+                QuoteItem.quote_id == quote_id,
+                QuoteItem.tenant_id == current_user.tenant_id
+            )
+        ).order_by(QuoteItem.sort_order)
+        items_result = await db.execute(items_stmt)
+        items = items_result.scalars().all()
+        
+        if items:
+            quote_snapshot['items'] = [{
+                'description': item.description,
+                'quantity': float(item.quantity),
+                'unit_price': float(item.unit_price),
+                'total_price': float(item.total_price)
+            } for item in items]
         
         version = QuoteVersion(
             quote_id=quote_id,

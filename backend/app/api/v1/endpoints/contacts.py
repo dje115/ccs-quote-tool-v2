@@ -4,14 +4,13 @@ Contact management endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from pydantic import BaseModel, EmailStr
 import uuid
 from datetime import datetime
 
-from app.core.database import get_db, get_async_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user, check_permission
 from app.models.crm import Contact, ContactRole
 from app.models.tenant import User

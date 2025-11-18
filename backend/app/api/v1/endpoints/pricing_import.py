@@ -5,11 +5,12 @@ Import pricing from Excel/CSV files with AI extraction
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from pydantic import BaseModel
+import asyncio
 
-from app.core.database import get_db
+from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, get_current_tenant
 from app.core.api_keys import get_api_keys
 from app.models.tenant import User, Tenant
@@ -33,9 +34,14 @@ async def import_pricing(
     use_ai_extraction: bool = Query(True, description="Use AI to extract from any format"),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Import pricing from Excel or CSV file"""
+    """
+    Import pricing from Excel or CSV file
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
         # Validate file type
         file_ext = file.filename.lower().split('.')[-1] if file.filename else ''
@@ -48,21 +54,38 @@ async def import_pricing(
         # Read file content
         file_content = await file.read()
         
-        # Get API keys
-        api_keys = get_api_keys(db, current_tenant)
+        # Get API keys (need sync session for this)
+        def _get_api_keys():
+            sync_db = SessionLocal()
+            try:
+                return get_api_keys(sync_db, current_tenant)
+            finally:
+                sync_db.close()
         
-        # Import pricing
-        import_service = PricingImportService(
-            db=db,
-            tenant_id=current_tenant.id,
-            openai_api_key=api_keys.openai if use_ai_extraction else None
-        )
+        loop = asyncio.get_event_loop()
+        api_keys = await loop.run_in_executor(None, _get_api_keys)
         
-        result = await import_service.import_pricing_from_file(
-            file_content=file_content,
-            filename=file.filename or 'import',
-            use_ai_extraction=use_ai_extraction
-        )
+        # Import pricing (service uses sync session)
+        def _import_pricing():
+            sync_db = SessionLocal()
+            try:
+                import_service = PricingImportService(
+                    db=sync_db,
+                    tenant_id=current_tenant.id,
+                    openai_api_key=api_keys.openai if use_ai_extraction else None
+                )
+                # Note: import_service.import_pricing_from_file is async, but service uses sync db
+                # We'll need to handle this carefully
+                import asyncio
+                return asyncio.run(import_service.import_pricing_from_file(
+                    file_content=file_content,
+                    filename=file.filename or 'import',
+                    use_ai_extraction=use_ai_extraction
+                ))
+            finally:
+                sync_db.close()
+        
+        result = await loop.run_in_executor(None, _import_pricing)
         
         if not result.get('success'):
             raise HTTPException(
@@ -85,12 +108,25 @@ async def import_pricing(
 async def get_import_template(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get pricing import template structure"""
+    """
+    Get pricing import template structure
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        import_service = PricingImportService(db, current_tenant.id)
-        template = import_service.get_import_template()
+        def _get_template():
+            sync_db = SessionLocal()
+            try:
+                import_service = PricingImportService(sync_db, current_tenant.id)
+                return import_service.get_import_template()
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        template = await loop.run_in_executor(None, _get_template)
         return template
     
     except Exception as e:

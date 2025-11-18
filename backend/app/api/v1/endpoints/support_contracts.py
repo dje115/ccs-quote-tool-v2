@@ -5,11 +5,12 @@ Multi-tenant aware contract management
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import date, datetime, timedelta
+import asyncio
 
-from app.core.database import get_db
+from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant
 from app.services.support_contract_service import SupportContractService
@@ -33,12 +34,15 @@ async def list_contracts(
     days_ahead: int = Query(90, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List support contracts with optional filters"""
+    """
+    List support contracts with optional filters
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = SupportContractService(db, current_tenant.id)
-        
         # Convert string enums to enum types
         contract_type_enum = None
         if contract_type:
@@ -60,13 +64,22 @@ async def list_contracts(
                     detail=f"Invalid status: {status}"
                 )
         
-        contracts = service.list_contracts(
-            customer_id=customer_id,
-            contract_type=contract_type_enum,
-            status=status_enum,
-            expiring_soon=expiring_soon,
-            days_ahead=days_ahead
-        )
+        def _list_contracts():
+            sync_db = SessionLocal()
+            try:
+                service = SupportContractService(sync_db, current_tenant.id)
+                return service.list_contracts(
+                    customer_id=customer_id,
+                    contract_type=contract_type_enum,
+                    status=status_enum,
+                    expiring_soon=expiring_soon,
+                    days_ahead=days_ahead
+                )
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        contracts = await loop.run_in_executor(None, _list_contracts)
         
         # Convert to response format
         result = []
@@ -139,12 +152,15 @@ async def create_contract(
     contract_data: SupportContractCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a new support contract"""
+    """
+    Create a new support contract
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = SupportContractService(db, current_tenant.id)
-        
         # Convert enum strings to enum types
         contract_type = ContractType(contract_data.contract_type.value)
         renewal_frequency = None
@@ -152,31 +168,40 @@ async def create_contract(
             from app.models.support_contract import RenewalFrequency
             renewal_frequency = RenewalFrequency(contract_data.renewal_frequency.value)
         
-        contract = service.create_contract(
-            customer_id=contract_data.customer_id,
-            contract_name=contract_data.contract_name,
-            contract_type=contract_type,
-            start_date=contract_data.start_date,
-            description=contract_data.description,
-            end_date=contract_data.end_date,
-            renewal_frequency=renewal_frequency,
-            auto_renew=contract_data.auto_renew,
-            monthly_value=contract_data.monthly_value,
-            annual_value=contract_data.annual_value,
-            setup_fee=contract_data.setup_fee,
-            currency=contract_data.currency,
-            terms=contract_data.terms,
-            sla_level=contract_data.sla_level,
-            included_services=contract_data.included_services,
-            excluded_services=contract_data.excluded_services,
-            support_hours_included=contract_data.support_hours_included,
-            renewal_notice_days=contract_data.renewal_notice_days,
-            cancellation_notice_days=contract_data.cancellation_notice_days,
-            quote_id=contract_data.quote_id,
-            opportunity_id=contract_data.opportunity_id,
-            notes=contract_data.notes,
-            contract_metadata=contract_data.contract_metadata
-        )
+        def _create_contract():
+            sync_db = SessionLocal()
+            try:
+                service = SupportContractService(sync_db, current_tenant.id)
+                return service.create_contract(
+                    customer_id=contract_data.customer_id,
+                    contract_name=contract_data.contract_name,
+                    contract_type=contract_type,
+                    start_date=contract_data.start_date,
+                    description=contract_data.description,
+                    end_date=contract_data.end_date,
+                    renewal_frequency=renewal_frequency,
+                    auto_renew=contract_data.auto_renew,
+                    monthly_value=contract_data.monthly_value,
+                    annual_value=contract_data.annual_value,
+                    setup_fee=contract_data.setup_fee,
+                    currency=contract_data.currency,
+                    terms=contract_data.terms,
+                    sla_level=contract_data.sla_level,
+                    included_services=contract_data.included_services,
+                    excluded_services=contract_data.excluded_services,
+                    support_hours_included=contract_data.support_hours_included,
+                    renewal_notice_days=contract_data.renewal_notice_days,
+                    cancellation_notice_days=contract_data.cancellation_notice_days,
+                    quote_id=contract_data.quote_id,
+                    opportunity_id=contract_data.opportunity_id,
+                    notes=contract_data.notes,
+                    contract_metadata=contract_data.contract_metadata
+                )
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        contract = await loop.run_in_executor(None, _create_contract)
         
         if not contract:
             raise HTTPException(status_code=400, detail="Invalid customer or contract creation failed")
@@ -246,11 +271,24 @@ async def get_contract(
     contract_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get a support contract"""
-    service = SupportContractService(db, current_tenant.id)
-    contract = service.get_contract(contract_id)
+    """
+    Get a support contract
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_contract():
+        sync_db = SessionLocal()
+        try:
+            service = SupportContractService(sync_db, current_tenant.id)
+            return service.get_contract(contract_id)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    contract = await loop.run_in_executor(None, _get_contract)
     
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -315,11 +353,14 @@ async def update_contract(
     contract_data: SupportContractUpdate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update a support contract"""
-    service = SupportContractService(db, current_tenant.id)
+    """
+    Update a support contract
     
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     # Convert enum strings to enum types if provided
     update_kwargs = contract_data.dict(exclude_unset=True)
     
@@ -330,7 +371,16 @@ async def update_contract(
         from app.models.support_contract import RenewalFrequency
         update_kwargs['renewal_frequency'] = RenewalFrequency(update_kwargs['renewal_frequency'].value)
     
-    contract = service.update_contract(contract_id, **update_kwargs)
+    def _update_contract():
+        sync_db = SessionLocal()
+        try:
+            service = SupportContractService(sync_db, current_tenant.id)
+            return service.update_contract(contract_id, **update_kwargs)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    contract = await loop.run_in_executor(None, _update_contract)
     
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -395,11 +445,24 @@ async def cancel_contract(
     cancellation_reason: str = Query(...),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Cancel a support contract"""
-    service = SupportContractService(db, current_tenant.id)
-    contract = service.cancel_contract(contract_id, cancellation_reason, current_user.id)
+    """
+    Cancel a support contract
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _cancel_contract():
+        sync_db = SessionLocal()
+        try:
+            service = SupportContractService(sync_db, current_tenant.id)
+            return service.cancel_contract(contract_id, cancellation_reason, current_user.id)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    contract = await loop.run_in_executor(None, _cancel_contract)
     
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
@@ -462,11 +525,24 @@ async def cancel_contract(
 async def get_recurring_revenue_summary(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get total recurring revenue summary"""
-    service = SupportContractService(db, current_tenant.id)
-    return service.get_total_recurring_revenue()
+    """
+    Get total recurring revenue summary
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_summary():
+        sync_db = SessionLocal()
+        try:
+            service = SupportContractService(sync_db, current_tenant.id)
+            return service.get_total_recurring_revenue()
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _get_summary)
 
 
 @router.get("/expiring-soon/list")
@@ -474,11 +550,24 @@ async def get_expiring_contracts(
     days_ahead: int = Query(90, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get contracts expiring soon"""
-    service = SupportContractService(db, current_tenant.id)
-    contracts = service.get_contracts_expiring_soon(days_ahead)
+    """
+    Get contracts expiring soon
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
+    def _get_expiring():
+        sync_db = SessionLocal()
+        try:
+            service = SupportContractService(sync_db, current_tenant.id)
+            return service.get_contracts_expiring_soon(days_ahead)
+        finally:
+            sync_db.close()
+    
+    loop = asyncio.get_event_loop()
+    contracts = await loop.run_in_executor(None, _get_expiring)
     
     # Convert to response format (similar to list_contracts)
     result = []

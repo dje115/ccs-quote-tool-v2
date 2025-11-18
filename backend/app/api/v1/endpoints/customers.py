@@ -4,7 +4,6 @@ Customer management endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
@@ -12,7 +11,7 @@ import uuid
 import asyncio
 from datetime import datetime
 
-from app.core.database import get_db, get_async_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user, get_current_tenant, check_permission
 from app.core.api_keys import get_api_keys
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
@@ -484,7 +483,7 @@ async def run_ai_analysis(
     options: AIAnalysisOptions = AIAnalysisOptions(),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Queue AI analysis for customer to run in background
@@ -498,6 +497,8 @@ async def run_ai_analysis(
     
     Args:
         options: Analysis options controlling which data sources to update
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     from sqlalchemy import select
     from app.core.celery_app import celery_app
@@ -508,7 +509,7 @@ async def run_ai_analysis(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     customer = result.scalars().first()
     
     if not customer:
@@ -539,7 +540,7 @@ async def run_ai_analysis(
     customer.ai_analysis_task_id = task.id
     customer.ai_analysis_started_at = datetime.now(timezone.utc)
     customer.ai_analysis_completed_at = None
-    db.commit()
+    await db.commit()
     
     return {
         'success': True,
@@ -552,17 +553,28 @@ async def run_ai_analysis(
 
 
 @router.post("/{customer_id}/addresses/exclude")
-def exclude_address(
+async def exclude_address(
     customer_id: str,
     request: dict,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Exclude an address from display (mark as 'Not this business')"""
-    from sqlalchemy.orm.attributes import flag_modified
+    """
+    Exclude an address from display (mark as 'Not this business')
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    from sqlalchemy import select
     
     try:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalars().first()
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
@@ -579,12 +591,8 @@ def exclude_address(
             excluded_addresses.append(location_id)
             customer.excluded_addresses = excluded_addresses
             
-            # CRITICAL: Tell SQLAlchemy the JSON field changed
-            flag_modified(customer, 'excluded_addresses')
-            
-            db.add(customer)
-            db.commit()
-            db.refresh(customer)
+            await db.commit()
+            await db.refresh(customer)
         
         return {
             'success': True,
@@ -593,6 +601,7 @@ def exclude_address(
         }
     
     except Exception as e:
+        await db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error excluding address: {str(e)}"
@@ -600,17 +609,28 @@ def exclude_address(
 
 
 @router.post("/{customer_id}/addresses/include")
-def include_address(
+async def include_address(
     customer_id: str,
     request: dict,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Include an address back in display (restore from excluded)"""
-    from sqlalchemy.orm.attributes import flag_modified
+    """
+    Include an address back in display (restore from excluded)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    from sqlalchemy import select
     
     try:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalars().first()
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
@@ -627,12 +647,8 @@ def include_address(
             excluded_addresses.remove(location_id)
             customer.excluded_addresses = excluded_addresses
             
-            # CRITICAL: Tell SQLAlchemy the JSON field changed
-            flag_modified(customer, 'excluded_addresses')
-            
-            db.add(customer)
-            db.commit()
-            db.refresh(customer)
+            await db.commit()
+            await db.refresh(customer)
         
         return {
             'success': True,
@@ -641,6 +657,7 @@ def include_address(
         }
     
     except Exception as e:
+        await db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error including address: {str(e)}"
@@ -650,7 +667,7 @@ def include_address(
 @router.get("/{customer_id}/accounts-documents")
 async def list_accounts_documents(
     customer_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -660,13 +677,21 @@ async def list_accounts_documents(
     1. Database query filters by customer.tenant_id == current_user.tenant_id
     2. Only documents belonging to the authenticated tenant are returned
     3. MinIO paths include tenant_id: accounts/{tenant_id}/{customer_id}/...
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
+        from sqlalchemy import select
+        
         # SECURITY: Database query enforces tenant isolation
-        customer = db.query(Customer).filter(
-            Customer.id == customer_id,
-            Customer.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalars().first()
         
         if not customer:
             raise HTTPException(
@@ -710,7 +735,7 @@ async def list_accounts_documents(
 async def view_accounts_document(
     customer_id: str,
     transaction_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -720,12 +745,21 @@ async def view_accounts_document(
     1. Database query filters by customer.tenant_id == current_user.tenant_id
     2. MinIO path validation ensures path starts with accounts/{tenant_id}/
     3. Only documents belonging to the authenticated tenant can be accessed
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        customer = db.query(Customer).filter(
-            Customer.id == customer_id,
-            Customer.tenant_id == current_user.tenant_id
-        ).first()
+        from sqlalchemy import select
+        from fastapi.responses import Response
+        
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalars().first()
         
         if not customer:
             raise HTTPException(
@@ -802,7 +836,7 @@ async def get_accounts_document_url(
     customer_id: str,
     transaction_id: str,
     expires_hours: int = Query(default=24, ge=1, le=168),  # 1 hour to 7 days
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -813,14 +847,21 @@ async def get_accounts_document_url(
     2. MinIO path validation ensures path starts with accounts/{tenant_id}/
     3. Presigned URLs are time-limited (1-168 hours)
     4. Only documents belonging to the authenticated tenant can be accessed
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         from datetime import timedelta
+        from sqlalchemy import select
         
-        customer = db.query(Customer).filter(
-            Customer.id == customer_id,
-            Customer.tenant_id == current_user.tenant_id
-        ).first()
+        stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        customer = result.scalars().first()
         
         if not customer:
             raise HTTPException(

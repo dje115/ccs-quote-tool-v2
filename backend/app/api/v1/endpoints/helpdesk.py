@@ -4,14 +4,14 @@ Helpdesk API Endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
-from app.core.dependencies import get_db, get_current_user, get_current_tenant, check_permission
-from app.core.database import get_async_db
+from app.core.dependencies import get_current_user, get_current_tenant, check_permission
+from app.core.database import get_async_db, SessionLocal
 from app.models.tenant import User, Tenant
 from app.models.helpdesk import TicketStatus, TicketPriority, TicketType
 from app.services.helpdesk_service import HelpdeskService
@@ -124,19 +124,23 @@ async def create_customer_ticket(
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
+        # Find or create customer by email (use async query)
+        customer_stmt = select(Customer).where(
+            and_(
+                Customer.tenant_id == tenant.id,
+                Customer.main_email == ticket_data.contact_email
+            )
+        )
+        customer_result = await db.execute(customer_stmt)
+        customer = customer_result.scalars().first()
+        
+        customer_id = customer.id if customer else None
+        
         # HelpdeskService currently expects sync session - use sync wrapper
         from app.core.database import SessionLocal
         sync_db = SessionLocal()
         try:
             service = HelpdeskService(sync_db, tenant.id)
-            
-            # Find or create customer by email (use sync session for this query)
-            customer = sync_db.query(Customer).filter(
-                Customer.tenant_id == tenant.id,
-                Customer.main_email == ticket_data.contact_email
-            ).first()
-            
-            customer_id = customer.id if customer else None
             
             ticket = await service.create_ticket(
                 subject=ticket_data.subject,

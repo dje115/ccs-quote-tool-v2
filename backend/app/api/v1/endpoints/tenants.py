@@ -4,13 +4,14 @@ Tenant management endpoints - Super Admin Only
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 from pydantic import BaseModel, EmailStr
 import uuid
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_super_admin
 from app.core.security import get_password_hash
 from app.models.tenant import Tenant, User, TenantStatus, UserRole
@@ -61,10 +62,16 @@ async def list_tenants(
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List all tenants (super admin only)"""
-    tenants = db.query(Tenant).offset(skip).limit(limit).all()
+    """
+    List all tenants (super admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Tenant).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    tenants = result.scalars().all()
     return tenants
 
 
@@ -72,12 +79,17 @@ async def list_tenants(
 async def create_tenant(
     tenant_data: TenantCreate,
     current_user: User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create new tenant with admin user (super admin only)"""
+    """
+    Create new tenant with admin user (super admin only)
     
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if slug already exists
-    existing_tenant = db.query(Tenant).filter_by(slug=tenant_data.slug).first()
+    stmt = select(Tenant).where(Tenant.slug == tenant_data.slug)
+    result = await db.execute(stmt)
+    existing_tenant = result.scalars().first()
     if existing_tenant:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -108,7 +120,7 @@ async def create_tenant(
         )
         
         db.add(tenant)
-        db.flush()
+        await db.flush()
         
         # Create tenant admin user
         hashed_password = get_password_hash(tenant_data.admin_password)
@@ -134,14 +146,14 @@ async def create_tenant(
         )
         
         db.add(admin_user)
-        db.commit()
+        await db.commit()
         
         print(f"[OK] Created tenant '{tenant.name}' with admin user {admin_user.email}")
         
         return tenant
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating tenant: {str(e)}"
@@ -152,10 +164,16 @@ async def create_tenant(
 async def get_tenant(
     tenant_id: str,
     current_user: User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get tenant by ID (super admin only)"""
-    tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+    """
+    Get tenant by ID (super admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Tenant).where(Tenant.id == tenant_id)
+    result = await db.execute(stmt)
+    tenant = result.scalars().first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return tenant
@@ -166,10 +184,16 @@ async def update_tenant(
     tenant_id: str,
     tenant_update: TenantUpdate,
     current_user: User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update tenant (super admin only)"""
-    tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+    """
+    Update tenant (super admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Tenant).where(Tenant.id == tenant_id)
+    result = await db.execute(stmt)
+    tenant = result.scalars().first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
@@ -191,13 +215,13 @@ async def update_tenant(
     if tenant_update.google_maps_api_key:
         tenant.google_maps_api_key = tenant_update.google_maps_api_key
     
-    db.commit()
+    await db.commit()
     
     # Invalidate API key cache for this tenant
     from app.core.api_keys import invalidate_api_key_cache
     invalidate_api_key_cache(tenant_id)
     
-    db.refresh(tenant)
+    await db.refresh(tenant)
     
     return tenant
 
@@ -206,16 +230,22 @@ async def update_tenant(
 async def delete_tenant(
     tenant_id: str,
     current_user: User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Soft delete tenant (super admin only)"""
-    tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+    """
+    Soft delete tenant (super admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Tenant).where(Tenant.id == tenant_id)
+    result = await db.execute(stmt)
+    tenant = result.scalars().first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     
     # Soft delete by setting status to suspended
     tenant.status = TenantStatus.SUSPENDED
-    db.commit()
+    await db.commit()
     
     return None
 
@@ -224,12 +254,17 @@ async def delete_tenant(
 @router.post("/signup", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def signup_tenant(
     tenant_data: TenantCreate,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Public endpoint for new tenant signup"""
+    """
+    Public endpoint for new tenant signup
     
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if slug already exists
-    existing_tenant = db.query(Tenant).filter_by(slug=tenant_data.slug).first()
+    stmt = select(Tenant).where(Tenant.slug == tenant_data.slug)
+    result = await db.execute(stmt)
+    existing_tenant = result.scalars().first()
     if existing_tenant:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -237,7 +272,9 @@ async def signup_tenant(
         )
     
     # Check if email already exists
-    existing_user = db.query(User).filter_by(email=tenant_data.admin_email).first()
+    user_stmt = select(User).where(User.email == tenant_data.admin_email)
+    user_result = await db.execute(user_stmt)
+    existing_user = user_result.scalars().first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -273,7 +310,7 @@ async def signup_tenant(
         )
         
         db.add(tenant)
-        db.flush()
+        await db.flush()
         
         # Create tenant admin user
         hashed_password = get_password_hash(tenant_data.admin_password)
@@ -306,7 +343,7 @@ async def signup_tenant(
         )
         
         db.add(admin_user)
-        db.commit()
+        await db.commit()
         
         print(f"[OK] New tenant signed up: {tenant.name} ({tenant.slug})")
         print(f"[OK] Admin user: {admin_user.email}")
@@ -314,7 +351,7 @@ async def signup_tenant(
         return tenant
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating tenant: {str(e)}"

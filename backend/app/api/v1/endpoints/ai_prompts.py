@@ -4,13 +4,15 @@ AI Prompts API endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import or_, and_, select
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
+import asyncio
 
-from app.core.dependencies import get_db, get_current_user, get_current_tenant
+from app.core.database import get_async_db, SessionLocal
+from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant, UserRole
 from app.models.ai_prompt import AIPrompt, AIPromptVersion, PromptCategory
 from app.models.ai_provider import AIProvider, ProviderAPIKey
@@ -131,37 +133,49 @@ class AvailableProviderResponse(BaseModel):
 async def get_available_providers(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get list of providers that have valid API keys (tenant or system level)"""
     try:
-        providers = db.query(AIProvider).filter(
+        providers_stmt = select(AIProvider).where(
             AIProvider.is_active == True
-        ).all()
+        )
+        providers_result = await db.execute(providers_stmt)
+        providers = providers_result.scalars().all()
         
         results = []
         
         for provider in providers:
             # Check if tenant or system has valid key
-            has_tenant_key = db.query(ProviderAPIKey).filter(
-                ProviderAPIKey.provider_id == provider.id,
-                ProviderAPIKey.tenant_id == current_tenant.id,
-                ProviderAPIKey.is_valid == True
-            ).first() is not None
+            tenant_key_stmt = select(ProviderAPIKey).where(
+                and_(
+                    ProviderAPIKey.provider_id == provider.id,
+                    ProviderAPIKey.tenant_id == current_tenant.id,
+                    ProviderAPIKey.is_valid == True
+                )
+            )
+            tenant_key_result = await db.execute(tenant_key_stmt)
+            has_tenant_key = tenant_key_result.scalars().first() is not None
             
-            has_system_key = db.query(ProviderAPIKey).filter(
-                ProviderAPIKey.provider_id == provider.id,
-                ProviderAPIKey.tenant_id.is_(None),
-                ProviderAPIKey.is_valid == True
-            ).first() is not None
+            system_key_stmt = select(ProviderAPIKey).where(
+                and_(
+                    ProviderAPIKey.provider_id == provider.id,
+                    ProviderAPIKey.tenant_id.is_(None),
+                    ProviderAPIKey.is_valid == True
+                )
+            )
+            system_key_result = await db.execute(system_key_stmt)
+            has_system_key = system_key_result.scalars().first() is not None
             
             # For OpenAI, also check legacy tenant.openai_api_key
             if provider.slug == "openai":
                 if current_tenant.openai_api_key:
                     has_tenant_key = True
-                system_tenant = db.query(Tenant).filter(
-                    (Tenant.name == "System") | (Tenant.plan == "system")
-                ).first()
+                system_tenant_stmt = select(Tenant).where(
+                    or_(Tenant.name == "System", Tenant.plan == "system")
+                )
+                system_tenant_result = await db.execute(system_tenant_stmt)
+                system_tenant = system_tenant_result.scalars().first()
                 if system_tenant and system_tenant.openai_api_key:
                     has_system_key = True
             
@@ -189,14 +203,18 @@ async def get_available_providers(
 async def get_available_models(
     provider_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get list of available models for a provider"""
     try:
-        provider = db.query(AIProvider).filter(
-            AIProvider.id == provider_id,
-            AIProvider.is_active == True
-        ).first()
+        provider_stmt = select(AIProvider).where(
+            and_(
+                AIProvider.id == provider_id,
+                AIProvider.is_active == True
+            )
+        )
+        provider_result = await db.execute(provider_stmt)
+        provider = provider_result.scalars().first()
         
         if not provider:
             raise HTTPException(
@@ -240,7 +258,7 @@ async def list_prompts(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     is_system: Optional[bool] = Query(None, description="Filter by system prompts"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """List all prompts with optional filters (Advanced users only)"""
     # Check if user has permission to manage prompts (admin or tenant_admin)
@@ -250,23 +268,21 @@ async def list_prompts(
             detail="Advanced user access required to manage AI prompts"
         )
     try:
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
-        
         # Build query to get both system prompts and tenant-specific prompts
-        query = db.query(AIPrompt)
+        stmt = select(AIPrompt)
         
         # Apply filters
         if category:
-            query = query.filter(AIPrompt.category == category)
+            stmt = stmt.where(AIPrompt.category == category)
         if is_active is not None:
-            query = query.filter(AIPrompt.is_active == is_active)
+            stmt = stmt.where(AIPrompt.is_active == is_active)
         if is_system is not None:
-            query = query.filter(AIPrompt.is_system == is_system)
+            stmt = stmt.where(AIPrompt.is_system == is_system)
         else:
             # If not filtering by is_system, get both system and tenant prompts
             # System prompts: is_system=True AND tenant_id IS NULL
             # Tenant prompts: is_system=False AND tenant_id = current_user.tenant_id
-            query = query.filter(
+            stmt = stmt.where(
                 or_(
                     and_(AIPrompt.is_system == True, AIPrompt.tenant_id.is_(None)),
                     and_(AIPrompt.is_system == False, AIPrompt.tenant_id == current_user.tenant_id)
@@ -275,12 +291,14 @@ async def list_prompts(
         
         if tenant_id:
             # If specific tenant_id requested, filter to that tenant's prompts only
-            query = query.filter(AIPrompt.tenant_id == tenant_id)
+            stmt = stmt.where(AIPrompt.tenant_id == tenant_id)
         
         if quote_type:
-            query = query.filter(AIPrompt.quote_type == quote_type)
+            stmt = stmt.where(AIPrompt.quote_type == quote_type)
         
-        prompts = query.order_by(AIPrompt.category, AIPrompt.version.desc()).all()
+        stmt = stmt.order_by(AIPrompt.category, AIPrompt.version.desc())
+        prompts_result = await db.execute(stmt)
+        prompts = prompts_result.scalars().all()
         
         return prompts
     except Exception as e:
@@ -294,7 +312,7 @@ async def list_prompts(
 async def get_prompt(
     prompt_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get a specific prompt by ID (Advanced users only)"""
     try:
@@ -305,7 +323,9 @@ async def get_prompt(
                 detail="Advanced user access required to manage AI prompts"
             )
         
-        prompt = db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        prompt_stmt = select(AIPrompt).where(AIPrompt.id == prompt_id)
+        prompt_result = await db.execute(prompt_stmt)
+        prompt = prompt_result.scalars().first()
         
         if not prompt:
             raise HTTPException(
@@ -335,7 +355,7 @@ async def create_prompt(
     prompt_data: PromptCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Create a new prompt (Advanced users only)"""
     try:
@@ -353,33 +373,40 @@ async def create_prompt(
                 detail="Only super admins can create system prompts"
             )
         
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
+        def _create_prompt():
+            sync_db = SessionLocal()
+            try:
+                service = AIPromptService(sync_db, tenant_id=current_user.tenant_id)
+                return service.create_prompt(
+                    name=prompt_data.name,
+                    category=prompt_data.category,
+                    system_prompt=prompt_data.system_prompt,
+                    user_prompt_template=prompt_data.user_prompt_template,
+                    model=prompt_data.model,
+                    temperature=prompt_data.temperature,
+                    max_tokens=prompt_data.max_tokens,
+                    is_system=prompt_data.is_system,
+                    tenant_id=None if prompt_data.is_system else current_user.tenant_id,
+                    created_by=current_user.id,
+                    variables=prompt_data.variables,
+                    description=prompt_data.description,
+                    quote_type=prompt_data.quote_type,
+                    provider_id=prompt_data.provider_id,
+                    provider_model=prompt_data.provider_model,
+                    provider_settings=prompt_data.provider_settings,
+                    use_system_default=prompt_data.use_system_default
+                )
+            finally:
+                sync_db.close()
         
-        prompt = service.create_prompt(
-            name=prompt_data.name,
-            category=prompt_data.category,
-            system_prompt=prompt_data.system_prompt,
-            user_prompt_template=prompt_data.user_prompt_template,
-            model=prompt_data.model,
-            temperature=prompt_data.temperature,
-            max_tokens=prompt_data.max_tokens,
-            is_system=prompt_data.is_system,
-            tenant_id=None if prompt_data.is_system else current_user.tenant_id,
-            created_by=current_user.id,
-            variables=prompt_data.variables,
-            description=prompt_data.description,
-            quote_type=prompt_data.quote_type,
-            provider_id=prompt_data.provider_id,
-            provider_model=prompt_data.provider_model,
-            provider_settings=prompt_data.provider_settings,
-            use_system_default=prompt_data.use_system_default
-        )
+        loop = asyncio.get_event_loop()
+        prompt = await loop.run_in_executor(None, _create_prompt)
         
         return prompt
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating prompt: {str(e)}"
@@ -391,7 +418,7 @@ async def update_prompt(
     prompt_id: str,
     prompt_data: PromptUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Update a prompt (creates new version) - Advanced users only"""
     try:
@@ -402,7 +429,9 @@ async def update_prompt(
                 detail="Advanced user access required to manage AI prompts"
             )
         
-        prompt = db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        prompt_stmt = select(AIPrompt).where(AIPrompt.id == prompt_id)
+        prompt_result = await db.execute(prompt_stmt)
+        prompt = prompt_result.scalars().first()
         
         if not prompt:
             raise HTTPException(
@@ -423,31 +452,38 @@ async def update_prompt(
                 detail="Access denied to this prompt"
             )
         
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
+        def _update_prompt():
+            sync_db = SessionLocal()
+            try:
+                service = AIPromptService(sync_db, tenant_id=current_user.tenant_id)
+                return service.update_prompt(
+                    prompt_id=prompt_id,
+                    system_prompt=prompt_data.system_prompt,
+                    user_prompt_template=prompt_data.user_prompt_template,
+                    model=prompt_data.model,
+                    temperature=prompt_data.temperature,
+                    max_tokens=prompt_data.max_tokens,
+                    variables=prompt_data.variables,
+                    description=prompt_data.description,
+                    quote_type=prompt_data.quote_type,
+                    note=prompt_data.note,
+                    updated_by=current_user.id,
+                    provider_id=prompt_data.provider_id,
+                    provider_model=prompt_data.provider_model,
+                    provider_settings=prompt_data.provider_settings,
+                    use_system_default=prompt_data.use_system_default
+                )
+            finally:
+                sync_db.close()
         
-        updated_prompt = service.update_prompt(
-            prompt_id=prompt_id,
-            system_prompt=prompt_data.system_prompt,
-            user_prompt_template=prompt_data.user_prompt_template,
-            model=prompt_data.model,
-            temperature=prompt_data.temperature,
-            max_tokens=prompt_data.max_tokens,
-            variables=prompt_data.variables,
-            description=prompt_data.description,
-            quote_type=prompt_data.quote_type,
-            note=prompt_data.note,
-            updated_by=current_user.id,
-            provider_id=prompt_data.provider_id,
-            provider_model=prompt_data.provider_model,
-            provider_settings=prompt_data.provider_settings,
-            use_system_default=prompt_data.use_system_default
-        )
+        loop = asyncio.get_event_loop()
+        updated_prompt = await loop.run_in_executor(None, _update_prompt)
         
         return updated_prompt
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating prompt: {str(e)}"
@@ -459,7 +495,7 @@ async def delete_prompt(
     prompt_id: str,
     soft_delete: bool = Query(True, description="Soft delete (deactivate) or hard delete"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Delete a prompt (Advanced users only)"""
     try:
@@ -470,7 +506,9 @@ async def delete_prompt(
                 detail="Advanced user access required to manage AI prompts"
             )
         
-        prompt = db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        prompt_stmt = select(AIPrompt).where(AIPrompt.id == prompt_id)
+        prompt_result = await db.execute(prompt_stmt)
+        prompt = prompt_result.scalars().first()
         
         if not prompt:
             raise HTTPException(
@@ -491,14 +529,22 @@ async def delete_prompt(
                 detail="Access denied to this prompt"
             )
         
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
-        service.delete_prompt(prompt_id, soft_delete=soft_delete)
+        def _delete_prompt():
+            sync_db = SessionLocal()
+            try:
+                service = AIPromptService(sync_db, tenant_id=current_user.tenant_id)
+                service.delete_prompt(prompt_id, soft_delete=soft_delete)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _delete_prompt)
         
         return None
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting prompt: {str(e)}"
@@ -510,7 +556,7 @@ async def test_prompt(
     prompt_id: str,
     test_data: PromptTestRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Test a prompt with sample variables (Advanced users only)"""
     try:
@@ -521,7 +567,9 @@ async def test_prompt(
                 detail="Advanced user access required to manage AI prompts"
             )
         
-        prompt = db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        prompt_stmt = select(AIPrompt).where(AIPrompt.id == prompt_id)
+        prompt_result = await db.execute(prompt_stmt)
+        prompt = prompt_result.scalars().first()
         
         if not prompt:
             raise HTTPException(
@@ -536,8 +584,16 @@ async def test_prompt(
                 detail="Access denied to this prompt"
             )
         
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
-        rendered = service.render_prompt(prompt, test_data.variables)
+        def _render_prompt():
+            sync_db = SessionLocal()
+            try:
+                service = AIPromptService(sync_db, tenant_id=current_user.tenant_id)
+                return service.render_prompt(prompt, test_data.variables)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        rendered = await loop.run_in_executor(None, _render_prompt)
         
         return PromptTestResponse(
             system_prompt=rendered['system_prompt'],
@@ -559,7 +615,7 @@ async def test_prompt(
 async def get_prompt_versions(
     prompt_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Get version history for a prompt (Advanced users only)"""
     try:
@@ -570,7 +626,9 @@ async def get_prompt_versions(
                 detail="Advanced user access required to manage AI prompts"
             )
         
-        prompt = db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        prompt_stmt = select(AIPrompt).where(AIPrompt.id == prompt_id)
+        prompt_result = await db.execute(prompt_stmt)
+        prompt = prompt_result.scalars().first()
         
         if not prompt:
             raise HTTPException(
@@ -585,8 +643,16 @@ async def get_prompt_versions(
                 detail="Access denied to this prompt"
             )
         
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
-        versions = service.get_prompt_versions(prompt_id)
+        def _get_versions():
+            sync_db = SessionLocal()
+            try:
+                service = AIPromptService(sync_db, tenant_id=current_user.tenant_id)
+                return service.get_prompt_versions(prompt_id)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        versions = await loop.run_in_executor(None, _get_versions)
         
         return versions
     except HTTPException:
@@ -603,7 +669,7 @@ async def rollback_prompt(
     prompt_id: str,
     version: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Rollback a prompt to a specific version (Advanced users only)"""
     try:
@@ -614,7 +680,9 @@ async def rollback_prompt(
                 detail="Advanced user access required to manage AI prompts"
             )
         
-        prompt = db.query(AIPrompt).filter(AIPrompt.id == prompt_id).first()
+        prompt_stmt = select(AIPrompt).where(AIPrompt.id == prompt_id)
+        prompt_result = await db.execute(prompt_stmt)
+        prompt = prompt_result.scalars().first()
         
         if not prompt:
             raise HTTPException(
@@ -635,12 +703,20 @@ async def rollback_prompt(
                 detail="Access denied to this prompt"
             )
         
-        service = AIPromptService(db, tenant_id=current_user.tenant_id)
-        rolled_back_prompt = service.rollback_to_version(
-            prompt_id=prompt_id,
-            version=version,
-            rolled_back_by=current_user.id
-        )
+        def _rollback():
+            sync_db = SessionLocal()
+            try:
+                service = AIPromptService(sync_db, tenant_id=current_user.tenant_id)
+                return service.rollback_to_version(
+                    prompt_id=prompt_id,
+                    version=version,
+                    rolled_back_by=current_user.id
+                )
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        rolled_back_prompt = await loop.run_in_executor(None, _rollback)
         
         return rolled_back_prompt
     except ValueError as e:
@@ -651,7 +727,7 @@ async def rollback_prompt(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error rolling back prompt: {str(e)}"

@@ -4,16 +4,18 @@ Product catalog API endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_, func
 from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from app.core.dependencies import get_db, get_current_user
+from app.core.database import get_async_db
+from app.core.dependencies import get_current_user
 from app.models.tenant import User
 from app.models.product import Product
-from app.services.product_service import ProductService
 from app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -81,20 +83,60 @@ async def list_products(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List products with filters"""
+    """
+    List products with filters
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        products = service.list_products(
-            category=category,
-            search=search,
-            is_active=is_active,
-            is_service=is_service,
-            skip=skip,
-            limit=limit
+        stmt = select(Product).where(
+            Product.tenant_id == current_user.tenant_id
         )
-        return products
+        
+        if category:
+            stmt = stmt.where(Product.category == category)
+        if search:
+            stmt = stmt.where(
+                or_(
+                    Product.name.ilike(f"%{search}%"),
+                    Product.description.ilike(f"%{search}%"),
+                    Product.code.ilike(f"%{search}%")
+                )
+            )
+        if is_active is not None:
+            stmt = stmt.where(Product.is_active == is_active)
+        if is_service is not None:
+            stmt = stmt.where(Product.is_service == is_service)
+        
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        products = result.scalars().all()
+        
+        return [
+            ProductResponse(
+                id=p.id,
+                code=p.code,
+                name=p.name,
+                description=p.description,
+                category=p.category,
+                subcategory=p.subcategory,
+                unit=p.unit,
+                base_price=float(p.base_price) if p.base_price else 0.0,
+                cost_price=float(p.cost_price) if p.cost_price else None,
+                supplier=p.supplier,
+                part_number=p.part_number,
+                image_url=p.image_url,
+                image_path=p.image_path,
+                gallery_images=p.gallery_images,
+                is_active=p.is_active,
+                is_service=p.is_service,
+                created_at=p.created_at.isoformat() if p.created_at else "",
+                updated_at=p.updated_at.isoformat() if p.updated_at else ""
+            )
+            for p in products
+        ]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -105,13 +147,24 @@ async def list_products(
 @router.get("/categories", response_model=List[str])
 async def get_categories(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get all product categories"""
+    """
+    Get all product categories
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        categories = service.get_categories()
-        return categories
+        stmt = select(Product.category).where(
+            and_(
+                Product.tenant_id == current_user.tenant_id,
+                Product.category.isnot(None),
+                Product.is_active == True
+            )
+        ).distinct()
+        result = await db.execute(stmt)
+        categories = [cat for cat in result.scalars().all() if cat]
+        return sorted(categories)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -123,12 +176,22 @@ async def get_categories(
 async def get_product(
     product_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get a specific product"""
+    """
+    Get a specific product
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        product = service.get_product(product_id)
+        stmt = select(Product).where(
+            and_(
+                Product.id == product_id,
+                Product.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        product = result.scalars().first()
         
         if not product:
             raise HTTPException(
@@ -136,7 +199,26 @@ async def get_product(
                 detail=f"Product {product_id} not found"
             )
         
-        return product
+        return ProductResponse(
+            id=product.id,
+            code=product.code,
+            name=product.name,
+            description=product.description,
+            category=product.category,
+            subcategory=product.subcategory,
+            unit=product.unit,
+            base_price=float(product.base_price) if product.base_price else 0.0,
+            cost_price=float(product.cost_price) if product.cost_price else None,
+            supplier=product.supplier,
+            part_number=product.part_number,
+            image_url=product.image_url,
+            image_path=product.image_path,
+            gallery_images=product.gallery_images,
+            is_active=product.is_active,
+            is_service=product.is_service,
+            created_at=product.created_at.isoformat() if product.created_at else "",
+            updated_at=product.updated_at.isoformat() if product.updated_at else ""
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -150,31 +232,57 @@ async def get_product(
 async def create_product(
     product_data: ProductCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a new product"""
+    """
+    Create a new product
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        product = service.create_product(
+        product = Product(
+            id=str(uuid.uuid4()),
+            tenant_id=current_user.tenant_id,
+            code=product_data.code,
             name=product_data.name,
-            base_price=product_data.base_price,
+            description=product_data.description,
             category=product_data.category,
             subcategory=product_data.subcategory,
-            code=product_data.code,
-            description=product_data.description,
             unit=product_data.unit,
-            cost_price=product_data.cost_price,
+            base_price=Decimal(str(product_data.base_price)),
+            cost_price=Decimal(str(product_data.cost_price)) if product_data.cost_price else None,
             supplier=product_data.supplier,
             part_number=product_data.part_number,
+            is_active=True,
             is_service=product_data.is_service
         )
         
-        db.commit()
-        db.refresh(product)
+        db.add(product)
+        await db.commit()
+        await db.refresh(product)
         
-        return product
+        return ProductResponse(
+            id=product.id,
+            code=product.code,
+            name=product.name,
+            description=product.description,
+            category=product.category,
+            subcategory=product.subcategory,
+            unit=product.unit,
+            base_price=float(product.base_price) if product.base_price else 0.0,
+            cost_price=float(product.cost_price) if product.cost_price else None,
+            supplier=product.supplier,
+            part_number=product.part_number,
+            image_url=product.image_url,
+            image_path=product.image_path,
+            gallery_images=product.gallery_images,
+            is_active=product.is_active,
+            is_service=product.is_service,
+            created_at=product.created_at.isoformat() if product.created_at else "",
+            updated_at=product.updated_at.isoformat() if product.updated_at else ""
+        )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating product: {str(e)}"
@@ -186,39 +294,22 @@ async def update_product(
     product_id: str,
     product_data: ProductUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update a product"""
+    """
+    Update a product
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        
-        update_kwargs = {}
-        if product_data.name is not None:
-            update_kwargs['name'] = product_data.name
-        if product_data.base_price is not None:
-            update_kwargs['base_price'] = product_data.base_price
-        if product_data.category is not None:
-            update_kwargs['category'] = product_data.category
-        if product_data.subcategory is not None:
-            update_kwargs['subcategory'] = product_data.subcategory
-        if product_data.code is not None:
-            update_kwargs['code'] = product_data.code
-        if product_data.description is not None:
-            update_kwargs['description'] = product_data.description
-        if product_data.unit is not None:
-            update_kwargs['unit'] = product_data.unit
-        if product_data.cost_price is not None:
-            update_kwargs['cost_price'] = product_data.cost_price
-        if product_data.supplier is not None:
-            update_kwargs['supplier'] = product_data.supplier
-        if product_data.part_number is not None:
-            update_kwargs['part_number'] = product_data.part_number
-        if product_data.is_active is not None:
-            update_kwargs['is_active'] = product_data.is_active
-        if product_data.is_service is not None:
-            update_kwargs['is_service'] = product_data.is_service
-        
-        product = service.update_product(product_id, **update_kwargs)
+        stmt = select(Product).where(
+            and_(
+                Product.id == product_id,
+                Product.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        product = result.scalars().first()
         
         if not product:
             raise HTTPException(
@@ -226,11 +317,59 @@ async def update_product(
                 detail=f"Product {product_id} not found"
             )
         
-        return product
+        # Update fields
+        if product_data.name is not None:
+            product.name = product_data.name
+        if product_data.base_price is not None:
+            product.base_price = Decimal(str(product_data.base_price))
+        if product_data.category is not None:
+            product.category = product_data.category
+        if product_data.subcategory is not None:
+            product.subcategory = product_data.subcategory
+        if product_data.code is not None:
+            product.code = product_data.code
+        if product_data.description is not None:
+            product.description = product_data.description
+        if product_data.unit is not None:
+            product.unit = product_data.unit
+        if product_data.cost_price is not None:
+            product.cost_price = Decimal(str(product_data.cost_price))
+        if product_data.supplier is not None:
+            product.supplier = product_data.supplier
+        if product_data.part_number is not None:
+            product.part_number = product_data.part_number
+        if product_data.is_active is not None:
+            product.is_active = product_data.is_active
+        if product_data.is_service is not None:
+            product.is_service = product_data.is_service
+        
+        await db.commit()
+        await db.refresh(product)
+        
+        return ProductResponse(
+            id=product.id,
+            code=product.code,
+            name=product.name,
+            description=product.description,
+            category=product.category,
+            subcategory=product.subcategory,
+            unit=product.unit,
+            base_price=float(product.base_price) if product.base_price else 0.0,
+            cost_price=float(product.cost_price) if product.cost_price else None,
+            supplier=product.supplier,
+            part_number=product.part_number,
+            image_url=product.image_url,
+            image_path=product.image_path,
+            gallery_images=product.gallery_images,
+            is_active=product.is_active,
+            is_service=product.is_service,
+            created_at=product.created_at.isoformat() if product.created_at else "",
+            updated_at=product.updated_at.isoformat() if product.updated_at else ""
+        )
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating product: {str(e)}"
@@ -242,24 +381,41 @@ async def delete_product(
     product_id: str,
     soft_delete: bool = Query(True, description="Soft delete (deactivate) or hard delete"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Delete a product"""
+    """
+    Delete a product
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        success = service.delete_product(product_id, soft_delete=soft_delete)
+        stmt = select(Product).where(
+            and_(
+                Product.id == product_id,
+                Product.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        product = result.scalars().first()
         
-        if not success:
+        if not product:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product {product_id} not found"
             )
         
+        if soft_delete:
+            product.is_active = False
+            await db.commit()
+        else:
+            await db.delete(product)
+            await db.commit()
+        
         return None
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting product: {str(e)}"
@@ -270,12 +426,19 @@ async def delete_product(
 async def import_products_csv(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Import products from CSV file"""
+    """
+    Import products from CSV file
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync ProductService calls in executor.
+    """
     try:
         import tempfile
         import os
+        import asyncio
+        from app.core.database import SessionLocal
         
         # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
@@ -284,8 +447,17 @@ async def import_products_csv(
             tmp_path = tmp_file.name
         
         try:
-            service = ProductService(db, tenant_id=current_user.tenant_id)
-            result = service.import_from_csv(tmp_path)
+            def _import_csv():
+                sync_db = SessionLocal()
+                try:
+                    from app.services.product_service import ProductService
+                    service = ProductService(sync_db, tenant_id=current_user.tenant_id)
+                    return service.import_from_csv(tmp_path)
+                finally:
+                    sync_db.close()
+            
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, _import_csv)
             
             return result
         finally:
@@ -306,12 +478,14 @@ async def upload_product_image(
     file: UploadFile = File(...),
     is_primary: bool = Query(True, description="Set as primary image (replaces existing)"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Upload an image for a product
     
     Supports primary image and gallery images. Images are stored in MinIO.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         # Validate file type
@@ -323,8 +497,14 @@ async def upload_product_image(
             )
         
         # Get product
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        product = service.get_product(product_id)
+        stmt = select(Product).where(
+            and_(
+                Product.id == product_id,
+                Product.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        product = result.scalars().first()
         
         if not product:
             raise HTTPException(
@@ -344,7 +524,7 @@ async def upload_product_image(
         file_data = await file.read()
         
         # Upload to MinIO
-        bucket_name = product.image_bucket or "ccs-quote-tool"
+        bucket_name = getattr(product, 'image_bucket', None) or "ccs-quote-tool"
         uploaded_path = await storage_service.upload_file(
             file_data=file_data,
             object_name=object_name,
@@ -365,7 +545,8 @@ async def upload_product_image(
             # Set as primary image
             product.image_path = uploaded_path
             product.image_url = image_url
-            product.image_bucket = bucket_name
+            if hasattr(product, 'image_bucket'):
+                product.image_bucket = bucket_name
         else:
             # Add to gallery
             import json
@@ -377,15 +558,34 @@ async def upload_product_image(
             })
             product.gallery_images = json.dumps(gallery)
         
-        db.commit()
-        db.refresh(product)
+        await db.commit()
+        await db.refresh(product)
         
-        return product
+        return ProductResponse(
+            id=product.id,
+            code=product.code,
+            name=product.name,
+            description=product.description,
+            category=product.category,
+            subcategory=product.subcategory,
+            unit=product.unit,
+            base_price=float(product.base_price) if product.base_price else 0.0,
+            cost_price=float(product.cost_price) if product.cost_price else None,
+            supplier=product.supplier,
+            part_number=product.part_number,
+            image_url=product.image_url,
+            image_path=product.image_path,
+            gallery_images=json.loads(product.gallery_images) if product.gallery_images else None,
+            is_active=product.is_active,
+            is_service=product.is_service,
+            created_at=product.created_at.isoformat() if product.created_at else "",
+            updated_at=product.updated_at.isoformat() if product.updated_at else ""
+        )
         
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error uploading image: {str(e)}"
@@ -397,17 +597,25 @@ async def delete_product_image(
     product_id: str,
     image_path: Optional[str] = Query(None, description="Specific image path to delete (if not provided, deletes primary)"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Delete a product image
     
     If image_path is provided, removes from gallery. Otherwise, deletes primary image.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         # Get product
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        product = service.get_product(product_id)
+        stmt = select(Product).where(
+            and_(
+                Product.id == product_id,
+                Product.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        product = result.scalars().first()
         
         if not product:
             raise HTTPException(
@@ -417,7 +625,7 @@ async def delete_product_image(
         
         # Get storage service
         storage_service = get_storage_service()
-        bucket_name = product.image_bucket or "ccs-quote-tool"
+        bucket_name = getattr(product, 'image_bucket', None) or "ccs-quote-tool"
         
         if image_path:
             # Delete from gallery
@@ -441,15 +649,15 @@ async def delete_product_image(
                 product.image_path = None
                 product.image_url = None
         
-        db.commit()
-        db.refresh(product)
+        await db.commit()
+        await db.refresh(product)
         
         return {"success": True, "message": "Image deleted successfully"}
         
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting image: {str(e)}"
@@ -461,17 +669,25 @@ async def get_product_image(
     product_id: str,
     image_path: Optional[str] = Query(None, description="Specific image path (if not provided, returns primary)"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get product image URL (presigned)
     
     Returns a presigned URL for accessing the product image.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         # Get product
-        service = ProductService(db, tenant_id=current_user.tenant_id)
-        product = service.get_product(product_id)
+        stmt = select(Product).where(
+            and_(
+                Product.id == product_id,
+                Product.tenant_id == current_user.tenant_id
+            )
+        )
+        result = await db.execute(stmt)
+        product = result.scalars().first()
         
         if not product:
             raise HTTPException(
@@ -481,7 +697,7 @@ async def get_product_image(
         
         # Get storage service
         storage_service = get_storage_service()
-        bucket_name = product.image_bucket or "ccs-quote-tool"
+        bucket_name = getattr(product, 'image_bucket', None) or "ccs-quote-tool"
         
         if image_path:
             # Get specific gallery image

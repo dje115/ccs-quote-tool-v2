@@ -2,5 +2,5 @@
 CCS Quote Tool v2 - FastAPI Application Package
 """
 
-__version__ = "2.10.0"
+__version__ = "2.11.0"
 

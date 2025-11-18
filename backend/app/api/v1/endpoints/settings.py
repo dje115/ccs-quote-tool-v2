@@ -4,7 +4,6 @@ Settings and configuration endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel
@@ -15,7 +14,7 @@ from openai import OpenAI
 import googlemaps
 import httpx
 
-from app.core.database import get_db, get_async_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
 from app.models.tenant import Tenant
 from app.schemas.sales import TenantProfileUpdate, TenantProfileResponse

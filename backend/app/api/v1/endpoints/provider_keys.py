@@ -4,12 +4,15 @@ API endpoints for AI provider key management
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_
 from typing import List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
+import asyncio
 
-from app.core.dependencies import get_db, get_current_user, get_current_tenant
+from app.core.database import get_async_db, SessionLocal
+from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant, UserRole
 from app.models.ai_provider import AIProvider, ProviderAPIKey
 from app.services.ai_provider_service import AIProviderService
@@ -71,14 +74,19 @@ class ProviderSettingsUpdate(BaseModel):
 @router.get("/providers", response_model=List[ProviderResponse])
 async def list_providers(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List all available AI providers"""
+    """
+    List all available AI providers
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        providers = db.query(AIProvider).filter(
+        stmt = select(AIProvider).where(
             AIProvider.is_active == True
-        ).order_by(AIProvider.name).all()
-        
+        ).order_by(AIProvider.name)
+        result = await db.execute(stmt)
+        providers = result.scalars().all()
         return providers
     except Exception as e:
         raise HTTPException(
@@ -91,28 +99,42 @@ async def list_providers(
 async def get_provider_key_status(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get API key status for all providers (tenant and system level)"""
+    """
+    Get API key status for all providers (tenant and system level)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        providers = db.query(AIProvider).filter(
+        providers_stmt = select(AIProvider).where(
             AIProvider.is_active == True
-        ).all()
+        )
+        providers_result = await db.execute(providers_stmt)
+        providers = providers_result.scalars().all()
         
         results = []
         
         for provider in providers:
             # Check tenant key
-            tenant_key = db.query(ProviderAPIKey).filter(
-                ProviderAPIKey.provider_id == provider.id,
-                ProviderAPIKey.tenant_id == current_tenant.id
-            ).first()
+            tenant_key_stmt = select(ProviderAPIKey).where(
+                and_(
+                    ProviderAPIKey.provider_id == provider.id,
+                    ProviderAPIKey.tenant_id == current_tenant.id
+                )
+            )
+            tenant_key_result = await db.execute(tenant_key_stmt)
+            tenant_key = tenant_key_result.scalars().first()
             
             # Check system key
-            system_key = db.query(ProviderAPIKey).filter(
-                ProviderAPIKey.provider_id == provider.id,
-                ProviderAPIKey.tenant_id.is_(None)
-            ).first()
+            system_key_stmt = select(ProviderAPIKey).where(
+                and_(
+                    ProviderAPIKey.provider_id == provider.id,
+                    ProviderAPIKey.tenant_id.is_(None)
+                )
+            )
+            system_key_result = await db.execute(system_key_stmt)
+            system_key = system_key_result.scalars().first()
             
             results.append(ProviderKeyStatusResponse(
                 provider=ProviderResponse(
@@ -149,7 +171,7 @@ async def test_provider_key(
     request: Optional[ProviderKeyRequest] = None,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     is_system: bool = False
 ):
     """
@@ -157,13 +179,20 @@ async def test_provider_key(
     
     If api_key is provided in request, tests that key.
     Otherwise, tests the existing saved key for the tenant/system.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
     """
     try:
         # Get provider
-        provider = db.query(AIProvider).filter(
-            AIProvider.id == provider_id,
-            AIProvider.is_active == True
-        ).first()
+        provider_stmt = select(AIProvider).where(
+            and_(
+                AIProvider.id == provider_id,
+                AIProvider.is_active == True
+            )
+        )
+        provider_result = await db.execute(provider_stmt)
+        provider = provider_result.scalars().first()
         
         if not provider:
             raise HTTPException(
@@ -180,10 +209,14 @@ async def test_provider_key(
             api_key = request.api_key.strip()
         else:
             # Get existing key
-            key_record = db.query(ProviderAPIKey).filter(
-                ProviderAPIKey.provider_id == provider_id,
-                ProviderAPIKey.tenant_id == tenant_id
-            ).first()
+            key_stmt = select(ProviderAPIKey).where(
+                and_(
+                    ProviderAPIKey.provider_id == provider_id,
+                    ProviderAPIKey.tenant_id == tenant_id
+                )
+            )
+            key_result = await db.execute(key_stmt)
+            key_record = key_result.scalars().first()
             
             if not key_record:
                 raise HTTPException(
@@ -193,23 +226,31 @@ async def test_provider_key(
             
             api_key = key_record.api_key
         
-        # Test the key
-        provider_service = AIProviderService(db, tenant_id=tenant_id)
-        test_result = await provider_service.test_provider(provider_id, api_key)
+        # Test the key (service uses sync db)
+        sync_db = SessionLocal()
+        try:
+            provider_service = AIProviderService(sync_db, tenant_id=tenant_id)
+            test_result = await provider_service.test_provider(provider_id, api_key)
+        finally:
+            sync_db.close()
         
         # Update key record if it exists
         if not request or not request.api_key:
-            key_record = db.query(ProviderAPIKey).filter(
-                ProviderAPIKey.provider_id == provider_id,
-                ProviderAPIKey.tenant_id == tenant_id
-            ).first()
+            key_stmt = select(ProviderAPIKey).where(
+                and_(
+                    ProviderAPIKey.provider_id == provider_id,
+                    ProviderAPIKey.tenant_id == tenant_id
+                )
+            )
+            key_result = await db.execute(key_stmt)
+            key_record = key_result.scalars().first()
             
             if key_record:
                 key_record.is_valid = test_result.get("success", False)
                 key_record.test_result = test_result.get("message")
                 key_record.test_error = test_result.get("error")
                 key_record.last_tested = datetime.now(timezone.utc)
-                db.commit()
+                await db.commit()
         
         return ProviderKeyTestResponse(
             success=test_result.get("success", False),
@@ -233,7 +274,7 @@ async def save_provider_key(
     request: ProviderKeyRequest,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     is_system: bool = False  # Query param: true for system-level key
 ):
     """
@@ -241,6 +282,9 @@ async def save_provider_key(
     
     - Tenant-level keys: Any authenticated user can save for their tenant
     - System-level keys: Only SUPER_ADMIN can save
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
     """
     try:
         # Check permissions for system-level keys
@@ -251,10 +295,14 @@ async def save_provider_key(
             )
         
         # Get provider
-        provider = db.query(AIProvider).filter(
-            AIProvider.id == provider_id,
-            AIProvider.is_active == True
-        ).first()
+        provider_stmt = select(AIProvider).where(
+            and_(
+                AIProvider.id == provider_id,
+                AIProvider.is_active == True
+            )
+        )
+        provider_result = await db.execute(provider_stmt)
+        provider = provider_result.scalars().first()
         
         if not provider:
             raise HTTPException(
@@ -273,10 +321,14 @@ async def save_provider_key(
             )
         
         # Check if key already exists
-        existing_key = db.query(ProviderAPIKey).filter(
-            ProviderAPIKey.provider_id == provider_id,
-            ProviderAPIKey.tenant_id == tenant_id
-        ).first()
+        existing_key_stmt = select(ProviderAPIKey).where(
+            and_(
+                ProviderAPIKey.provider_id == provider_id,
+                ProviderAPIKey.tenant_id == tenant_id
+            )
+        )
+        existing_key_result = await db.execute(existing_key_stmt)
+        existing_key = existing_key_result.scalars().first()
         
         # Test the key if requested
         test_result = None
@@ -284,12 +336,16 @@ async def save_provider_key(
         is_valid = False
         
         if request.test_on_save:
-            provider_service = AIProviderService(db, tenant_id=tenant_id)
-            test_result_dict = await provider_service.test_provider(provider_id, request.api_key.strip())
-            
-            is_valid = test_result_dict.get("success", False)
-            test_result = test_result_dict.get("message")
-            test_error = test_result_dict.get("error")
+            sync_db = SessionLocal()
+            try:
+                provider_service = AIProviderService(sync_db, tenant_id=tenant_id)
+                test_result_dict = await provider_service.test_provider(provider_id, request.api_key.strip())
+                
+                is_valid = test_result_dict.get("success", False)
+                test_result = test_result_dict.get("message")
+                test_error = test_result_dict.get("error")
+            finally:
+                sync_db.close()
         
         # Update or create key
         if existing_key:
@@ -312,7 +368,7 @@ async def save_provider_key(
             )
             db.add(new_key)
         
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -325,7 +381,7 @@ async def save_provider_key(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error saving provider key: {str(e)}"
@@ -337,9 +393,13 @@ async def update_provider_settings(
     provider_id: str,
     settings: ProviderSettingsUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update provider settings (base_url, supported_models, default_settings) - Admin only"""
+    """
+    Update provider settings (base_url, supported_models, default_settings) - Admin only
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -347,10 +407,10 @@ async def update_provider_settings(
         )
     
     try:
-        from app.services.ai_provider_service import AIProviderService
-        from datetime import datetime, timezone
+        provider_stmt = select(AIProvider).where(AIProvider.id == provider_id)
+        provider_result = await db.execute(provider_stmt)
+        provider = provider_result.scalars().first()
         
-        provider = db.query(AIProvider).filter(AIProvider.id == provider_id).first()
         if not provider:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -368,8 +428,8 @@ async def update_provider_settings(
             provider.is_active = settings.is_active
         
         provider.updated_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(provider)
+        await db.commit()
+        await db.refresh(provider)
         
         return ProviderResponse(
             id=provider.id,
@@ -385,7 +445,7 @@ async def update_provider_settings(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating provider settings: {str(e)}"
@@ -397,10 +457,14 @@ async def delete_provider_key(
     provider_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     is_system: bool = False
 ):
-    """Delete provider API key"""
+    """
+    Delete provider API key
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Check permissions for system-level keys
         if is_system and current_user.role != UserRole.SUPER_ADMIN:
@@ -411,10 +475,14 @@ async def delete_provider_key(
         
         tenant_id = None if is_system else current_tenant.id
         
-        key_record = db.query(ProviderAPIKey).filter(
-            ProviderAPIKey.provider_id == provider_id,
-            ProviderAPIKey.tenant_id == tenant_id
-        ).first()
+        key_stmt = select(ProviderAPIKey).where(
+            and_(
+                ProviderAPIKey.provider_id == provider_id,
+                ProviderAPIKey.tenant_id == tenant_id
+            )
+        )
+        key_result = await db.execute(key_stmt)
+        key_record = key_result.scalars().first()
         
         if not key_record:
             raise HTTPException(
@@ -422,15 +490,15 @@ async def delete_provider_key(
                 detail="API key not found"
             )
         
-        db.delete(key_record)
-        db.commit()
+        await db.delete(key_record)
+        await db.commit()
         
         return {"success": True, "message": "API key deleted successfully"}
     
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting provider key: {str(e)}"

@@ -5,12 +5,13 @@ Authentication endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 from datetime import timedelta, datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
 from app.core.config import settings
 from app.core.dependencies import get_current_user
@@ -50,18 +51,25 @@ class LoginResponse(BaseModel):
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     response: Response = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Login endpoint - sets HttpOnly cookies and returns user info
     
     SECURITY: Tokens are stored in HttpOnly cookies to prevent XSS attacks.
     The frontend should not store tokens in localStorage.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     # Find user by email or username
-    user = db.query(User).filter(
-        (User.email == form_data.username) | (User.username == form_data.username)
-    ).first()
+    stmt = select(User).where(
+        or_(
+            User.email == form_data.username,
+            User.username == form_data.username
+        )
+    )
+    result = await db.execute(stmt)
+    user = result.scalars().first()
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -129,7 +137,7 @@ async def refresh_token(
     request: Optional[RefreshTokenRequest] = None,
     response: Response = None,
     refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Refresh access token using refresh token with rotation.
@@ -140,6 +148,8 @@ async def refresh_token(
     
     Supports both HttpOnly cookies (preferred) and request body (backward compatibility).
     If refresh_token is provided in both cookie and body, cookie takes precedence.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     from app.core.security import decode_token
     
@@ -164,7 +174,9 @@ async def refresh_token(
     tenant_id = payload.get("tenant_id")
     
     # Get user from database
-    user = db.query(User).filter(User.id == user_id).first()
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalars().first()
     
     if not user or not user.is_active:
         raise HTTPException(

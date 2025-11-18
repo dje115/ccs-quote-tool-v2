@@ -5,10 +5,12 @@ Multi-tenant aware renewal management
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from typing import List, Optional
+import asyncio
 
-from app.core.database import get_db
+from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant
 from app.services.contract_renewal_service import ContractRenewalService
@@ -25,32 +27,40 @@ async def list_contract_renewals(
     status_filter: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List renewals for a contract"""
+    """
+    List renewals for a contract
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.support_contract import SupportContract, ContractRenewal
         
         # Verify contract belongs to tenant
-        contract = db.query(SupportContract).filter(
+        contract_stmt = select(SupportContract).where(
             and_(
                 SupportContract.id == contract_id,
                 SupportContract.tenant_id == current_tenant.id
             )
-        ).first()
+        )
+        contract_result = await db.execute(contract_stmt)
+        contract = contract_result.scalars().first()
         
         if not contract:
             raise HTTPException(status_code=404, detail="Contract not found")
         
         # Get renewals
-        query = db.query(ContractRenewal).filter(
+        renewals_stmt = select(ContractRenewal).where(
             ContractRenewal.contract_id == contract_id
         )
         
         if status_filter:
-            query = query.filter(ContractRenewal.status == status_filter)
+            renewals_stmt = renewals_stmt.where(ContractRenewal.status == status_filter)
         
-        renewals = query.order_by(ContractRenewal.renewal_date.desc()).all()
+        renewals_stmt = renewals_stmt.order_by(ContractRenewal.renewal_date.desc())
+        renewals_result = await db.execute(renewals_stmt)
+        renewals = renewals_result.scalars().all()
         
         # Convert to response format
         result = []
@@ -95,20 +105,32 @@ async def create_renewal(
     renewal_data: ContractRenewalCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a renewal record for a contract"""
+    """
+    Create a renewal record for a contract
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = ContractRenewalService(db, current_tenant.id)
+        def _create_renewal():
+            sync_db = SessionLocal()
+            try:
+                service = ContractRenewalService(sync_db, current_tenant.id)
+                return service.create_renewal_record(
+                    contract_id=contract_id,
+                    renewal_date=renewal_data.renewal_date,
+                    new_end_date=renewal_data.new_end_date,
+                    new_monthly_value=renewal_data.new_monthly_value,
+                    new_annual_value=renewal_data.new_annual_value,
+                    renewal_type=renewal_data.renewal_type or "manual"
+                )
+            finally:
+                sync_db.close()
         
-        renewal = service.create_renewal_record(
-            contract_id=contract_id,
-            renewal_date=renewal_data.renewal_date,
-            new_end_date=renewal_data.new_end_date,
-            new_monthly_value=renewal_data.new_monthly_value,
-            new_annual_value=renewal_data.new_annual_value,
-            renewal_type=renewal_data.renewal_type or "manual"
-        )
+        loop = asyncio.get_event_loop()
+        renewal = await loop.run_in_executor(None, _create_renewal)
         
         if not renewal:
             raise HTTPException(status_code=404, detail="Contract not found")
@@ -150,12 +172,25 @@ async def approve_renewal(
     renewal_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Approve a contract renewal"""
+    """
+    Approve a contract renewal
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = ContractRenewalService(db, current_tenant.id)
-        renewal = service.approve_renewal(renewal_id, current_user.id)
+        def _approve_renewal():
+            sync_db = SessionLocal()
+            try:
+                service = ContractRenewalService(sync_db, current_tenant.id)
+                return service.approve_renewal(renewal_id, current_user.id)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        renewal = await loop.run_in_executor(None, _approve_renewal)
         
         if not renewal:
             raise HTTPException(status_code=404, detail="Renewal not found")
@@ -197,12 +232,25 @@ async def complete_renewal(
     renewal_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Complete a contract renewal"""
+    """
+    Complete a contract renewal
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = ContractRenewalService(db, current_tenant.id)
-        contract = service.complete_renewal(renewal_id)
+        def _complete_renewal():
+            sync_db = SessionLocal()
+            try:
+                service = ContractRenewalService(sync_db, current_tenant.id)
+                return service.complete_renewal(renewal_id)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        contract = await loop.run_in_executor(None, _complete_renewal)
         
         if not contract:
             raise HTTPException(status_code=404, detail="Renewal not found or not approved")
@@ -228,12 +276,25 @@ async def decline_renewal(
     reason: str = Query(...),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Decline a contract renewal"""
+    """
+    Decline a contract renewal
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Note: Wraps sync service calls in executor.
+    """
     try:
-        service = ContractRenewalService(db, current_tenant.id)
-        success = service.decline_renewal(renewal_id, reason)
+        def _decline_renewal():
+            sync_db = SessionLocal()
+            try:
+                service = ContractRenewalService(sync_db, current_tenant.id)
+                return service.decline_renewal(renewal_id, reason)
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(None, _decline_renewal)
         
         if not success:
             raise HTTPException(status_code=404, detail="Renewal not found")
