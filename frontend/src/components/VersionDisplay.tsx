@@ -21,7 +21,7 @@ const VersionDisplay: React.FC<{ variant?: 'footer' | 'inline' }> = ({ variant =
       } catch (error) {
         console.error('Failed to fetch version:', error);
         // Fallback version
-        setVersionInfo({ version: '2.5.0' });
+        setVersionInfo({ version: '3.0.0' });
       } finally {
         setLoading(false);
       }

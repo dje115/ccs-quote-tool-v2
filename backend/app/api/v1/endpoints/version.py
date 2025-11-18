@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 Version information endpoint
+
+IMPORTANT: Version management is centralized. See VERSION_MANAGEMENT.md for details.
+The VERSION file in the project root is the single source of truth.
 """
 
 from fastapi import APIRouter
