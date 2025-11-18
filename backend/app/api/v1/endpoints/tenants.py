@@ -192,6 +192,11 @@ async def update_tenant(
         tenant.google_maps_api_key = tenant_update.google_maps_api_key
     
     db.commit()
+    
+    # Invalidate API key cache for this tenant
+    from app.core.api_keys import invalidate_api_key_cache
+    invalidate_api_key_cache(tenant_id)
+    
     db.refresh(tenant)
     
     return tenant

@@ -1,44 +1,35 @@
 #!/usr/bin/env python3
 """
 Celery configuration for background tasks
+
+DEPRECATED: This module is kept for backward compatibility.
+All Celery configuration is now in app.core.celery_app.
+
+This module re-exports celery_app and init_celery from celery_app.py
+to maintain compatibility with existing imports.
 """
 
-from celery import Celery
-from app.core.config import settings
+# Import from consolidated celery_app module
+from app.core.celery_app import celery_app
 
-# Create Celery application
-celery_app = Celery(
-    "ccs_quote_tool_v2",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND
-)
-
-# Celery configuration
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    task_time_limit=3600,  # 1 hour
-    task_soft_time_limit=3300,  # 55 minutes
-    worker_prefetch_multiplier=1,
-    worker_max_tasks_per_child=1000,
-)
-
-# Auto-discover tasks
-celery_app.autodiscover_tasks(["app.services", "app.tasks"])
+# Re-export for backward compatibility
+__all__ = ['celery_app', 'init_celery']
 
 
 def init_celery():
-    """Initialize Celery"""
-    print("✅ Celery initialized")
+    """
+    Initialize Celery
+    
+    This function is kept for backward compatibility.
+    The actual Celery app is initialized in celery_app.py.
+    """
+    # Celery app is already initialized in celery_app.py
+    # Just return it for compatibility
     return celery_app
 
 
-# Task decorators
+# Task decorators (for backward compatibility)
 def task(*args, **kwargs):
-    """Celery task decorator"""
+    """Celery task decorator (re-exported from celery_app)"""
     return celery_app.task(*args, **kwargs)
 

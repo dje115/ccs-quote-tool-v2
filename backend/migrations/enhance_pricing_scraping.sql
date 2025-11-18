@@ -70,3 +70,4 @@ COMMENT ON COLUMN product_content_history.scraping_metadata IS 'Metadata about s
 COMMENT ON TABLE pricing_verification_queue IS 'Queue for manual verification of low-confidence or flagged prices';
 
 
+

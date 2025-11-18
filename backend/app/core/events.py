@@ -7,11 +7,14 @@ SECURITY: Uses async Redis client to prevent blocking the event loop
 """
 
 import json
+import logging
 import redis.asyncio as aioredis
 import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class EventPublisher:

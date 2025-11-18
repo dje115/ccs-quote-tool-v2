@@ -20,15 +20,29 @@ const AIMonitorBadge: React.FC = () => {
 
   // Initial load of running analyses - only if authenticated
   useEffect(() => {
-    // Check if user is authenticated before making API calls
-    const token = localStorage.getItem('access_token') || localStorage.getItem('token');
-    if (!token) {
-      // Not authenticated, skip API call
-      return;
-    }
-
+    // SECURITY: Gate on proven session state (/auth/me) instead of localStorage
+    // HttpOnly cookies cannot be read by JavaScript, so we verify auth via API call
     const loadStatus = async () => {
       try {
+        // First verify authentication via /auth/me endpoint
+        const { authAPI } = await import('../services/api');
+        try {
+          await authAPI.getCurrentUser();
+        } catch (authError: any) {
+          // Not authenticated - skip loading status
+          if (authError?.response?.status === 401 || authError?.response?.status === 403) {
+            return;
+          }
+          console.error('[AIMonitorBadge] Auth check failed:', authError);
+          return;
+        }
+      } catch (error) {
+        // Skip if auth check fails
+        return;
+      }
+
+      try {
+        // User is authenticated - load status
         // Use dedicated endpoint for better performance
         const response = await aiAnalysisAPI.getStatus();
         const { running, queued, total_active } = response.data;

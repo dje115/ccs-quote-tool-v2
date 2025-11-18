@@ -5,13 +5,14 @@ Customer management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 import uuid
 import asyncio
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.dependencies import get_current_user, get_current_tenant, check_permission
 from app.core.api_keys import get_api_keys
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
@@ -117,9 +118,14 @@ async def list_customers(
     search: Optional[str] = None,
     is_competitor: Optional[bool] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List customers for current tenant"""
+    """
+    List customers for current tenant
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Database queries are executed asynchronously, allowing concurrent request handling.
+    """
     from sqlalchemy import select
     
     # Build query using SQLAlchemy 2.0 syntax
@@ -139,7 +145,7 @@ async def list_customers(
         stmt = stmt.where(Customer.is_competitor == is_competitor)
     
     stmt = stmt.offset(skip).limit(limit)
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     customers = result.scalars().all()
     
     # Fix ai_analysis_raw field that might be a string instead of dict
@@ -156,9 +162,13 @@ async def list_competitors(
     limit: int = 100,
     search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List competitors for current tenant"""
+    """
+    List competitors for current tenant
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     # Build query to get only competitors
@@ -173,7 +183,7 @@ async def list_competitors(
         stmt = stmt.where(Customer.company_name.ilike(f"%{search}%"))
     
     stmt = stmt.offset(skip).limit(limit)
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     competitors = result.scalars().all()
     return competitors
 
@@ -182,11 +192,17 @@ async def list_competitors(
 async def create_customer(
     customer_data: CustomerCreate,
     current_user: User = Depends(check_permission("customer:create")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create new customer"""
-    print(f"[CREATE CUSTOMER] Received data: {customer_data}")
-    print(f"[CREATE CUSTOMER] Company name: {customer_data.company_name}")
+    """
+    Create new customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[CREATE CUSTOMER] Received data: {customer_data}")
+    logger.info(f"[CREATE CUSTOMER] Company name: {customer_data.company_name}")
     
     # Check for duplicates
     from sqlalchemy import select
@@ -196,7 +212,7 @@ async def create_customer(
         Customer.company_name == customer_data.company_name,
         Customer.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     existing = result.scalars().first()
     
     if existing:
@@ -235,8 +251,8 @@ async def create_customer(
             customer.lead_score = customer_data.lead_score
         
         db.add(customer)
-        db.commit()
-        db.refresh(customer)
+        await db.commit()
+        await db.refresh(customer)
         
         # Publish customer.created event (async, non-blocking)
         from app.core.events import get_event_publisher
@@ -262,7 +278,8 @@ async def create_customer(
         return customer
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        logger.error(f"Error creating customer: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating customer: {str(e)}"
@@ -273,9 +290,13 @@ async def create_customer(
 async def get_customer(
     customer_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get customer by ID"""
+    """
+    Get customer by ID
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Customer).where(
@@ -283,7 +304,7 @@ async def get_customer(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     customer = result.scalars().first()
     
     if not customer:
@@ -301,9 +322,13 @@ async def update_customer(
     customer_id: str,
     customer_update: CustomerUpdate,
     current_user: User = Depends(check_permission("customer:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update customer"""
+    """
+    Update customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Customer).where(
@@ -311,7 +336,7 @@ async def update_customer(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     customer = result.scalars().first()
     
     if not customer:
@@ -346,8 +371,8 @@ async def update_customer(
     if customer_update.is_competitor is not None:
         customer.is_competitor = customer_update.is_competitor
     
-    db.commit()
-    db.refresh(customer)
+    await db.commit()
+    await db.refresh(customer)
     
     # Publish customer.updated event (async, non-blocking)
     from app.core.events import get_event_publisher
@@ -378,9 +403,13 @@ async def update_customer(
 async def delete_customer(
     customer_id: str,
     current_user: User = Depends(check_permission("customer:delete")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Soft delete customer"""
+    """
+    Soft delete customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Customer).where(
@@ -388,7 +417,7 @@ async def delete_customer(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     customer = result.scalars().first()
     
     if not customer:
@@ -397,7 +426,7 @@ async def delete_customer(
     # Soft delete
     customer.is_deleted = True
     customer.deleted_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
     
     # Publish customer.deleted event (async, non-blocking)
     from app.core.events import get_event_publisher
@@ -416,9 +445,13 @@ async def confirm_registration(
     customer_id: str,
     confirmed: bool,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Toggle company registration confirmation status"""
+    """
+    Toggle company registration confirmation status
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Customer).where(
@@ -426,15 +459,15 @@ async def confirm_registration(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     customer = result.scalars().first()
     
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
     customer.registration_confirmed = confirmed
-    db.commit()
-    db.refresh(customer)
+    await db.commit()
+    await db.refresh(customer)
     
     return {"success": True, "registration_confirmed": confirmed}
 

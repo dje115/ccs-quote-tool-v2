@@ -5,11 +5,13 @@ AI Analysis API endpoints for company analysis and lead generation
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
 from app.core.dependencies import get_db, get_current_active_user, get_current_tenant, get_current_user
+from app.core.database import get_async_db
 from app.core.api_keys import get_api_keys
 from app.models.tenant import User, Tenant
 from app.models.crm import Customer
@@ -41,21 +43,30 @@ async def analyze_company(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Comprehensive company analysis using AI, Companies House, and Google Maps"""
+    """
+    Comprehensive company analysis using AI, Companies House, and Google Maps
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        # Resolve API keys (tenant-specific with fallback to system keys)
-        api_keys = get_api_keys(db, current_tenant)
-        
-        # Initialize AI service with proper DB, tenant, and API keys
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
+        # Resolve API keys (tenant-specific with fallback to system keys) - use sync session
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+            
+            # Initialize AI service with proper DB, tenant, and API keys
+            ai_service = AIAnalysisService(
+                openai_api_key=api_keys.openai,
+                companies_house_api_key=api_keys.companies_house,
+                google_maps_api_key=api_keys.google_maps,
+                tenant_id=current_tenant.id,
+                db=sync_db
+            )
+        finally:
+            sync_db.close()
         
         # Perform analysis
         analysis_result = await ai_service.analyze_company(
@@ -79,6 +90,9 @@ async def analyze_company(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing company: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error analyzing company: {str(e)}"
@@ -90,21 +104,30 @@ async def score_lead(
     request: LeadScoringRequest,
     current_user: User = Depends(get_current_active_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Score lead quality using AI analysis"""
+    """
+    Score lead quality using AI analysis
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        # Resolve API keys (tenant-specific with fallback to system keys)
-        api_keys = get_api_keys(db, current_tenant)
-        
-        # Initialize AI service with proper DB, tenant, and API keys
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
+        # Resolve API keys (tenant-specific with fallback to system keys) - use sync session
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+            
+            # Initialize AI service with proper DB, tenant, and API keys
+            ai_service = AIAnalysisService(
+                openai_api_key=api_keys.openai,
+                companies_house_api_key=api_keys.companies_house,
+                google_maps_api_key=api_keys.google_maps,
+                tenant_id=current_tenant.id,
+                db=sync_db
+            )
+        finally:
+            sync_db.close()
         
         # Perform lead scoring
         scoring_result = await ai_service.score_lead(request.company_data)
@@ -122,6 +145,9 @@ async def score_lead(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error scoring lead: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error scoring lead: {str(e)}"
@@ -133,21 +159,30 @@ async def analyze_financial_data(
     request: FinancialAnalysisRequest,
     current_user: User = Depends(get_current_active_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Analyze financial data from Companies House"""
+    """
+    Analyze financial data from Companies House
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        # Resolve API keys (tenant-specific with fallback to system keys)
-        api_keys = get_api_keys(db, current_tenant)
-        
-        # Initialize AI service with proper DB, tenant, and API keys
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
+        # Resolve API keys (tenant-specific with fallback to system keys) - use sync session
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+            
+            # Initialize AI service with proper DB, tenant, and API keys
+            ai_service = AIAnalysisService(
+                openai_api_key=api_keys.openai,
+                companies_house_api_key=api_keys.companies_house,
+                google_maps_api_key=api_keys.google_maps,
+                tenant_id=current_tenant.id,
+                db=sync_db
+            )
+        finally:
+            sync_db.close()
         
         # Perform financial analysis
         analysis_result = await ai_service.analyze_financial_data(request.company_number)
@@ -167,6 +202,9 @@ async def analyze_financial_data(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing financial data: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error analyzing financial data: {str(e)}"
@@ -178,21 +216,30 @@ async def generate_lead_strategy(
     request: LeadStrategyRequest,
     current_user: User = Depends(get_current_active_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Generate lead engagement strategy"""
+    """
+    Generate lead engagement strategy
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        # Resolve API keys (tenant-specific with fallback to system keys)
-        api_keys = get_api_keys(db, current_tenant)
-        
-        # Initialize AI service with proper DB, tenant, and API keys
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
+        # Resolve API keys (tenant-specific with fallback to system keys) - use sync session
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+            
+            # Initialize AI service with proper DB, tenant, and API keys
+            ai_service = AIAnalysisService(
+                openai_api_key=api_keys.openai,
+                companies_house_api_key=api_keys.companies_house,
+                google_maps_api_key=api_keys.google_maps,
+                tenant_id=current_tenant.id,
+                db=sync_db
+            )
+        finally:
+            sync_db.close()
         
         # Generate strategy
         strategy_result = await ai_service.generate_lead_strategy(request.company_data)
@@ -210,9 +257,76 @@ async def generate_lead_strategy(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating strategy: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating strategy: {str(e)}"
+        )
+
+
+@router.get("/status")
+async def get_ai_analysis_status(
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get status of running and queued AI analysis tasks for the current tenant.
+    Returns a summary of customers with 'running' or 'queued' status.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from sqlalchemy import select
+        
+        # Query customers with running or queued AI analysis
+        running_stmt = select(Customer).where(
+            Customer.tenant_id == current_tenant.id,
+            Customer.is_deleted == False,
+            Customer.ai_analysis_status == 'running'
+        )
+        queued_stmt = select(Customer).where(
+            Customer.tenant_id == current_tenant.id,
+            Customer.is_deleted == False,
+            Customer.ai_analysis_status == 'queued'
+        )
+        
+        running_result = await db.execute(running_stmt)
+        queued_result = await db.execute(queued_stmt)
+        
+        running_customers = running_result.scalars().all()
+        queued_customers = queued_result.scalars().all()
+        
+        return {
+            "running": [
+                {
+                    "customer_id": customer.id,
+                    "company_name": customer.company_name,
+                    "status": customer.ai_analysis_status or "running",
+                    "task_id": customer.ai_analysis_task_id
+                }
+                for customer in running_customers
+            ],
+            "queued": [
+                {
+                    "customer_id": customer.id,
+                    "company_name": customer.company_name,
+                    "status": customer.ai_analysis_status or "queued",
+                    "task_id": customer.ai_analysis_task_id
+                }
+                for customer in queued_customers
+            ]
+        }
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching AI analysis status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching AI analysis status: {str(e)}"
         )
 
 
@@ -220,21 +334,21 @@ async def generate_lead_strategy(
 async def get_analysis_status(
     current_user: User = Depends(get_current_active_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get status of AI analysis services"""
+    """
+    Get status of AI analysis services
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        # Resolve API keys (tenant-specific with fallback to system keys)
-        api_keys = get_api_keys(db, current_tenant)
-        
-        # Initialize AI service with proper DB, tenant, and API keys
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
+        # Resolve API keys (tenant-specific with fallback to system keys) - use sync session
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+        finally:
+            sync_db.close()
         
         return {
             "success": True,
@@ -248,6 +362,9 @@ async def get_analysis_status(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error checking analysis status: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error checking analysis status: {str(e)}"
@@ -257,9 +374,13 @@ async def get_analysis_status(
 @router.get("/prompts")
 async def get_ai_prompts(
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get available AI prompts for analysis"""
+    """
+    Get available AI prompts for analysis
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Return the available prompt types and their descriptions
         prompts = {
@@ -295,6 +416,9 @@ async def get_ai_prompts(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting prompts: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting prompts: {str(e)}"

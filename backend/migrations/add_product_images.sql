@@ -18,3 +18,4 @@ COMMENT ON COLUMN products.image_bucket IS 'MinIO bucket name where images are s
 COMMENT ON COLUMN products.gallery_images IS 'JSON array of additional image paths for product gallery';
 
 
+

@@ -29,7 +29,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
   const maxReconnectAttempts = 5;
   const reconnectDelay = 3000; // 3 seconds
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     // Prevent multiple simultaneous connections
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
       console.log('[WebSocket] Connection already in progress, skipping');
@@ -41,12 +41,27 @@ export const useWebSocket = (): UseWebSocketReturn => {
       return;
     }
 
-    // Get JWT token from localStorage
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      console.log('[WebSocket] No auth token, skipping connection');
+    // SECURITY: WebSocket handshake sends HttpOnly cookies automatically
+    // Backend WebSocket endpoint now reads token from cookies in handshake
+    // No need to get token from localStorage or API - cookies are sent automatically
+    // We still need to verify authentication by checking if user is logged in
+    let isAuthenticated = false;
+    try {
+      const { authAPI } = await import('../services/api');
+      await authAPI.getCurrentUser();
+      isAuthenticated = true;
+    } catch (error) {
+      console.log('[WebSocket] Not authenticated, skipping connection');
       return;
     }
+    
+    if (!isAuthenticated) {
+      return;
+    }
+    
+    // Token will be read from HttpOnly cookie by backend during WebSocket handshake
+    // We don't need to send it in the message anymore, but we'll send empty auth for compatibility
+    const token = ''; // Not used - backend reads from cookie
 
     // Get WebSocket URL from environment or construct from API URL
     // SECURITY: Token will be sent as first message, not in URL (prevents logging/caching)
@@ -100,12 +115,13 @@ export const useWebSocket = (): UseWebSocketReturn => {
         setIsConnected(true);
         reconnectAttemptsRef.current = 0;
         
-        // SECURITY: Send token as first message instead of query parameter
-        // This prevents token from appearing in server logs, caches, or URL history
+        // SECURITY: Token is read from HttpOnly cookie by backend during handshake
+        // We still send auth message for backward compatibility, but token is empty
+        // Backend will use cookie if available, or message token as fallback
         try {
-          ws.send(JSON.stringify({ type: 'auth', token }));
+          ws.send(JSON.stringify({ type: 'auth', token: token || '' }));
         } catch (error) {
-          console.error('[WebSocket] Error sending auth token:', error);
+          console.error('[WebSocket] Error sending auth message:', error);
           ws.close();
           return;
         }

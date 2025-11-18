@@ -46,7 +46,7 @@ services:
       dockerfile: Dockerfile
       target: development
       args:
-        APP_VERSION: ${APP_VERSION:-2.9.0}
+        APP_VERSION: ${APP_VERSION:-2.10.0}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-backend
@@ -60,6 +60,11 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_BUCKET=ccs-quote-tool
+      - MINIO_SECURE=false
     ports:
       - "8000:8000"
     volumes:
@@ -69,6 +74,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - ccs-network
     restart: unless-stopped
@@ -122,7 +129,7 @@ services:
       dockerfile: Dockerfile
       target: development
       args:
-        APP_VERSION: ${APP_VERSION:-2.9.0}
+        APP_VERSION: ${APP_VERSION:-2.10.0}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-celery-worker
@@ -137,6 +144,11 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_BUCKET=ccs-quote-tool
+      - MINIO_SECURE=false
     volumes:
       - ./backend:/app
     depends_on:
@@ -145,6 +157,8 @@ services:
       redis:
         condition: service_healthy
       backend:
+        condition: service_started
+      minio:
         condition: service_started
     networks:
       - ccs-network
@@ -157,7 +171,7 @@ services:
       dockerfile: Dockerfile
       target: development
       args:
-        APP_VERSION: ${APP_VERSION:-2.9.0}
+        APP_VERSION: ${APP_VERSION:-2.10.0}
         BUILD_DATE: ${BUILD_DATE:-}
         BUILD_HASH: ${BUILD_HASH:-}
     container_name: ccs-celery-beat
@@ -172,6 +186,11 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - COMPANIES_HOUSE_API_KEY=${COMPANIES_HOUSE_API_KEY:-}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_BUCKET=ccs-quote-tool
+      - MINIO_SECURE=false
     volumes:
       - ./backend:/app
     depends_on:
@@ -180,6 +199,8 @@ services:
       redis:
         condition: service_healthy
       backend:
+        condition: service_started
+      minio:
         condition: service_started
     networks:
       - ccs-network

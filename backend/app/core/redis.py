@@ -16,13 +16,14 @@ async def init_redis():
     global redis_client
     
     try:
-        redis_client = await redis.from_url(
+        # redis.from_url() returns synchronously, not a coroutine
+        redis_client = redis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True
         )
         
-        # Test connection
+        # Test connection (ping() is a coroutine)
         await redis_client.ping()
         print("✅ Redis connected successfully")
         

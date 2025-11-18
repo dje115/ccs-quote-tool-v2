@@ -41,19 +41,13 @@ const Login: React.FC = () => {
       const response = await authAPI.login(email, password);
       const { user } = response.data;
 
-      // SECURITY: Tokens are now stored in HttpOnly cookies (set by backend)
-      // Only store user info in localStorage (non-sensitive)
-      // Tokens in response.data are for backward compatibility during migration
+      // SECURITY: Tokens are stored in HttpOnly cookies (set by backend automatically)
+      // Only store user info in localStorage (non-sensitive data)
+      // Do NOT store tokens in localStorage - they're vulnerable to XSS attacks
       localStorage.setItem('user', JSON.stringify(user));
       
-      // Optionally store tokens in localStorage for backward compatibility
-      // (HttpOnly cookies are preferred and sent automatically)
-      if (response.data.access_token) {
-        localStorage.setItem('access_token', response.data.access_token);
-      }
-      if (response.data.refresh_token) {
-        localStorage.setItem('refresh_token', response.data.refresh_token);
-      }
+      // Tokens in response.data are ignored - we rely entirely on HttpOnly cookies
+      // HttpOnly cookies are sent automatically by the browser and cannot be accessed by JavaScript
 
       // Redirect to dashboard for all users
       navigate('/dashboard');

@@ -3,12 +3,13 @@
 Database configuration and initialization
 """
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool, NullPool
 import asyncio
 from typing import AsyncGenerator
+from contextvars import ContextVar
 
 from app.core.config import settings
 from app.models.base import Base
@@ -24,6 +25,10 @@ import uuid
 
 # Password hashing - using Argon2 (most secure and modern algorithm)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+# Context variable for storing current tenant ID (for RLS)
+# This is set by get_current_tenant() and used by get_db() to set PostgreSQL session variable
+current_tenant_id_context: ContextVar[str] = ContextVar('current_tenant_id', default=None)
 
 # Create database engine with connection pooling
 # QueuePool allows connection reuse, improving performance for async routes
@@ -178,15 +183,28 @@ def get_db():
     """
     Get database session.
     
-    SECURITY: Tenant isolation is enforced at the application level by filtering
-    queries with current_user.tenant_id (see get_current_tenant() dependency).
-    Row-level security (RLS) is configured as an additional layer but requires
-    tenant context to be set via get_current_tenant() which sets request.state.db_tenant_id.
+    SECURITY: Tenant isolation is enforced at multiple levels:
+    1. Application-level filtering with current_user.tenant_id (see get_current_tenant())
+    2. Row-level security (RLS) - sets app.current_tenant_id per transaction
+    
+    RLS requires tenant context to be set. This is done by:
+    - Setting current_tenant_id_context in get_current_tenant()
+    - Using SQLAlchemy event listener to set PostgreSQL session variable before queries
     
     All endpoints using get_current_user() or get_current_tenant() automatically
     filter by tenant_id, preventing cross-tenant data access.
     """
     db = SessionLocal()
+    
+    # Set tenant ID for RLS if available in context
+    # This enables database-level row-level security policies
+    tenant_id = current_tenant_id_context.get(None)
+    if tenant_id:
+        # Set PostgreSQL session variable for RLS (transaction-local)
+        # This makes RLS policies work correctly
+        # Use parameterized query to prevent SQL injection
+        db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant_id)})
+    
     try:
         yield db
     finally:
@@ -194,8 +212,26 @@ def get_db():
 
 
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
-    """Get async database session"""
+    """
+    Get async database session with RLS support
+    
+    SECURITY: Tenant isolation is enforced at multiple levels:
+    1. Application-level filtering with current_user.tenant_id (see get_current_tenant())
+    2. Row-level security (RLS) - sets app.current_tenant_id per transaction
+    
+    RLS requires tenant context to be set. This is done by:
+    - Setting current_tenant_id_context in get_current_tenant()
+    - Setting PostgreSQL session variable before queries
+    """
     async with AsyncSessionLocal() as session:
+        # Set tenant ID for RLS if available in context
+        # This enables database-level row-level security policies
+        tenant_id = current_tenant_id_context.get(None)
+        if tenant_id:
+            # Set PostgreSQL session variable for RLS (transaction-local)
+            # This makes RLS policies work correctly
+            await session.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant_id)})
+        
         yield session
 
 

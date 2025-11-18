@@ -5,7 +5,8 @@ Quote management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import or_, select, func
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from decimal import Decimal
@@ -13,7 +14,7 @@ import uuid
 import asyncio
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
 from app.models.quotes import Quote, QuoteStatus
 from app.models.tenant import User, Tenant
@@ -119,37 +120,53 @@ async def list_quotes(
     customer_id: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List quotes for current tenant with pagination"""
+    """
+    List quotes for current tenant with pagination
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        query = db.query(Quote).filter_by(
-            tenant_id=current_user.tenant_id,
-            is_deleted=False
+        # Build base query
+        stmt = select(Quote).where(
+            Quote.tenant_id == current_user.tenant_id,
+            Quote.is_deleted == False
+        )
+        
+        # Build count query for total
+        count_stmt = select(func.count(Quote.id)).where(
+            Quote.tenant_id == current_user.tenant_id,
+            Quote.is_deleted == False
         )
         
         if status:
-            query = query.filter_by(status=status)
+            stmt = stmt.where(Quote.status == status)
+            count_stmt = count_stmt.where(Quote.status == status)
         
         if customer_id:
-            query = query.filter_by(customer_id=customer_id)
+            stmt = stmt.where(Quote.customer_id == customer_id)
+            count_stmt = count_stmt.where(Quote.customer_id == customer_id)
         
         # Apply search filter if provided
         if search:
             search_filter = f"%{search}%"
-            query = query.filter(
-                or_(
-                    Quote.title.ilike(search_filter),
-                    Quote.quote_number.ilike(search_filter),
-                    Quote.project_title.ilike(search_filter)
-                )
+            search_condition = or_(
+                Quote.title.ilike(search_filter),
+                Quote.quote_number.ilike(search_filter),
+                Quote.project_title.ilike(search_filter)
             )
+            stmt = stmt.where(search_condition)
+            count_stmt = count_stmt.where(search_condition)
         
         # Get total count before pagination
-        total = query.count()
+        total_result = await db.execute(count_stmt)
+        total = total_result.scalar() or 0
         
         # Apply pagination
-        quotes = query.order_by(Quote.created_at.desc()).offset(skip).limit(limit).all()
+        stmt = stmt.order_by(Quote.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        quotes = result.scalars().all()
         
         # Calculate total pages
         total_pages = (total + limit - 1) // limit if limit > 0 else 1
@@ -186,13 +203,20 @@ async def list_quotes(
 async def create_quote(
     quote_data: QuoteCreate,
     current_user: User = Depends(check_permission("quote:create")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create new quote"""
+    """
+    Create new quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    from sqlalchemy import select, func
     
     try:
         # Generate quote number
-        quote_count = db.query(Quote).filter_by(tenant_id=current_user.tenant_id).count()
+        count_stmt = select(func.count(Quote.id)).where(Quote.tenant_id == current_user.tenant_id)
+        count_result = await db.execute(count_stmt)
+        quote_count = count_result.scalar() or 0
         quote_number = f"Q-{datetime.now().strftime('%Y%m')}-{quote_count + 1:04d}"
         
         quote = Quote(
@@ -226,8 +250,8 @@ async def create_quote(
         )
         
         db.add(quote)
-        db.commit()
-        db.refresh(quote)
+        await db.commit()
+        await db.refresh(quote)
         
         # Optionally trigger AI analysis if requested (queued as background task)
         if quote_data.auto_analyze:
@@ -236,41 +260,54 @@ async def create_quote(
                 from app.core.celery_app import celery_app
                 from app.models.tenant import Tenant
                 
-                tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+                tenant_stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+                tenant_result = await db.execute(tenant_stmt)
+                tenant = tenant_result.scalar_one_or_none()
                 if tenant:
-                    api_keys = get_api_keys(db, tenant)
-                    if api_keys.openai:
-                        quote_data_dict = {
-                            'project_title': quote.project_title or quote.title,
-                            'project_description': quote.project_description or quote.description,
-                            'site_address': quote.site_address,
-                            'building_type': quote.building_type,
-                            'building_size': quote.building_size,
-                            'number_of_floors': quote.number_of_floors or 1,
-                            'number_of_rooms': quote.number_of_rooms or 1,
-                            'cabling_type': quote.cabling_type,
-                            'wifi_requirements': quote.wifi_requirements or False,
-                            'cctv_requirements': quote.cctv_requirements or False,
-                            'door_entry_requirements': quote.door_entry_requirements or False,
-                            'special_requirements': quote.special_requirements,
-                            'quote_type': quote.quote_type
-                        }
-                        
-                        # Queue analysis task to Celery (non-blocking)
-                        celery_app.send_task(
-                            'analyze_quote_requirements',
-                            args=[
-                                quote.id,
-                                str(current_user.tenant_id),
-                                quote_data_dict,
-                                None,  # clarification_answers
-                                False  # questions_only
-                            ]
-                        )
-                        print(f"[QUOTE CREATION] Queued auto-analysis task for quote {quote.id}")
+                    # For async session, we need to use a sync session for get_api_keys
+                    # This is a temporary workaround - get_api_keys should be refactored to support async
+                    from app.core.database import SessionLocal
+                    sync_db = SessionLocal()
+                    try:
+                        api_keys = get_api_keys(sync_db, tenant)
+                        if api_keys.openai:
+                            quote_data_dict = {
+                                'project_title': quote.project_title or quote.title,
+                                'project_description': quote.project_description or quote.description,
+                                'site_address': quote.site_address,
+                                'building_type': quote.building_type,
+                                'building_size': quote.building_size,
+                                'number_of_floors': quote.number_of_floors or 1,
+                                'number_of_rooms': quote.number_of_rooms or 1,
+                                'cabling_type': quote.cabling_type,
+                                'wifi_requirements': quote.wifi_requirements or False,
+                                'cctv_requirements': quote.cctv_requirements or False,
+                                'door_entry_requirements': quote.door_entry_requirements or False,
+                                'special_requirements': quote.special_requirements,
+                                'quote_type': quote.quote_type
+                            }
+                            
+                            # Queue analysis task to Celery (non-blocking)
+                            celery_app.send_task(
+                                'analyze_quote_requirements',
+                                args=[
+                                    quote.id,
+                                    str(current_user.tenant_id),
+                                    quote_data_dict,
+                                    None,  # clarification_answers
+                                    False  # questions_only
+                                ]
+                            )
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.info(f"[QUOTE CREATION] Queued auto-analysis task for quote {quote.id}")
+                    finally:
+                        sync_db.close()
             except Exception as e:
                 # Don't fail quote creation if analysis fails
-                print(f"[QUOTE CREATION] Error queueing auto-analysis: {e}")
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"[QUOTE CREATION] Error queueing auto-analysis: {e}", exc_info=True)
         
         # Publish quote.created event (async, non-blocking)
         from app.core.events import get_event_publisher
@@ -293,7 +330,10 @@ async def create_quote(
         return quote
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating quote: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating quote: {str(e)}"
@@ -304,14 +344,22 @@ async def create_quote(
 async def get_quote(
     quote_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get quote by ID"""
-    quote = db.query(Quote).filter_by(
-        id=quote_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    """
+    Get quote by ID
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    from sqlalchemy import select
+    
+    stmt = select(Quote).where(
+        Quote.id == quote_id,
+        Quote.tenant_id == current_user.tenant_id,
+        Quote.is_deleted == False
+    )
+    result = await db.execute(stmt)
+    quote = result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Quote not found")
@@ -324,14 +372,22 @@ async def update_quote(
     quote_id: str,
     quote_update: QuoteUpdate,
     current_user: User = Depends(check_permission("quote:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update quote"""
-    quote = db.query(Quote).filter_by(
-        id=quote_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    """
+    Update quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    from sqlalchemy import select
+    
+    stmt = select(Quote).where(
+        Quote.id == quote_id,
+        Quote.tenant_id == current_user.tenant_id,
+        Quote.is_deleted == False
+    )
+    result = await db.execute(stmt)
+    quote = result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Quote not found")
@@ -369,8 +425,8 @@ async def update_quote(
     if quote_update.special_requirements is not None:
         quote.special_requirements = quote_update.special_requirements
     
-    db.commit()
-    db.refresh(quote)
+    await db.commit()
+    await db.refresh(quote)
     
     # Publish quote.updated event (async, non-blocking)
     from app.core.events import get_event_publisher
@@ -406,21 +462,29 @@ async def update_quote(
 async def delete_quote(
     quote_id: str,
     current_user: User = Depends(check_permission("quote:delete")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Soft delete quote"""
-    quote = db.query(Quote).filter_by(
-        id=quote_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    """
+    Soft delete quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    from sqlalchemy import select
+    
+    stmt = select(Quote).where(
+        Quote.id == quote_id,
+        Quote.tenant_id == current_user.tenant_id,
+        Quote.is_deleted == False
+    )
+    result = await db.execute(stmt)
+    quote = result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Quote not found")
     
     quote.is_deleted = True
     quote.deleted_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
     
     return None
 
@@ -430,19 +494,26 @@ async def analyze_quote_requirements(
     request: QuoteAnalyzeRequest,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Analyze quote requirements using AI (queued as background task)
     
     Returns 202 Accepted with task ID. Analysis runs in background via Celery.
     Results will be available via WebSocket events or by polling the quote.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         from app.core.celery_app import celery_app
         
-        # Get API keys to validate configuration
-        api_keys = get_api_keys(db, current_tenant)
+        # Get API keys to validate configuration (use sync session for get_api_keys)
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+        finally:
+            sync_db.close()
         if not api_keys.openai:
             raise HTTPException(
                 status_code=400,
@@ -451,10 +522,12 @@ async def analyze_quote_requirements(
         
         # Build quote data dict - use request data if provided, otherwise fetch from quote
         if request.quote_id:
-            quote = db.query(Quote).filter(
+            stmt = select(Quote).where(
                 Quote.id == request.quote_id,
                 Quote.tenant_id == current_user.tenant_id
-            ).first()
+            )
+            result = await db.execute(stmt)
+            quote = result.scalar_one_or_none()
             
             if not quote:
                 raise HTTPException(status_code=404, detail="Quote not found")
@@ -525,23 +598,35 @@ async def analyze_quote_requirements(
 async def calculate_quote_pricing(
     quote_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Calculate pricing for a quote"""
+    """
+    Calculate pricing for a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
-        pricing_service = QuotePricingService(db, tenant_id=current_user.tenant_id)
-        pricing_breakdown = pricing_service.calculate_quote_pricing(quote)
+        # QuotePricingService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            pricing_service = QuotePricingService(sync_db, tenant_id=current_user.tenant_id)
+            pricing_breakdown = pricing_service.calculate_quote_pricing(quote)
+        finally:
+            sync_db.close()
         
-        db.commit()
-        db.refresh(quote)
+        await db.commit()
+        await db.refresh(quote)
         
         return {
             'success': True,
@@ -552,7 +637,10 @@ async def calculate_quote_pricing(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error calculating pricing: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error calculating pricing: {str(e)}"
@@ -563,20 +651,28 @@ async def calculate_quote_pricing(
 async def duplicate_quote(
     quote_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Duplicate a quote"""
+    """
+    Duplicate a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        original_quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        original_quote = result.scalar_one_or_none()
         
         if not original_quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
         # Generate new quote number
-        quote_count = db.query(Quote).filter_by(tenant_id=current_user.tenant_id).count()
+        count_stmt = select(func.count(Quote.id)).where(Quote.tenant_id == current_user.tenant_id)
+        count_result = await db.execute(count_stmt)
+        quote_count = count_result.scalar() or 0
         new_quote_number = f"Q-{datetime.now().strftime('%Y%m')}-{quote_count + 1:04d}"
         
         # Create duplicate
@@ -605,36 +701,47 @@ async def duplicate_quote(
         )
         
         db.add(new_quote)
-        db.flush()
+        await db.flush()
         
         # Copy quote items if any
-        for item in original_quote.items:
-            from app.models.quotes import QuoteItem
-            new_item = QuoteItem(
-                id=str(uuid.uuid4()),
-                tenant_id=current_user.tenant_id,
-                quote_id=new_quote.id,
-                description=item.description,
-                category=item.category,
-                quantity=item.quantity,
-                unit_price=item.unit_price,
-                discount_rate=item.discount_rate,
-                discount_amount=item.discount_amount,
-                total_price=item.total_price,
-                notes=item.notes,
-                sort_order=item.sort_order
-            )
-            db.add(new_item)
+        # Need to load items relationship - use sync session for relationship loading
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            sync_quote = sync_db.query(Quote).filter(Quote.id == quote_id).first()
+            if sync_quote and sync_quote.items:
+                for item in sync_quote.items:
+                    from app.models.quotes import QuoteItem
+                    new_item = QuoteItem(
+                        id=str(uuid.uuid4()),
+                        tenant_id=current_user.tenant_id,
+                        quote_id=new_quote.id,
+                        description=item.description,
+                        category=item.category,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        discount_rate=item.discount_rate,
+                        discount_amount=item.discount_amount,
+                        total_price=item.total_price,
+                        notes=item.notes,
+                        sort_order=item.sort_order
+                    )
+                    db.add(new_item)
+        finally:
+            sync_db.close()
         
-        db.commit()
-        db.refresh(new_quote)
+        await db.commit()
+        await db.refresh(new_quote)
         
         return new_quote
     
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error duplicating quote: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error duplicating quote: {str(e)}"
@@ -647,21 +754,25 @@ async def submit_clarifications(
     clarification_answers: List[Dict[str, str]],
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Submit clarification answers and re-analyze quote (queued as background task)
     
     Returns 202 Accepted with task ID. Analysis runs in background via Celery.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         import json
         from app.core.celery_app import celery_app
         
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
@@ -676,10 +787,15 @@ async def submit_clarifications(
         
         clarifications_log.extend(clarification_answers)
         quote.clarifications_log = json.dumps(clarifications_log)
-        db.commit()
+        await db.commit()
         
-        # Get API keys to validate configuration
-        api_keys = get_api_keys(db, current_tenant)
+        # Get API keys to validate configuration (use sync session for get_api_keys)
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+        finally:
+            sync_db.close()
         if not api_keys.openai:
             raise HTTPException(
                 status_code=400,
@@ -726,7 +842,10 @@ async def submit_clarifications(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error submitting clarifications: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error submitting clarifications: {str(e)}"
@@ -737,21 +856,27 @@ async def submit_clarifications(
 async def approve_quote(
     quote_id: str,
     current_user: User = Depends(check_permission("quote:approve")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Approve a quote"""
+    """
+    Approve a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
         quote.status = QuoteStatus.ACCEPTED
-        db.commit()
-        db.refresh(quote)
+        await db.commit()
+        await db.refresh(quote)
         
         # Publish quote.approved event (async, non-blocking)
         from app.core.events import get_event_publisher
@@ -772,7 +897,10 @@ async def approve_quote(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error approving quote: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error approving quote: {str(e)}"
@@ -784,14 +912,20 @@ async def reject_quote(
     quote_id: str,
     reason: Optional[str] = None,
     current_user: User = Depends(check_permission("quote:approve")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Reject a quote"""
+    """
+    Reject a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
@@ -800,8 +934,8 @@ async def reject_quote(
         if reason:
             quote.notes = (quote.notes or "") + f"\nRejection reason: {reason}"
         
-        db.commit()
-        db.refresh(quote)
+        await db.commit()
+        await db.refresh(quote)
         
         # Publish quote.rejected event (async, non-blocking)
         from app.core.events import get_event_publisher
@@ -822,7 +956,10 @@ async def reject_quote(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error rejecting quote: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error rejecting quote: {str(e)}"
@@ -833,20 +970,32 @@ async def reject_quote(
 async def get_quote_consistency(
     quote_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get consistency analysis for a quote"""
+    """
+    Get consistency analysis for a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
-        consistency_service = QuoteConsistencyService(db, current_user.tenant_id)
-        analysis = consistency_service.analyze_quote_consistency(quote_id)
+        # QuoteConsistencyService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            consistency_service = QuoteConsistencyService(sync_db, current_user.tenant_id)
+            analysis = consistency_service.analyze_quote_consistency(quote_id)
+        finally:
+            sync_db.close()
         
         return {
             'success': True,
@@ -866,23 +1015,31 @@ async def get_quote_consistency(
 async def list_quote_versions(
     quote_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List all versions of a quote"""
+    """
+    List all versions of a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.product import QuoteVersion
         
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
-        versions = db.query(QuoteVersion).filter(
+        versions_stmt = select(QuoteVersion).where(
             QuoteVersion.quote_id == quote_id
-        ).order_by(QuoteVersion.created_at.desc()).all()
+        ).order_by(QuoteVersion.created_at.desc())
+        versions_result = await db.execute(versions_stmt)
+        versions = versions_result.scalars().all()
         
         return {
             'success': True,
@@ -902,25 +1059,33 @@ async def list_quote_versions(
 async def create_quote_version(
     quote_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a new version of a quote"""
+    """
+    Create a new version snapshot of a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.product import QuoteVersion
         import json
         
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
         # Get current version number
-        existing_versions = db.query(QuoteVersion).filter(
+        count_stmt = select(func.count(QuoteVersion.id)).where(
             QuoteVersion.quote_id == quote_id
-        ).count()
+        )
+        count_result = await db.execute(count_stmt)
+        existing_versions = count_result.scalar() or 0
         
         version_number = f"{existing_versions + 1}.0"
         
@@ -950,13 +1115,23 @@ async def create_quote_version(
             'recommended_products': quote.recommended_products,
             'labour_breakdown': quote.labour_breakdown,
             'quotation_details': quote.quotation_details,
-            'items': [{
-                'description': item.description,
-                'quantity': float(item.quantity),
-                'unit_price': float(item.unit_price),
-                'total_price': float(item.total_price)
-            } for item in quote.items]
+            'items': []  # Will be populated below using sync session
         }
+        
+        # Need to load items relationship - use sync session for relationship loading
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            sync_quote = sync_db.query(Quote).filter(Quote.id == quote_id).first()
+            if sync_quote and sync_quote.items:
+                quote_snapshot['items'] = [{
+                    'description': item.description,
+                    'quantity': float(item.quantity),
+                    'unit_price': float(item.unit_price),
+                    'total_price': float(item.total_price)
+                } for item in sync_quote.items]
+        finally:
+            sync_db.close()
         
         version = QuoteVersion(
             quote_id=quote_id,
@@ -966,8 +1141,8 @@ async def create_quote_version(
         )
         
         db.add(version)
-        db.commit()
-        db.refresh(version)
+        await db.commit()
+        await db.refresh(version)
         
         return {
             'success': True,
@@ -977,7 +1152,10 @@ async def create_quote_version(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating version: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Error creating version: {str(e)}"
@@ -990,51 +1168,63 @@ async def generate_quote_document(
     format: str = Query("docx", regex="^(docx|pdf)$"),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Generate Word or PDF document for a quote"""
+    """
+    Generate Word or PDF document for a quote
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from fastapi.responses import StreamingResponse
         from app.services.document_generator_service import DocumentGeneratorService
         
-        quote = db.query(Quote).filter(
+        stmt = select(Quote).where(
             Quote.id == quote_id,
             Quote.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        quote = result.scalar_one_or_none()
         
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
         
-        generator = DocumentGeneratorService(db, current_user.tenant_id)
-        
-        if format == "pdf":
-            document = generator.generate_pdf_document(quote)
-            if not document:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to generate PDF document"
+        # DocumentGeneratorService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            generator = DocumentGeneratorService(sync_db, current_user.tenant_id)
+            
+            if format == "pdf":
+                document = generator.generate_pdf_document(quote)
+                if not document:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to generate PDF document"
+                    )
+                return StreamingResponse(
+                    document,
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="quote_{quote.quote_number}.pdf"'
+                    }
                 )
-            return StreamingResponse(
-                document,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f'attachment; filename="quote_{quote.quote_number}.pdf"'
-                }
-            )
-        else:  # docx
-            document = generator.generate_word_document(quote)
-            if not document:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to generate Word document"
+            else:  # docx
+                document = generator.generate_word_document(quote)
+                if not document:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to generate Word document"
+                    )
+                return StreamingResponse(
+                    document,
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="quote_{quote.quote_number}.docx"'
+                    }
                 )
-            return StreamingResponse(
-                document,
-                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                headers={
-                    "Content-Disposition": f'attachment; filename="quote_{quote.quote_number}.docx"'
-                }
-            )
+        finally:
+            sync_db.close()
     
     except HTTPException:
         raise

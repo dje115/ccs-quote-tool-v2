@@ -4,9 +4,10 @@ WebSocket endpoint for real-time updates
 Provides tenant-isolated WebSocket connections for instant updates
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException, status, Cookie
 from jose import jwt
 import json
+from typing import Optional
 from app.core.config import settings
 from app.core.websocket import get_websocket_manager
 from app.core.database import SessionLocal
@@ -15,7 +16,7 @@ from app.models.tenant import User
 router = APIRouter()
 
 
-async def authenticate_websocket(websocket: WebSocket, token: str) -> tuple[str, str]:
+async def authenticate_websocket(websocket: WebSocket, token: Optional[str] = None) -> tuple[str, str]:
     """
     Authenticate WebSocket connection using JWT token
     
@@ -58,14 +59,16 @@ async def authenticate_websocket(websocket: WebSocket, token: str) -> tuple[str,
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(None)  # Optional for backward compatibility
+    access_token_cookie: Optional[str] = Cookie(None, alias="access_token")
 ):
     """
     WebSocket endpoint for real-time updates
     
     SECURITY: Token can be provided via:
-    1. Query parameter (legacy, for backward compatibility) - NOT RECOMMENDED
-    2. First message after connection (preferred) - format: {"type": "auth", "token": "..."}
+    1. HttpOnly cookie (preferred) - sent automatically in WebSocket handshake
+    2. First message after connection (fallback) - Format: {"type": "auth", "token": "..."}
+    
+    Query parameters are NOT supported to prevent token leakage in logs/caches.
     
     The WebSocket connection is tenant-scoped - users only receive
     events for their tenant. All events are published to Redis Pub/Sub
@@ -73,38 +76,39 @@ async def websocket_endpoint(
     """
     tenant_id = None
     user_id = None
+    token = None
     
     try:
         # Accept connection first
         await websocket.accept()
         
-        # SECURITY: Prefer token from first message over query parameter
-        # Query parameters can leak into logs, caches, and URL history
+        # SECURITY: Try to get token from HttpOnly cookie first (preferred method)
+        # WebSocket handshake is an HTTP request, so cookies are available
+        token = access_token_cookie
+        
+        # If no cookie, try to get token from first message (fallback for clients without cookies)
         if not token:
-            # Wait for auth message (first message should be auth)
             try:
-                # Set timeout for auth message
+                # Set timeout for auth message (5 seconds)
                 import asyncio
                 auth_data = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
                 auth_message = json.loads(auth_data)
-                if auth_message.get("type") == "auth":
-                    token = auth_message.get("token")
-                    if not token:
-                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token in auth message")
-                        return
-                else:
+                
+                if auth_message.get("type") != "auth":
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="First message must be auth message")
                     return
+                
+                token = auth_message.get("token")
+                if not token:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token in auth message or cookie")
+                    return
+                    
             except asyncio.TimeoutError:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication timeout")
                 return
             except json.JSONDecodeError:
                 await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid auth message format")
                 return
-        
-        if not token:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="No authentication token provided")
-            return
         
         # Authenticate connection
         try:

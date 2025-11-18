@@ -4,13 +4,14 @@ Lead management endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user, check_permission
 from app.models.leads import Lead, LeadStatus, LeadSource
 from app.models.tenant import User
@@ -50,18 +51,24 @@ async def list_leads(
     limit: int = 20,
     status: Optional[LeadStatus] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List leads for current tenant"""
-    query = db.query(Lead).filter_by(
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
+    """
+    List leads for current tenant
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Lead).where(
+        Lead.tenant_id == current_user.tenant_id,
+        Lead.is_deleted == False
     )
     
     if status:
-        query = query.filter_by(status=status)
+        stmt = stmt.where(Lead.status == status)
     
-    leads = query.order_by(Lead.created_at.desc()).offset(skip).limit(limit).all()
+    stmt = stmt.order_by(Lead.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    leads = result.scalars().all()
     return leads
 
 
@@ -69,14 +76,20 @@ async def list_leads(
 async def get_lead(
     lead_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get lead by ID"""
-    lead = db.query(Lead).filter_by(
-        id=lead_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    """
+    Get lead by ID
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Lead).where(
+        Lead.id == lead_id,
+        Lead.tenant_id == current_user.tenant_id,
+        Lead.is_deleted == False
+    )
+    result = await db.execute(stmt)
+    lead = result.scalar_one_or_none()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -89,14 +102,20 @@ async def update_lead(
     lead_id: str,
     lead_update: LeadUpdate,
     current_user: User = Depends(check_permission("lead:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update lead"""
-    lead = db.query(Lead).filter_by(
-        id=lead_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    """
+    Update lead
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Lead).where(
+        Lead.id == lead_id,
+        Lead.tenant_id == current_user.tenant_id,
+        Lead.is_deleted == False
+    )
+    result = await db.execute(stmt)
+    lead = result.scalar_one_or_none()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -110,8 +129,8 @@ async def update_lead(
     if lead_update.contact_phone is not None:
         lead.contact_phone = lead_update.contact_phone
     
-    db.commit()
-    db.refresh(lead)
+    await db.commit()
+    await db.refresh(lead)
     
     return lead
 
@@ -120,21 +139,27 @@ async def update_lead(
 async def delete_lead(
     lead_id: str,
     current_user: User = Depends(check_permission("lead:delete")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Soft delete lead"""
-    lead = db.query(Lead).filter_by(
-        id=lead_id,
-        tenant_id=current_user.tenant_id,
-        is_deleted=False
-    ).first()
+    """
+    Soft delete lead
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(Lead).where(
+        Lead.id == lead_id,
+        Lead.tenant_id == current_user.tenant_id,
+        Lead.is_deleted == False
+    )
+    result = await db.execute(stmt)
+    lead = result.scalar_one_or_none()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
     lead.is_deleted = True
     lead.deleted_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
     
     return None
 
@@ -143,22 +168,26 @@ async def delete_lead(
 async def create_leads_from_competitors(
     data: CompetitorLeadsCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Create discovery leads from competitor company names
     These will be queued for AI analysis
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     created_leads = []
     skipped_duplicates = []
     
     for company_name in data.company_names:
         # Check if lead already exists
-        existing_lead = db.query(Lead).filter_by(
-            tenant_id=current_user.tenant_id,
-            company_name=company_name,
-            is_deleted=False
-        ).first()
+        stmt = select(Lead).where(
+            Lead.tenant_id == current_user.tenant_id,
+            Lead.company_name == company_name,
+            Lead.is_deleted == False
+        )
+        result = await db.execute(stmt)
+        existing_lead = result.scalar_one_or_none()
         
         if existing_lead:
             skipped_duplicates.append(company_name)
@@ -179,7 +208,7 @@ async def create_leads_from_competitors(
         db.add(lead)
         created_leads.append(company_name)
     
-    db.commit()
+    await db.commit()
     
     return {
         "success": True,

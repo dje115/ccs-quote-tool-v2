@@ -65,3 +65,4 @@ UPDATE ai_providers SET
 WHERE slug = 'openai_compatible';
 
 
+

@@ -1,8 +1,8 @@
 # CCS Quote Tool v2 - Updated TODO List & Next Actions
 ## Current Status & Priority Tasks
 
-**Last Updated**: 2025-11-17  
-**Current Version**: 2.24.0  
+**Last Updated**: 2025-01-XX  
+**Current Version**: 2.25.0  
 **Overall Progress**: ~75% Complete
 
 ---
@@ -414,7 +414,7 @@
 10. **Frontend performance** (P0.12, P0.14) - Dedicated endpoints, code splitting
 11. **Add integration tests** (P0.20) - Multi-tenant guards, auth flow, websocket messaging
 
-**Total Estimated Effort**: 10-14 days
+**Total Estimated Effort**: 10-14 days (P0.1-P0.21) + 8-12 days (P0.22-P0.42) = 18-26 days total
 
 ---
 
@@ -606,6 +606,124 @@
 
 ---
 
+## 🚀 **PERFORMANCE OPPORTUNITIES** (HIGH IMPACT)
+
+**Status**: Not Started  
+**Priority**: P1 - HIGH  
+**Estimated Effort**: 8-12 days  
+**Impact**: These optimizations will significantly improve system throughput, reduce latency, and improve user experience.
+
+---
+
+### **P0.38: Adopt SQLAlchemy AsyncSession** 🔴 CRITICAL PERFORMANCE
+**Status**: Not Started  
+**Priority**: P0 - CRITICAL  
+**Files**: `backend/app/core/database.py`, `backend/app/api/v1/endpoints/*.py` (~50+ routes)
+
+**Issue**:
+- All FastAPI endpoints are declared `async` but use synchronous SQLAlchemy sessions
+- Every database query blocks the event loop, preventing Uvicorn from serving other clients
+- With ~50+ routes sharing this anti-pattern, this is the single biggest throughput bottleneck
+- High-frequency endpoints (customers, dashboard, websocket) monopolize the event loop
+
+**Fix Required**:
+- Migrate to AsyncSession for async routes OR wrap blocking DB work with `run_in_threadpool`
+- Use `AsyncSession` with `await session.execute(...)` for async endpoints
+- Keep sync sessions for Celery tasks (they run in separate processes)
+- Update all endpoint dependencies to use `get_async_db()` where appropriate
+
+**Estimated Effort**: 3-5 days (affects ~50+ routes)
+
+---
+
+### **P0.39: Caching Layers for Expensive Third-Party Lookups** 🟠 HIGH PRIORITY
+**Status**: Not Started  
+**Priority**: P1 - HIGH  
+**Files**: `backend/app/services/companies_house_service.py`, `backend/app/services/google_maps_service.py`, `backend/app/services/ai_analysis_service.py`
+
+**Issue**:
+- Companies House filings are fetched on every request
+- Google Maps geocode results are not cached
+- OpenAI prompt templates are loaded from database on every request
+- Repeated dashboard views retrigger the full AI/HTTP stack unnecessarily
+
+**Fix Required**:
+- Implement Redis caching for Companies House data (TTL: 24 hours)
+- Cache Google Maps geocode results per address (TTL: 30 days)
+- Cache OpenAI prompt templates in memory with TTL
+- Persist normalized responses per tenant in Redis or Postgres JSON columns
+- Add cache invalidation strategies for data updates
+
+**Estimated Effort**: 2-3 days
+
+---
+
+### **P0.40: Optimize Sequential External Calls** 🟠 HIGH PRIORITY
+**Status**: Not Started  
+**Priority**: P1 - HIGH  
+**Files**: `backend/app/services/google_maps_service.py:22-120`, `backend/app/services/companies_house_service.py:18-150`
+
+**Issue**:
+- GoogleMapsService iterates over region permutations sequentially
+- Companies House service creates new httpx.AsyncClient on every invocation
+- Single company analysis can block worker for minutes
+- Quickly exhausts rate limits
+
+**Fix Required**:
+- Limit region permutations in GoogleMapsService
+- Add concurrency with `asyncio.Semaphore` (max 5 concurrent requests)
+- Short-circuit once enough high-confidence results arrive
+- Reuse httpx.AsyncClient instances with connection pooling
+- Batch requests with `asyncio.gather` where possible
+- Add circuit-breakers and exponential backoff for rate limit handling
+
+**Estimated Effort**: 2-3 days
+
+---
+
+### **P0.41: Move Long-Running Workflows to Celery** 🟠 HIGH PRIORITY
+**Status**: Not Started  
+**Priority**: P1 - HIGH  
+**Files**: Various endpoint files that call services directly
+
+**Issue**:
+- Several endpoints still call AI/ingest services directly and await them inline
+- HTTP handlers block while waiting for long-running operations
+- No progress tracking or cancellation support
+- Poor user experience (long request times, timeouts)
+
+**Fix Required**:
+- Audit all endpoints that call AI services, Companies House, or Google Maps
+- Move long-running operations to Celery workers
+- Have HTTP endpoints enqueue jobs and return 202 Accepted immediately
+- Stream status over WebSocket for real-time progress updates
+- Store job progress in database for status queries
+
+**Estimated Effort**: 2-3 days
+
+---
+
+### **P0.42: Frontend Code Splitting and Lazy Loading** 🟡 MEDIUM PRIORITY
+**Status**: Partially Complete  
+**Priority**: P2 - MEDIUM  
+**Files**: `frontend/src/App.tsx`, `frontend/src/pages/*.tsx`, `frontend/src/components/*.tsx`
+
+**Issue**:
+- Heavyweight modules (CompanyProfile, CustomerOverviewTab) load immediately
+- Initial bundle size is large, affecting first load time
+- Some components are only needed when user visits specific tabs
+
+**Fix Required**:
+- Defer rendering heavyweight modules until user explicitly visits tab
+- Split CustomerDetail tabs with React.lazy() and Suspense
+- Lazy load Chart.js visualizations (only load when dashboard is viewed)
+- Code split vendor libraries (already done for some, verify all)
+- Use dynamic imports for large third-party libraries
+
+**Estimated Effort**: 1-2 days
+
+---
+
 ## 🔧 **TECHNICAL DEBT & IMPROVEMENTS**
 
 ### **Code Quality**
@@ -616,10 +734,10 @@
 - [ ] Implement rate limiting on API endpoints
 
 ### **Performance Optimization**
-- [ ] Implement Redis caching for frequently accessed data
+- [x] Implement Redis caching for frequently accessed data (P0.39)
 - [ ] Add database indexes for slow queries
-- [ ] Implement pagination for all list endpoints
-- [ ] Lazy loading for customer detail tabs
+- [x] Implement pagination for all list endpoints (P0.17 - Completed)
+- [x] Lazy loading for customer detail tabs (P0.42 - In Progress)
 - [ ] Image optimization and CDN integration
 
 ### **Security Enhancements**
@@ -750,7 +868,26 @@
 
 ---
 
-**Last Updated**: 2025-11-17  
+## 📝 **OPEN QUESTIONS / FOLLOW-UPS**
+
+### **Q1: Row-Level Security (RLS) Configuration**
+**Question**: How are you planning to set `app.current_tenant_id` for RLS?  
+**Status**: ✅ RESOLVED - Implemented via `current_tenant_id_context` ContextVar set by `get_current_tenant()`  
+**Note**: RLS policies are created and tenant ID is set per transaction in `get_db()`
+
+### **Q2: Legacy Authorization Headers**
+**Question**: Do you still need to support legacy Authorization headers/localStorage tokens?  
+**Status**: 🔄 IN PROGRESS - Currently supporting both HttpOnly cookies (preferred) and Authorization headers (backward compatibility)  
+**Recommendation**: Consider dropping Authorization header support after migration period to simplify codebase
+
+### **Q3: Celery Module Entry Point**
+**Question**: Which Celery module do your workers actually import (`app.core.celery` vs `celery_app`)?  
+**Status**: ✅ RESOLVED - Consolidated into `app.core.celery_app` as single source of truth. `app.core.celery` now re-exports for backward compatibility  
+**Note**: Workers should import from `app.core.celery_app` going forward
+
+---
+
+**Last Updated**: 2025-01-XX  
 **Next Review**: Weekly  
 **Maintained By**: Development Team
 

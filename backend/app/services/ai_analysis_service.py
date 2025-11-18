@@ -4,6 +4,7 @@ AI Analysis Service for Company Analysis and Lead Generation
 """
 
 import json
+import re
 import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
@@ -376,47 +377,11 @@ class AIAnalysisService:
                 tenant_id=self.tenant_id
             )
             
-            # Fallback to hardcoded prompt if database prompt not found
+            # Require database prompt - no fallbacks
             if not prompt_obj:
-                print("[COMPETITORS] Using fallback prompt - database prompt not found")
-                competitor_prompt = f"""
-Find REAL, VERIFIED UK competitors for: {company_name}
-
-COMPANY DETAILS:
-- Business: {business_activities}
-- Sector: {business_sector}
-- Size Category: {company_size}
-- Locations: {locations_text}
-- Postcode Areas: {postcode_text}
-{f'- Turnover: £{turnover:,.0f}' if turnover else ''}
-{f'- Employees: {employees}' if employees else ''}
-
-MATCH CRITERIA:
-- Services: Same specific business area ({business_sector})
-- Size: Similar to company above (within ±50% if financial data available)
-- Region: Operates in same regions or nearby {postcode_text}
-- Status: Registered and ACTIVE (not shell/dormant)
-
-VERIFICATION REQUIRED:
-Each competitor MUST include:
-1. Company name
-2. Primary location/postcode
-3. Website URL or Companies House link
-4. Why they compete with {company_name}
-
-SEARCH INSTRUCTIONS:
-1. Use web search to find REAL companies
-2. Verify each company exists and is active
-3. Return company names you can verify via web search
-4. Only include companies with legitimate business presence
-
-Return ONLY verified real company names (one per line).
-If you find fewer than 5 real competitors, return 2-3 that are verified.
-Better 3 verified than 10 unverified.
-"""
-                system_prompt = "You are an expert at finding real, verified business competitors. Only return companies that actually exist and are currently trading. Use web search to verify each company before including it."
-                model = "gpt-5"
-                max_tokens = 8000
+                error_msg = f"Competitor analysis prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
+                print(f"[ERROR] {error_msg}")
+                raise ValueError(error_msg)
             else:
                 # Render prompt with variables
                 rendered = prompt_service.render_prompt(prompt_obj, {
@@ -438,27 +403,20 @@ Better 3 verified than 10 unverified.
             if not self.provider_service:
                 return []
             
-            if prompt_obj:
-                provider_response = await self.provider_service.generate(
-                    prompt=prompt_obj,
-                    variables={
-                        "company_name": company_name,
-                        "business_sector": business_sector,
-                        "company_size": company_size,
-                        "locations_text": locations_text,
-                        "postcode_text": postcode_text,
-                        "turnover": turnover,
-                        "employees": employees
-                    },
-                    max_tokens=max_tokens
-                )
-            else:
-                provider_response = await self.provider_service.generate_with_rendered_prompts(
-                    prompt=None,
-                    system_prompt=system_prompt,
-                    user_prompt=competitor_prompt,
-                    max_tokens=max_tokens
-                )
+            # Use database prompt (required - no fallback)
+            provider_response = await self.provider_service.generate(
+                prompt=prompt_obj,
+                variables={
+                    "company_name": company_name,
+                    "business_sector": business_sector,
+                    "company_size": company_size,
+                    "locations_text": locations_text,
+                    "postcode_text": postcode_text,
+                    "turnover": turnover,
+                    "employees": employees
+                },
+                max_tokens=max_tokens
+            )
             
             result_text = provider_response.content
             print(f"[COMPETITORS] GPT-5 response:\n{result_text[:500]}")
@@ -712,125 +670,11 @@ Better 3 verified than 10 unverified.
                 tenant_id=self.tenant_id
             )
             
-            # Fallback to hardcoded prompt if database prompt not found
+            # Require database prompt - no fallbacks
             if not prompt_obj:
-                print("[AI ANALYSIS] Using fallback prompt - database prompt not found")
-                user_prompt = f"""
-            Analyze this company and provide comprehensive business intelligence that helps us sell to them.
-            
-            {tenant_context}
-            
-            {company_info}
-            
-            IMPORTANT BUDGET ANALYSIS INSTRUCTION:
-            When estimating budget ranges in section 5, focus on services that match what WE provide (from the tenant context above). 
-            For example, if we provide crane hire, lifting services, or construction support, estimate their spending capacity for THOSE services, not generic IT budgets.
-            Base your budget estimates on their business activities and what services they would actually need from companies like ours.
-            
-             CRITICAL INSTRUCTION FOR COMPETITOR ANALYSIS:
-            When identifying competitors in section 9, find competitors OF THE PROSPECT COMPANY, NOT competitors of our company.
-            Exclude any companies in our sector (cabling, infrastructure). Return competitors of THE PROSPECT in THEIR sector.
-            
-            IMPORTANT: Consider how our company's products, services, and strengths align with this prospect's needs. 
-            Focus on identifying specific opportunities where we can add value based on what we offer.
-
-            Please provide a detailed analysis including:
-
-            1. **Business Sector Classification**: Choose the most appropriate sector from: office, retail, industrial, healthcare, education, hospitality, manufacturing, technology, finance, government, other
-
-            2. **Company Size Assessment**: Use the Companies House financial data to provide accurate estimates:
-               - Number of employees (use the employee estimates from Companies House data if available)
-               - Revenue range (use actual turnover data from Companies House if available, otherwise estimate)
-               - Business size category (Small, Medium, Large, Enterprise)
-
-            3. **Primary Business Activities**: Describe what this company does, their main products/services
-
-            4. **Technology Maturity**: Assess their likely technology/operational sophistication based on company size and financial data:
-               - Basic: Simple needs, basic infrastructure
-               - Intermediate: Some advanced systems, growing requirements
-               - Advanced: Sophisticated infrastructure, multiple systems
-               - Enterprise: Complex, integrated systems, dedicated teams
-               (If technology isn't relevant to your industry, assess operational maturity)
-
-            5. **Service Budget Estimate**: Based on their revenue and company size, estimate their likely annual spending range for services like ours (crane hire, lifting services, construction support, etc.) - NOT generic IT budgets unless that's what we provide
-
-            6. **Financial Health Analysis**: Analyze the financial data from Companies House:
-               - Comment on their profitability trend (Growing/Stable/Declining)
-               - Assess their financial stability based on shareholders' funds and cash position
-               - Evaluate revenue growth trends
-               - Identify any financial risks or opportunities
-
-            7. **Growth Potential**: Assess potential for business growth and expansion based on financial trends and company size
-
-            8. **Needs Assessment**: What needs might they have related to our products/services based on their size, financial position, and business activities?
-                Focus on needs that align with what we offer.
-
-            9. **COMPETITORS OF THIS COMPANY (NOT OUR COMPANY)**: [SKIP - Handled separately by GPT-5]
-                
-                [Note: Competitors are identified by a dedicated GPT-5 call with web search - not included here]
-
-            10. **Business Opportunities**: What opportunities exist for our company to add value given their financial capacity and growth trajectory?
-                Be specific about which of our offerings might align with their needs.
-
-            11. **Risk Factors**: What challenges or potential objections might we face when approaching them based on their financial position and business context?
-
-            12. **Actionable Sales Strategy** (CRITICAL): Analyze the prospect's business type and determine the best approach:
-            
-                **A) If they are a POTENTIAL CUSTOMER (B2C/Direct Sales):**
-                - Create 5-10 ways to sell OUR services directly TO them
-                - Match each of OUR products/services to one of THEIR specific needs
-                - Example: "Provide [our service] to address their [need/pain point]"
-                - Focus on how they can BUY from us
-                
-                **B) If they are in a SIMILAR/COMPLEMENTARY business (B2B/Partnership):**
-                - Use the "B2B Partnership Opportunities" section in OUR company information
-                - Create 5-10 ways to work WITH them (subcontracting, white-label, joint bids, etc.)
-                - Example: "Partner on their customer projects requiring [our expertise]"
-                - Example: "Act as their overflow/regional subcontractor for [service type]"
-                - Focus on how we can COLLABORATE to serve their customers together
-                
-                **IMPORTANT**: 
-                - Determine which approach fits based on their business activities
-                - If they're a potential customer, use approach A
-                - If they're a service provider like us (MSP, contractor, consultant, etc.), use approach B
-                - If both could apply, provide BOTH approaches clearly labeled
-                - Only suggest what we actually offer (as listed in OUR company information)
-
-            13. **Address and Location Analysis**: Based on the company information, identify:
-                - Primary business address (if different from registered address)
-                - ALL additional sites/locations mentioned
-                - Geographic spread of operations
-
-            Please respond in JSON format with these exact fields:
-            {{
-                "business_sector": "string (one of the sectors listed above)",
-                "estimated_employees": number,
-                "estimated_revenue": "string (revenue range)",
-                "business_size_category": "string (Small/Medium/Large/Enterprise)",
-                "primary_business_activities": "string (detailed description)",
-                "technology_maturity": "string (Basic/Intermediate/Advanced/Enterprise)",
-                "service_budget_estimate": "string (budget range for services like ours - crane hire, lifting, construction support, etc.)",
-                "growth_potential": "string (High/Medium/Low)",
-                "technology_needs": "string (predicted IT needs)",
-                "competitors": ["array of 5-10 competitor company names as strings"],
-                "opportunities": "string (business opportunities)",
-                "risks": "string (risk factors)",
-                "actionable_recommendations": ["array of 5-10 specific strings, each describing how we can help them"],
-                "company_profile": "string (comprehensive company summary)",
-                "primary_address": "string (main business address if different from registered)",
-                "additional_sites": "string (list of additional locations/sites)",
-                "location_analysis": "string (geographic spread and location requirements)",
-                "financial_health_analysis": "string (detailed analysis of financial position, profitability trends, and stability)",
-                "employee_analysis": "string (analysis of employee count and company size based on Companies House data)",
-                "revenue_analysis": "string (analysis of turnover trends and revenue growth)",
-                "profitability_assessment": "string (assessment of profitability trends and financial performance)"
-            }}
-
-            Focus on UK market context and be realistic in your assessments.
-            """
-                system_prompt = self._build_dynamic_system_prompt("general")
-                model = "gpt-5-mini"
-                max_tokens = 8000
+                error_msg = f"Customer analysis prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
+                print(f"[ERROR] {error_msg}")
+                raise ValueError(error_msg)
             else:
                 # Render prompt with variables
                 rendered = prompt_service.render_prompt(prompt_obj, {
@@ -850,24 +694,15 @@ Better 3 verified than 10 unverified.
             if not self.provider_service:
                 raise Exception("AI provider service not available")
             
-            if prompt_obj:
-                # Use database prompt
-                provider_response = await self.provider_service.generate(
-                    prompt=prompt_obj,
-                    variables={
-                        "tenant_context": tenant_context,
-                        "company_info": company_info
-                    },
-                    max_tokens=max_tokens
-                )
-            else:
-                # Use fallback prompts
-                provider_response = await self.provider_service.generate_with_rendered_prompts(
-                    prompt=None,
-                    system_prompt=system_prompt,
-                    user_prompt=prompt,
-                    max_tokens=max_tokens
-                )
+            # Use database prompt (required - no fallback)
+            provider_response = await self.provider_service.generate(
+                prompt=prompt_obj,
+                variables={
+                    "tenant_context": tenant_context,
+                    "company_info": company_info
+                },
+                max_tokens=max_tokens
+            )
             
             print(f"[AI] AI provider call successful, processing response...")
             result_text = provider_response.content
@@ -1312,18 +1147,55 @@ Better 3 verified than 10 unverified.
             elif tech_maturity == 'intermediate':
                 score += 5
             
-            # Growth potential scoring
+            # Growth potential scoring (improved to handle variations like "Medium-High")
             growth_potential = str(analysis.get('growth_potential', '')).lower()
-            if growth_potential == 'high':
-                score += 15
+            if 'high' in growth_potential:
+                # Check for "high" first (handles "high", "medium-high", "high-medium", etc.)
+                if growth_potential == 'high':
+                    score += 15  # Pure high
+                elif 'medium' in growth_potential:
+                    score += 12  # Medium-High or High-Medium (between medium and high)
+                else:
+                    score += 15  # Contains "high" but not "medium"
             elif growth_potential == 'medium':
                 score += 8
             
-            # Service budget scoring (rough estimate)
+            # Service budget scoring (improved pattern matching)
             service_budget = str(analysis.get('service_budget_estimate', analysis.get('it_budget_estimate', ''))).lower()
-            if '50k' in service_budget or '100k' in service_budget or '1m' in service_budget:
+            
+            # Remove common formatting characters for easier matching
+            budget_clean = service_budget.replace(',', '').replace('£', '').replace('$', '').replace(' ', '')
+            
+            # Check for high-value budgets (50k+, 100k+, 1m+)
+            # Match patterns like: 50k, 50000, 50,000, £50k, etc.
+            # Extract numbers and check for high-value ranges
+            numbers = re.findall(r'\d+', budget_clean)
+            has_high_budget = False
+            has_medium_budget = False
+            
+            # Check text patterns first (more reliable)
+            if '50k' in budget_clean or '100k' in budget_clean or '1m' in budget_clean or 'million' in budget_clean:
+                has_high_budget = True
+            elif '10k' in budget_clean or '25k' in budget_clean or '10,000' in service_budget or '25,000' in service_budget:
+                has_medium_budget = True
+            
+            # Also check numeric values
+            for num_str in numbers:
+                try:
+                    num = int(num_str)
+                    # Check for high-value budgets (50k+)
+                    if num >= 50000:
+                        has_high_budget = True
+                        break
+                    # Check for medium budgets (10k-49k)
+                    elif num >= 10000 and not has_high_budget:
+                        has_medium_budget = True
+                except ValueError:
+                    continue
+            
+            if has_high_budget:
                 score += 10
-            elif '10k' in service_budget or '25k' in service_budget:
+            elif has_medium_budget:
                 score += 5
             
             return min(100, max(0, score))

@@ -128,6 +128,10 @@ async def get_current_tenant(
     request.state.tenant_id = jwt_tenant_id
     request.state.db_tenant_id = jwt_tenant_id
     
+    # Set tenant ID in context variable for RLS (database-level security)
+    from app.core.database import current_tenant_id_context
+    current_tenant_id_context.set(jwt_tenant_id)
+    
     return tenant
 
 

@@ -32,17 +32,12 @@ const processQueue = (error: any, token: string | null = null) => {
 };
 
 // Add auth token to requests
-// SECURITY: Prefer HttpOnly cookies (sent automatically with withCredentials: true)
-// Fallback to Authorization header for backward compatibility during migration
+// SECURITY: HttpOnly cookies are sent automatically by the browser with withCredentials: true
+// We no longer use localStorage tokens to prevent XSS attacks
 apiClient.interceptors.request.use(
   (config) => {
-    // Try to get token from localStorage (backward compatibility)
-    // HttpOnly cookies are sent automatically by the browser
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    // If no token in localStorage, rely on HttpOnly cookie (sent automatically)
+    // HttpOnly cookies are sent automatically - no need to manually add Authorization header
+    // The backend will read tokens from cookies first, then fall back to Authorization header
     return config;
   },
   (error) => Promise.reject(error)
@@ -83,16 +78,14 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
     isRefreshing = true;
     
-    // Try refresh token from localStorage (backward compatibility)
-    // HttpOnly cookies are sent automatically with withCredentials: true
-    const refreshToken = localStorage.getItem('refresh_token');
-    
+    // SECURITY: HttpOnly cookies are sent automatically with withCredentials: true
+    // No need to read refresh_token from localStorage - backend reads from cookie
     try {
-      // Refresh token endpoint will use cookie if available, or body if provided
+      // Refresh token endpoint will use HttpOnly cookie automatically
       // IMPORTANT: Use axios directly (not apiClient) to avoid triggering interceptor
       const refreshResponse = await axios.post(
         `${API_BASE_URL}/api/v1/auth/refresh`,
-        refreshToken ? { refresh_token: refreshToken } : {},
+        {}, // Empty body - refresh token comes from HttpOnly cookie
         {
           withCredentials: true,
           headers: {
@@ -104,16 +97,12 @@ apiClient.interceptors.response.use(
       const newAccessToken = refreshResponse.data.access_token;
       const newRefreshToken = refreshResponse.data.refresh_token;
       
-      // Update localStorage for backward compatibility (if tokens returned)
-      // HttpOnly cookies are set automatically by the server
-      if (newAccessToken) {
-        localStorage.setItem('access_token', newAccessToken);
-      }
-      if (newRefreshToken) {
-        localStorage.setItem('refresh_token', newRefreshToken);
-      }
+      // SECURITY: Do NOT store tokens in localStorage - HttpOnly cookies are set automatically by the server
+      // If backend returns tokens in response, they're for backward compatibility only
+      // We rely entirely on HttpOnly cookies for security
       
-      // Update authorization header for retry
+      // Update authorization header for retry (if token provided in response)
+      // But prefer HttpOnly cookie which is sent automatically
       if (newAccessToken && originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
       }
@@ -127,9 +116,7 @@ apiClient.interceptors.response.use(
       // Refresh failed - clear queue and auth data
       processQueue(refreshError, null);
       
-      // Clear all auth data and redirect to login
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      // Clear user data (tokens are in HttpOnly cookies, cleared by backend on logout)
       localStorage.removeItem('user');
       
       // Only redirect if not already on login page
@@ -205,9 +192,9 @@ export const supplierAPI = {
 
 // Customer API
 export const customerAPI = {
-  list: (params?: any) => apiClient.get('/customers/', { params }),
+  list: (params?: any, config?: any) => apiClient.get('/customers/', { params, ...config }),
   create: (data: any) => apiClient.post('/customers/', data),
-  get: (id: string) => apiClient.get(`/customers/${id}`),
+  get: (id: string, config?: any) => apiClient.get(`/customers/${id}`, config),
   update: (id: string, data: any) => apiClient.put(`/customers/${id}`, data),
   delete: (id: string) => apiClient.delete(`/customers/${id}`),
   runAiAnalysis: (id: string, options?: { update_financial_data?: boolean; update_addresses?: boolean }) => 
@@ -250,7 +237,7 @@ export const campaignAPI = {
 
 // Contact API
 export const contactAPI = {
-  list: (customerId: string) => apiClient.get(`/contacts/customer/${customerId}`),
+  list: (customerId: string, config?: any) => apiClient.get(`/contacts/customer/${customerId}`, config),
   create: (data: any) => apiClient.post('/contacts/', data),
   update: (id: string, data: any) => apiClient.put(`/contacts/${id}`, data),
   delete: (id: string) => apiClient.delete(`/contacts/${id}`),
@@ -258,7 +245,7 @@ export const contactAPI = {
 
 // Quote API
 export const quoteAPI = {
-  list: (params?: any) => apiClient.get('/quotes/', { params }),
+  list: (params?: any, config?: any) => apiClient.get('/quotes/', { params, ...config }),
   create: (data: any) => apiClient.post('/quotes/', data),
   get: (id: string) => apiClient.get(`/quotes/${id}`),
   update: (id: string, data: any) => apiClient.put(`/quotes/${id}`, data),
@@ -356,7 +343,7 @@ export const providerKeysAPI = {
 
 // Helpdesk API
 export const helpdeskAPI = {
-  getTickets: (params?: any) => apiClient.get('/helpdesk/tickets', { params }),
+  getTickets: (params?: any, config?: any) => apiClient.get('/helpdesk/tickets', { params, ...config }),
   getTicket: (id: string) => apiClient.get(`/helpdesk/tickets/${id}`),
   createTicket: (data: any) => apiClient.post('/helpdesk/tickets', data),
   updateTicket: (id: string, data: any) => apiClient.put(`/helpdesk/tickets/${id}`, data),

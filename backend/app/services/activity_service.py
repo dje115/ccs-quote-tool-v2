@@ -154,42 +154,11 @@ Your Company: {tenant.company_name}
                 tenant_id=self.tenant_id
             )
             
-            # Fallback to hardcoded prompt if database prompt not found
+            # Require database prompt - no fallbacks
             if not prompt_obj:
-                print("[ActivityService] Using fallback prompt - database prompt not found")
-                user_prompt = f"""You are a sales assistant AI helping to process activity notes for a CRM system.
-
-ACTIVITY TYPE: {activity.activity_type.value.upper()}
-ORIGINAL NOTES (from salesperson):
-{activity.notes}
-
-{customer_context}
-{tenant_context}
-{activity_context}
-
-TASKS:
-1. Clean up and restructure the notes to be professional and clear
-2. Extract key information (pain points, objections, requirements, commitments)
-3. Suggest ONE specific next action that should be taken
-
-IMPORTANT:
-- Keep all factual information from the original notes
-- Make it concise but complete
-- Be specific in next actions (e.g., "Call back on Friday to discuss server room upgrade" not "Follow up later")
-- Consider the customer's stage in the sales cycle
-- Next action should be realistic and actionable
-
-Respond in JSON format:
-{{
-  "cleaned_notes": "Professional, structured version of the notes",
-  "next_action": "Specific action to take with date/context if mentioned",
-  "key_points": ["point1", "point2", "point3"],
-  "follow_up_priority": "high|medium|low",
-  "suggested_follow_up_date": "YYYY-MM-DD or null"
-}}"""
-                system_prompt = "You are a sales assistant AI that helps clean up and analyze sales activity notes. Always respond with valid JSON."
-                model = "gpt-5-mini"
-                max_tokens = 10000
+                error_msg = f"Activity enhancement prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
+                print(f"[ERROR] {error_msg}")
+                raise ValueError(error_msg)
             else:
                 # Render prompt with variables
                 rendered = prompt_service.render_prompt(prompt_obj, {
@@ -206,41 +175,29 @@ Respond in JSON format:
             
             # Use AIProviderService to generate completion
             try:
-                if prompt_obj:
-                    # Render prompt to get temperature and max_tokens
-                    rendered = prompt_service.render_prompt(prompt_obj, {
+                # Render prompt to get temperature and max_tokens
+                rendered = prompt_service.render_prompt(prompt_obj, {
+                    "activity_type": activity.activity_type.value.upper(),
+                    "notes": activity.notes,
+                    "customer_context": customer_context,
+                    "tenant_context": tenant_context,
+                    "activity_context": activity_context
+                })
+                # Use database prompt with provider service (required - no fallback)
+                provider_response = await self.provider_service.generate(
+                    prompt=prompt_obj,
+                    variables={
                         "activity_type": activity.activity_type.value.upper(),
                         "notes": activity.notes,
                         "customer_context": customer_context,
                         "tenant_context": tenant_context,
                         "activity_context": activity_context
-                    })
-                    # Use database prompt with provider service
-                    provider_response = await self.provider_service.generate(
-                        prompt=prompt_obj,
-                        variables={
-                            "activity_type": activity.activity_type.value.upper(),
-                            "notes": activity.notes,
-                            "customer_context": customer_context,
-                            "tenant_context": tenant_context,
-                            "activity_context": activity_context
-                        },
-                        temperature=rendered.get('temperature', 0.7),
-                        max_tokens=max_tokens,
-                        response_format={"type": "json_object"}
-                    )
-                    ai_response_text = provider_response.content
-                else:
-                    # Use fallback with rendered prompts
-                    provider_response = await self.provider_service.generate_with_rendered_prompts(
-                        prompt=None,  # No prompt object for fallback
-                        system_prompt=system_prompt,
-                        user_prompt=user_prompt,
-                        temperature=0.7,
-                        max_tokens=max_tokens,
-                        response_format={"type": "json_object"}
-                    )
-                    ai_response_text = provider_response.content
+                    },
+                    temperature=rendered.get('temperature', 0.7),
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"}
+                )
+                ai_response_text = provider_response.content
                 
                 # Parse JSON response
                 ai_response = json.loads(ai_response_text)
@@ -454,68 +411,34 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
                 tenant_id=self.tenant_id
             )
             
-            # Fallback to hardcoded prompt if database prompt not found
+            # Require database prompt - no fallbacks
             if not prompt_obj:
-                print("[ActivityService] Using fallback prompt for action suggestions - database prompt not found")
-                user_prompt = f"""You are a sales advisor AI helping prioritize customer engagement actions.
-
-CUSTOMER INFORMATION:
-Company: {customer.company_name}
-Status: {customer.status.value}
-Lead Score: {customer.lead_score or 'N/A'}
-Sector: {customer.business_sector.value if customer.business_sector else 'Unknown'}
-Days Since Last Contact: {days_since_contact if days_since_contact is not None else 'No previous contact'}
-
-{activity_summary}
-
-CUSTOMER'S IDENTIFIED NEEDS:
-{needs_assessment if needs_assessment else 'Not assessed yet'}
-
-CUSTOMER'S BUSINESS OPPORTUNITIES:
-{business_opportunities if business_opportunities else 'Not identified yet'}
-
-HOW YOUR COMPANY CAN HELP THIS CUSTOMER:
-{how_we_can_help if how_we_can_help else 'Not analyzed yet'}
-
-{tenant_context}
-
-CRITICAL INSTRUCTIONS:
-1. Base ALL suggestions on the customer's IDENTIFIED NEEDS and BUSINESS OPPORTUNITIES above
-2. Match your company's products/services to their specific needs
-3. Use the "How We Can Help" section to craft targeted value propositions
-4. If they are in a similar industry, consider B2B partnership opportunities
-5. Be SPECIFIC - reference actual needs and solutions, not generic sales talk
-6. Each suggestion should have a clear business reason tied to their needs
-
-TASK: Generate 3 prioritized action suggestions (call, email, visit) that directly address the customer's needs with your solutions.
-
-Respond in JSON:
-{{
-  "call_suggestion": {{
-    "priority": "high|medium|low",
-    "reason": "Why call now",
-    "talking_points": ["point1", "point2", "point3"],
-    "best_time": "Suggested time/day"
-  }},
-  "email_suggestion": {{
-    "priority": "high|medium|low",
-    "reason": "Why email now",
-    "subject": "Email subject line",
-    "key_topics": ["topic1", "topic2"]
-  }},
-  "visit_suggestion": {{
-    "priority": "high|medium|low",
-    "reason": "Why visit now",
-    "objectives": ["objective1", "objective2"],
-    "timing": "When to schedule"
-  }}
-}}"""
-                system_prompt = "You are a sales strategy AI that provides actionable customer engagement suggestions. Always respond with valid JSON."
-                model = "gpt-5-mini"
-                max_tokens = 20000
-            else:
-                # Render prompt with variables
-                rendered = prompt_service.render_prompt(prompt_obj, {
+                error_msg = f"Action suggestions prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
+                print(f"[ERROR] {error_msg}")
+                raise ValueError(error_msg)
+            
+            # Render prompt with variables
+            rendered = prompt_service.render_prompt(prompt_obj, {
+                "company_name": customer.company_name,
+                "status": customer.status.value,
+                "lead_score": str(customer.lead_score or 'N/A'),
+                "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
+                "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
+                "activity_summary": activity_summary,
+                "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
+                "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
+                "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
+                "tenant_context": tenant_context
+            })
+            user_prompt = rendered['user_prompt']
+            system_prompt = rendered['system_prompt']
+            model = rendered['model']
+            max_tokens = rendered['max_tokens']
+            
+            # Use AIProviderService (required - no fallback)
+            provider_response = await self.provider_service.generate(
+                prompt=prompt_obj,
+                variables={
                     "company_name": customer.company_name,
                     "status": customer.status.value,
                     "lead_score": str(customer.lead_score or 'N/A'),
@@ -526,61 +449,30 @@ Respond in JSON:
                     "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
                     "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
                     "tenant_context": tenant_context
-                })
-                user_prompt = rendered['user_prompt']
-                system_prompt = rendered['system_prompt']
-                model = rendered['model']
-                max_tokens = rendered['max_tokens']
-            
-            # Use AIProviderService
-            if prompt_obj:
-                provider_response = await self.provider_service.generate(
-                    prompt=prompt_obj,
-                    variables={
-                        "company_name": customer.company_name,
-                        "status": customer.status.value,
-                        "lead_score": str(customer.lead_score or 'N/A'),
-                        "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
-                        "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
-                        "activity_summary": activity_summary,
-                        "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
-                        "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
-                        "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
-                        "tenant_context": tenant_context
-                    },
-                    max_tokens=max_tokens,
-                    response_format={"type": "json_object"}
-                )
-            else:
-                provider_response = await self.provider_service.generate_with_rendered_prompts(
-                    prompt=None,
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    max_tokens=max_tokens,
-                    response_format={"type": "json_object"}
-                )
+                },
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"}
+            )
             
             suggestions = json.loads(provider_response.content)
             generated_at = datetime.now(timezone.utc)
             
             # Cache the suggestions in the database
             customer.ai_suggestions = suggestions
-            customer.ai_suggestions_date = generated_at
+            customer.ai_suggestions_generated_at = generated_at
             self.db.commit()
-            print(f"✓ Cached suggestions for customer {customer_id}")
             
-            return {
-                'success': True,
-                'suggestions': suggestions,
-                'generated_at': generated_at.isoformat(),
-                'cached': False
-            }
-                
+            return suggestions
+            
+        except json.JSONDecodeError as e:
+            print(f"[ActivityService] JSON decode error: {e}")
+            print(f"[ActivityService] Response content: {provider_response.content[:500]}")
+            raise ValueError(f"Invalid JSON response from AI: {str(e)}")
         except Exception as e:
-            print(f"[ERROR] Failed to generate action suggestions: {e}")
+            print(f"[ActivityService] Error generating action suggestions: {e}")
             import traceback
             traceback.print_exc()
-            return {'success': False, 'error': str(e)}
+            raise
     
     def get_activities(
         self,

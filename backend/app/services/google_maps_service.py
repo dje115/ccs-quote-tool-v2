@@ -5,19 +5,60 @@ Google Maps API Service for location data and company search
 
 import httpx
 import json
+import asyncio
+import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 class GoogleMapsService:
-    """Service for Google Maps API integration"""
+    """
+    Service for Google Maps API integration
+    
+    PERFORMANCE: Reuses httpx.AsyncClient with connection pooling and limits
+    region permutations to avoid exhausting rate limits. Uses asyncio.Semaphore
+    for concurrent request limiting and short-circuits when enough results found.
+    """
     
     def __init__(self, api_key: Optional[str] = None):
         self.base_url = settings.GOOGLE_MAPS_BASE_URL
         self.api_key = api_key or settings.GOOGLE_MAPS_API_KEY
         self.timeout = 30.0
+        
+        # Create reusable HTTP client with connection pooling
+        self._client: Optional[httpx.AsyncClient] = None
+        self._client_lock = asyncio.Lock()
+        
+        # Semaphore to limit concurrent requests (max 5 at a time)
+        self._semaphore = asyncio.Semaphore(5)
+        
+        # Maximum number of locations to find before short-circuiting
+        self._max_locations = 20
+    
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create reusable HTTP client"""
+        if self._client is None:
+            async with self._client_lock:
+                if self._client is None:
+                    self._client = httpx.AsyncClient(
+                        timeout=self.timeout,
+                        limits=httpx.Limits(
+                            max_keepalive_connections=10,
+                            max_connections=20,
+                            keepalive_expiry=30.0
+                        )
+                    )
+        return self._client
+    
+    async def close(self):
+        """Close HTTP client and cleanup resources"""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
     
     async def search_company_locations(self, company_name: str) -> Dict[str, Any]:
         """
@@ -103,14 +144,20 @@ class GoogleMapsService:
             ]
             search_queries.extend(uk_searches)
             
-            print(f"[GOOGLE MAPS] Searching for '{company_name}' with {len(search_queries)} queries")
+            logger.info(f"Searching for '{company_name}' with {len(search_queries)} queries")
+            
+            # Limit region permutations to avoid rate limits
+            # Prioritize: company name, major regions, then stop when we have enough results
+            priority_queries = search_queries[:10]  # First 10 queries (company name + variations + major regions)
+            remaining_queries = search_queries[10:]
             
             all_locations = []
             seen_place_ids = set()
+            client = await self._get_client()
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                # Execute all search queries
-                for i, query in enumerate(search_queries):
+            async def search_query(query: str) -> List[Dict[str, Any]]:
+                """Search a single query with semaphore limiting"""
+                async with self._semaphore:
                     try:
                         search_response = await client.get(
                             f"{self.base_url}/place/textsearch/json",
@@ -123,12 +170,11 @@ class GoogleMapsService:
                         
                         if search_response.status_code == 200:
                             search_data = search_response.json()
+                            locations = []
                             
                             if search_data.get("results"):
-                                print(f"[GOOGLE MAPS] Query {i+1}/{len(search_queries)}: '{query}' found {len(search_data['results'])} results")
-                                
-                                # Get details for each unique place
-                                for result in search_data["results"]:
+                                # Get details for each unique place (limit to 5 per query to avoid rate limits)
+                                for result in search_data["results"][:5]:
                                     place_id = result.get("place_id")
                                     if place_id and place_id not in seen_place_ids:
                                         seen_place_ids.add(place_id)
@@ -136,18 +182,44 @@ class GoogleMapsService:
                                         
                                         # Only add if it matches the company name reasonably well
                                         if self._is_relevant_location(location_detail, company_name):
-                                            all_locations.append(location_detail)
-                        
-                        # Rate limiting - small delay between requests
-                        if i % 10 == 0 and i > 0:
-                            import asyncio
-                            await asyncio.sleep(0.5)
+                                            locations.append(location_detail)
                             
+                            return locations
+                        return []
                     except Exception as e:
-                        print(f"[GOOGLE MAPS] Error with query '{query}': {e}")
-                        continue
+                        logger.warning(f"Error with query '{query}': {e}")
+                        return []
             
-            print(f"[GOOGLE MAPS] Found {len(all_locations)} unique locations for '{company_name}'")
+            # Execute priority queries first (in parallel with semaphore)
+            priority_tasks = [search_query(query) for query in priority_queries]
+            priority_results = await asyncio.gather(*priority_tasks, return_exceptions=True)
+            
+            # Flatten results
+            for result in priority_results:
+                if isinstance(result, list):
+                    all_locations.extend(result)
+                # Short-circuit if we have enough results
+                if len(all_locations) >= self._max_locations:
+                    logger.info(f"Found {len(all_locations)} locations, short-circuiting remaining queries")
+                    break
+            
+            # If we still need more results, process remaining queries (but limit to avoid rate limits)
+            if len(all_locations) < self._max_locations and remaining_queries:
+                # Process remaining queries in batches of 10
+                for batch_start in range(0, min(50, len(remaining_queries)), 10):  # Limit to 50 more queries max
+                    batch = remaining_queries[batch_start:batch_start + 10]
+                    batch_tasks = [search_query(query) for query in batch]
+                    batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                    
+                    for result in batch_results:
+                        if isinstance(result, list):
+                            all_locations.extend(result)
+                    
+                    # Short-circuit if we have enough results
+                    if len(all_locations) >= self._max_locations:
+                        break
+            
+            logger.info(f"Found {len(all_locations)} unique locations for '{company_name}'")
             
             return {
                 "company_name": company_name,
@@ -157,7 +229,7 @@ class GoogleMapsService:
             }
             
         except Exception as e:
-            print(f"[ERROR] Google Maps search failed: {e}")
+            logger.error(f"Google Maps search failed: {e}", exc_info=True)
             return {"error": f"Error searching company locations: {str(e)}"}
     
     async def _get_place_details(self, place_id: str, client: httpx.AsyncClient) -> Dict[str, Any]:
@@ -198,28 +270,28 @@ class GoogleMapsService:
     async def geocode_address(self, address: str) -> Dict[str, Any]:
         """Geocode an address to get coordinates"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/geocode/json",
-                    params={
-                        "address": address,
-                        "key": self.api_key
-                    }
-                )
-                response.raise_for_status()
-                geocode_data = response.json()
-                
-                if geocode_data.get("results"):
-                    result = geocode_data["results"][0]
-                    return {
-                        "address": address,
-                        "formatted_address": result.get("formatted_address"),
-                        "geometry": result.get("geometry"),
-                        "place_id": result.get("place_id"),
-                        "types": result.get("types", [])
-                    }
-                
-                return {"address": address, "error": "No results found"}
+            client = await self._get_client()
+            response = await client.get(
+                f"{self.base_url}/geocode/json",
+                params={
+                    "address": address,
+                    "key": self.api_key
+                }
+            )
+            response.raise_for_status()
+            geocode_data = response.json()
+            
+            if geocode_data.get("results"):
+                result = geocode_data["results"][0]
+                return {
+                    "address": address,
+                    "formatted_address": result.get("formatted_address"),
+                    "geometry": result.get("geometry"),
+                    "place_id": result.get("place_id"),
+                    "types": result.get("types", [])
+                }
+            
+            return {"address": address, "error": "No results found"}
                 
         except Exception as e:
             return {"address": address, "error": str(e)}
@@ -227,27 +299,27 @@ class GoogleMapsService:
     async def reverse_geocode(self, lat: float, lng: float) -> Dict[str, Any]:
         """Reverse geocode coordinates to get address"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/geocode/json",
-                    params={
-                        "latlng": f"{lat},{lng}",
-                        "key": self.api_key
-                    }
-                )
-                response.raise_for_status()
-                geocode_data = response.json()
-                
-                if geocode_data.get("results"):
-                    result = geocode_data["results"][0]
-                    return {
-                        "coordinates": {"lat": lat, "lng": lng},
-                        "formatted_address": result.get("formatted_address"),
-                        "place_id": result.get("place_id"),
-                        "types": result.get("types", [])
-                    }
-                
-                return {"coordinates": {"lat": lat, "lng": lng}, "error": "No results found"}
+            client = await self._get_client()
+            response = await client.get(
+                f"{self.base_url}/geocode/json",
+                params={
+                    "latlng": f"{lat},{lng}",
+                    "key": self.api_key
+                }
+            )
+            response.raise_for_status()
+            geocode_data = response.json()
+            
+            if geocode_data.get("results"):
+                result = geocode_data["results"][0]
+                return {
+                    "coordinates": {"lat": lat, "lng": lng},
+                    "formatted_address": result.get("formatted_address"),
+                    "place_id": result.get("place_id"),
+                    "types": result.get("types", [])
+                }
+            
+            return {"coordinates": {"lat": lat, "lng": lng}, "error": "No results found"}
                 
         except Exception as e:
             return {"coordinates": {"lat": lat, "lng": lng}, "error": str(e)}
@@ -255,42 +327,42 @@ class GoogleMapsService:
     async def search_nearby_places(self, lat: float, lng: float, radius: int = 1000, keyword: str = None) -> Dict[str, Any]:
         """Search for places near a location"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                params = {
-                    "location": f"{lat},{lng}",
-                    "radius": radius,
-                    "key": self.api_key
-                }
-                
-                if keyword:
-                    params["keyword"] = keyword
-                
-                response = await client.get(
-                    f"{self.base_url}/place/nearbysearch/json",
-                    params=params
-                )
-                response.raise_for_status()
-                nearby_data = response.json()
-                
-                places = []
-                if nearby_data.get("results"):
-                    for result in nearby_data["results"]:
-                        places.append({
-                            "name": result.get("name"),
-                            "place_id": result.get("place_id"),
-                            "geometry": result.get("geometry"),
-                            "rating": result.get("rating"),
-                            "types": result.get("types", []),
-                            "vicinity": result.get("vicinity")
-                        })
-                
-                return {
-                    "location": {"lat": lat, "lng": lng},
-                    "radius": radius,
-                    "keyword": keyword,
-                    "places": places,
-                    "status": nearby_data.get("status")
-                }
+            client = await self._get_client()
+            params = {
+                "location": f"{lat},{lng}",
+                "radius": radius,
+                "key": self.api_key
+            }
+            
+            if keyword:
+                params["keyword"] = keyword
+            
+            response = await client.get(
+                f"{self.base_url}/place/nearbysearch/json",
+                params=params
+            )
+            response.raise_for_status()
+            nearby_data = response.json()
+            
+            places = []
+            if nearby_data.get("results"):
+                for result in nearby_data["results"]:
+                    places.append({
+                        "name": result.get("name"),
+                        "place_id": result.get("place_id"),
+                        "geometry": result.get("geometry"),
+                        "rating": result.get("rating"),
+                        "types": result.get("types", []),
+                        "vicinity": result.get("vicinity")
+                    })
+            
+            return {
+                "location": {"lat": lat, "lng": lng},
+                "radius": radius,
+                "keyword": keyword,
+                "places": places,
+                "status": nearby_data.get("status")
+            }
                 
         except Exception as e:
             return {"error": f"Error searching nearby places: {str(e)}"}
@@ -333,36 +405,36 @@ class GoogleMapsService:
                 return photos
                 
         except Exception as e:
-            print(f"Error getting place photos: {e}")
+            logger.warning(f"Error getting place photos: {e}")
             return []
     
     async def calculate_distance(self, origin: str, destination: str) -> Dict[str, Any]:
         """Calculate distance between two locations"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/distancematrix/json",
-                    params={
-                        "origins": origin,
-                        "destinations": destination,
-                        "key": self.api_key,
-                        "units": "metric"
-                    }
-                )
-                response.raise_for_status()
-                distance_data = response.json()
-                
-                if distance_data.get("rows") and distance_data["rows"][0].get("elements"):
-                    element = distance_data["rows"][0]["elements"][0]
-                    return {
-                        "origin": origin,
-                        "destination": destination,
-                        "distance": element.get("distance", {}),
-                        "duration": element.get("duration", {}),
-                        "status": element.get("status")
-                    }
-                
-                return {"error": "No distance data found"}
+            client = await self._get_client()
+            response = await client.get(
+                f"{self.base_url}/distancematrix/json",
+                params={
+                    "origins": origin,
+                    "destinations": destination,
+                    "key": self.api_key,
+                    "units": "metric"
+                }
+            )
+            response.raise_for_status()
+            distance_data = response.json()
+            
+            if distance_data.get("rows") and distance_data["rows"][0].get("elements"):
+                element = distance_data["rows"][0]["elements"][0]
+                return {
+                    "origin": origin,
+                    "destination": destination,
+                    "distance": element.get("distance", {}),
+                    "duration": element.get("duration", {}),
+                    "status": element.get("status")
+                }
+            
+            return {"error": "No distance data found"}
                 
         except Exception as e:
             return {"error": f"Error calculating distance: {str(e)}"}
@@ -404,6 +476,6 @@ class GoogleMapsService:
             return False
             
         except Exception as e:
-            print(f"[ERROR] Error checking location relevance: {e}")
+            logger.error(f"Error checking location relevance: {e}", exc_info=True)
             return True  # Include by default if error
 

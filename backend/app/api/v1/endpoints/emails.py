@@ -4,9 +4,9 @@ Email testing endpoints
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user
 from app.models.tenant import User, UserRole
 from app.services.email_service import get_email_service
@@ -32,13 +32,15 @@ class EmailTestResponse(BaseModel):
 async def test_email(
     request: EmailTestRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Test email sending (admin only)
     
     This endpoint allows administrators to test email configuration
     by sending a test email. In development, emails are captured by MailHog.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     # Check if user is admin
     if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN]:

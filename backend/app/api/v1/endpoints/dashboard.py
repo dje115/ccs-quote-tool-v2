@@ -3,14 +3,15 @@
 Dashboard endpoints for CRM analytics and AI-powered insights
 """
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, extract
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import calendar
+import asyncio
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant
 from app.models.crm import Customer, CustomerStatus, Contact
@@ -80,82 +81,75 @@ class DashboardResponse(BaseModel):
 
 @router.get("/", response_model=DashboardResponse)
 async def get_dashboard(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
-    """Get comprehensive dashboard data"""
+    """
+    Get comprehensive dashboard data
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    All database queries are executed asynchronously, allowing Uvicorn
+    to serve other clients concurrently.
+    """
     
     try:
         tenant_id = current_tenant.id
         
         # Get discovery/leads count from Lead table (discoveries)
-        discovery_count = db.execute(
+        discovery_result = await db.execute(
             select(func.count(Lead.id)).where(
                 and_(
                     Lead.tenant_id == tenant_id,
                     Lead.is_deleted == False
                 )
             )
-        ).scalar() or 0
+        )
+        discovery_count = discovery_result.scalar() or 0
         
         print(f"🔍 Dashboard Debug - Tenant ID: {tenant_id}")
         print(f"🔍 Dashboard Debug - Discovery Count: {discovery_count}")
         
         # Get customer counts by status
         # Note: "total_leads" in frontend refers to discoveries from Lead table, not Customer.LEAD status
-        leads_count = db.execute(
-            select(func.count(Customer.id)).where(
+        # Execute all count queries in parallel for better performance
+        leads_result, prospects_result, opportunities_result, customers_result, cold_leads_result, inactive_result, quotes_result = await asyncio.gather(
+            db.execute(select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status == CustomerStatus.LEAD,
                     Customer.is_deleted == False
                 )
-            )
-        ).scalar() or 0
-        
-        prospects_count = db.execute(
-            select(func.count(Customer.id)).where(
+            )),
+            db.execute(select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status == CustomerStatus.PROSPECT,
                     Customer.is_deleted == False
                 )
-            )
-        ).scalar() or 0
-        
-        opportunities_count = db.execute(
-            select(func.count(Customer.id)).where(
+            )),
+            db.execute(select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status == CustomerStatus.OPPORTUNITY,
                     Customer.is_deleted == False
                 )
-            )
-        ).scalar() or 0
-        
-        customers_count = db.execute(
-            select(func.count(Customer.id)).where(
+            )),
+            db.execute(select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status == CustomerStatus.CUSTOMER,
                     Customer.is_deleted == False
                 )
-            )
-        ).scalar() or 0
-        
-        cold_leads_count = db.execute(
-            select(func.count(Customer.id)).where(
+            )),
+            db.execute(select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.status == CustomerStatus.COLD_LEAD,
                     Customer.is_deleted == False
                 )
-            )
-        ).scalar() or 0
-        
-        inactive_count = db.execute(
-            select(func.count(Customer.id)).where(
+            )),
+            db.execute(select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.is_deleted == False,
@@ -164,21 +158,26 @@ async def get_dashboard(
                         Customer.status == CustomerStatus.LOST
                     )
                 )
-            )
-        ).scalar() or 0
-        
-        # Quote stats
-        total_quotes = db.execute(
-            select(func.count(Quote.id)).where(
+            )),
+            db.execute(select(func.count(Quote.id)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
                     Quote.is_deleted == False
                 )
-            )
-        ).scalar() or 0
+            ))
+        )
         
-        quotes_pending = db.execute(
-            select(func.count(Quote.id)).where(
+        leads_count = leads_result.scalar() or 0
+        prospects_count = prospects_result.scalar() or 0
+        opportunities_count = opportunities_result.scalar() or 0
+        customers_count = customers_result.scalar() or 0
+        cold_leads_count = cold_leads_result.scalar() or 0
+        inactive_count = inactive_result.scalar() or 0
+        total_quotes = quotes_result.scalar() or 0
+        
+        # Execute remaining quote queries in parallel
+        quotes_pending_result, quotes_accepted_result, revenue_result = await asyncio.gather(
+            db.execute(select(func.count(Quote.id)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
                     Quote.is_deleted == False,
@@ -187,30 +186,27 @@ async def get_dashboard(
                         Quote.status == QuoteStatus.SENT
                     )
                 )
-            )
-        ).scalar() or 0
-        
-        quotes_accepted = db.execute(
-            select(func.count(Quote.id)).where(
+            )),
+            db.execute(select(func.count(Quote.id)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
                     Quote.status == QuoteStatus.ACCEPTED,
                     Quote.is_deleted == False
                 )
-            )
-        ).scalar() or 0
-        
-        # Revenue calculation
-        revenue_result = db.execute(
-            select(func.sum(Quote.total_amount)).where(
+            )),
+            db.execute(select(func.sum(Quote.total_amount)).where(
                 and_(
                     Quote.tenant_id == tenant_id,
                     Quote.status == QuoteStatus.ACCEPTED,
                     Quote.is_deleted == False
                 )
-            )
-        ).scalar()
-        total_revenue = float(revenue_result) if revenue_result else 0.0
+            ))
+        )
+        
+        quotes_pending = quotes_pending_result.scalar() or 0
+        quotes_accepted = quotes_accepted_result.scalar() or 0
+        revenue_value = revenue_result.scalar()
+        total_revenue = float(revenue_value) if revenue_value else 0.0
         
         avg_deal_value = (total_revenue / quotes_accepted) if quotes_accepted > 0 else 0.0
         
@@ -248,14 +244,15 @@ async def get_dashboard(
         ]
         
         # Recent activity (last 10 items)
-        recent_customers = db.execute(
+        recent_customers_result = await db.execute(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.is_deleted == False
                 )
             ).order_by(Customer.created_at.desc()).limit(5)
-        ).scalars().all()
+        )
+        recent_customers = recent_customers_result.scalars().all()
         
         recent_activity = []
         for customer in recent_customers:
@@ -269,27 +266,29 @@ async def get_dashboard(
             ))
         
         # Monthly trends (last 6 months)
+        # Execute all monthly queries in parallel for better performance
         monthly_trends = []
         now = datetime.utcnow()
+        month_queries = []
+        month_starts = []
+        
         for i in range(5, -1, -1):
             month_date = now - timedelta(days=30 * i)
             month_start = month_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
+            month_starts.append(month_start)
             
-            # Count new discoveries (leads) from Lead table for monthly trends
-            new_leads = db.execute(
-                select(func.count(Lead.id)).where(
+            # Prepare queries for parallel execution (create coroutines)
+            month_queries.append([
+                db.execute(select(func.count(Lead.id)).where(
                     and_(
                         Lead.tenant_id == tenant_id,
                         Lead.created_at >= month_start,
                         Lead.created_at <= month_end,
                         Lead.is_deleted == False
                     )
-                )
-            ).scalar() or 0
-            
-            converted = db.execute(
-                select(func.count(Customer.id)).where(
+                )),
+                db.execute(select(func.count(Customer.id)).where(
                     and_(
                         Customer.tenant_id == tenant_id,
                         Customer.status == CustomerStatus.CUSTOMER,
@@ -297,11 +296,8 @@ async def get_dashboard(
                         Customer.created_at >= month_start,
                         Customer.created_at <= month_end
                     )
-                )
-            ).scalar() or 0
-            
-            month_revenue_result = db.execute(
-                select(func.sum(Quote.total_amount)).where(
+                )),
+                db.execute(select(func.sum(Quote.total_amount)).where(
                     and_(
                         Quote.tenant_id == tenant_id,
                         Quote.status == QuoteStatus.ACCEPTED,
@@ -309,12 +305,21 @@ async def get_dashboard(
                         Quote.created_at >= month_start,
                         Quote.created_at <= month_end
                     )
-                )
-            ).scalar()
-            month_revenue = float(month_revenue_result) if month_revenue_result else 0.0
+                ))
+            ])
+        
+        # Execute all monthly queries in parallel (flatten nested structure)
+        all_month_results = await asyncio.gather(*[asyncio.gather(*queries) for queries in month_queries])
+        
+        # Process results
+        for idx, (new_leads_result, converted_result, month_revenue_result) in enumerate(all_month_results):
+            new_leads = new_leads_result.scalar() or 0
+            converted = converted_result.scalar() or 0
+            revenue_value = month_revenue_result.scalar()
+            month_revenue = float(revenue_value) if revenue_value else 0.0
             
             monthly_trends.append(MonthlyTrend(
-                month=calendar.month_abbr[month_start.month],
+                month=calendar.month_abbr[month_starts[idx].month],
                 new_leads=new_leads,
                 converted=converted,
                 revenue=month_revenue
@@ -324,7 +329,7 @@ async def get_dashboard(
         ai_insights = []
         
         # Insight 1: High-value leads
-        high_score_leads = db.execute(
+        high_score_leads_result = await db.execute(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
@@ -333,7 +338,8 @@ async def get_dashboard(
                     Customer.is_deleted == False
                 )
             ).limit(5)
-        ).scalars().all()
+        )
+        high_score_leads = high_score_leads_result.scalars().all()
         
         if high_score_leads:
             ai_insights.append(AIInsight(
@@ -383,7 +389,7 @@ async def get_dashboard(
             ))
         
         # Top leads by score
-        top_leads_query = db.execute(
+        top_leads_result = await db.execute(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
@@ -391,7 +397,8 @@ async def get_dashboard(
                     Customer.status.in_([CustomerStatus.LEAD, CustomerStatus.PROSPECT, CustomerStatus.OPPORTUNITY])
                 )
             ).order_by(Customer.lead_score.desc()).limit(10)
-        ).scalars().all()
+        )
+        top_leads_query = top_leads_result.scalars().all()
         
         top_leads = [
             {
@@ -466,7 +473,7 @@ class AIQueryResponse(BaseModel):
 @router.post("/ai-query", response_model=AIQueryResponse)
 async def ai_dashboard_query(
     request: AIQueryRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
@@ -497,30 +504,42 @@ async def ai_dashboard_query(
         # ===== API KEY RESOLUTION: Tenant keys first, then fall back to system keys =====
         # Get API keys using the centralized helper function
         # This checks tenant keys first, then falls back to system-wide keys from admin portal
-        api_keys = get_api_keys(db, current_tenant)
+        # Use sync session for get_api_keys (it expects sync session)
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+        finally:
+            sync_db.close()
         
         # Initialize AI service with resolved API keys and tenant context
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
+        # Use sync session for AI service (it may need sync operations)
+        sync_db_for_ai = SessionLocal()
+        try:
+            ai_service = AIAnalysisService(
+                openai_api_key=api_keys.openai,
+                companies_house_api_key=api_keys.companies_house,
+                google_maps_api_key=api_keys.google_maps,
+                tenant_id=current_tenant.id,
+                db=sync_db_for_ai
+            )
+        finally:
+            sync_db_for_ai.close()
         
         # ===== CUSTOMER DATA =====
-        total_customers = db.execute(
+        total_customers_result = await db.execute(
             select(func.count(Customer.id)).where(
                 and_(
                     Customer.tenant_id == tenant_id,
                     Customer.is_deleted == False
                 )
             )
-        ).scalar() or 0
+        )
+        total_customers = total_customers_result.scalar() or 0
         
         customers_by_status = {}
         for status in CustomerStatus:
-            count = db.execute(
+            count_result = await db.execute(
                 select(func.count(Customer.id)).where(
                     and_(
                         Customer.tenant_id == tenant_id,
@@ -528,19 +547,20 @@ async def ai_dashboard_query(
                         Customer.is_deleted == False
                     )
                 )
-            ).scalar() or 0
-            customers_by_status[status.value] = count
+            )
+            customers_by_status[status.value] = count_result.scalar() or 0
         
         # ===== CONTACT DATA =====
         from app.models.crm import Contact
-        total_contacts = db.execute(
+        total_contacts_result = await db.execute(
             select(func.count(Contact.id)).where(
                 and_(
                     Contact.tenant_id == tenant_id,
                     Contact.is_deleted == False
                 )
             )
-        ).scalar() or 0
+        )
+        total_contacts = total_contacts_result.scalar() or 0
         
         # ===== MONTHLY TRENDS (Last 6 months) =====
         now = datetime.utcnow()
@@ -551,7 +571,7 @@ async def ai_dashboard_query(
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
             
             # Count new discoveries (leads) from Lead table for AI query context
-            new_leads = db.execute(
+            new_leads_result = await db.execute(
                 select(func.count(Lead.id)).where(
                     and_(
                         Lead.tenant_id == tenant_id,
@@ -560,9 +580,10 @@ async def ai_dashboard_query(
                         Lead.is_deleted == False
                     )
                 )
-            ).scalar() or 0
+            )
+            new_leads = new_leads_result.scalar() or 0
             
-            new_customers = db.execute(
+            new_customers_result = await db.execute(
                 select(func.count(Customer.id)).where(
                     and_(
                         Customer.tenant_id == tenant_id,
@@ -572,7 +593,8 @@ async def ai_dashboard_query(
                         Customer.is_deleted == False
                     )
                 )
-            ).scalar() or 0
+            )
+            new_customers = new_customers_result.scalar() or 0
             
             monthly_data.append({
                 "month": month_date.strftime("%B %Y"),
@@ -581,7 +603,7 @@ async def ai_dashboard_query(
             })
         
         # ===== TOP PERFORMING LEADS =====
-        top_leads = db.execute(
+        top_leads_result = await db.execute(
             select(Customer).where(
                 and_(
                     Customer.tenant_id == tenant_id,
@@ -589,7 +611,8 @@ async def ai_dashboard_query(
                     Customer.is_deleted == False
                 )
             ).order_by(Customer.lead_score.desc()).limit(5)
-        ).scalars().all()
+        )
+        top_leads = top_leads_result.scalars().all()
         
         top_leads_info = [
             f"{lead.company_name} (Score: {lead.lead_score or 0})"
@@ -769,19 +792,23 @@ TOP PERFORMING LEADS:
 async def change_customer_status(
     customer_id: str,
     new_status: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """Change customer status (lead -> prospect -> customer, etc.)"""
     
     try:
-        customer = db.query(Customer).filter(
+        from sqlalchemy import select
+        
+        stmt = select(Customer).where(
             and_(
                 Customer.id == customer_id,
                 Customer.tenant_id == current_tenant.id
             )
-        ).first()
+        )
+        result = await db.execute(stmt)
+        customer = result.scalar_one_or_none()
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
@@ -801,7 +828,7 @@ async def change_customer_status(
         
         old_status = customer.status.value
         customer.status = valid_statuses[new_status.lower()]
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -814,7 +841,7 @@ async def change_customer_status(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         print(f"[ERROR] Change status error: {e}")
         import traceback
         print(traceback.format_exc())

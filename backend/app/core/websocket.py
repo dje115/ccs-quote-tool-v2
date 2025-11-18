@@ -6,10 +6,13 @@ Manages WebSocket connections and broadcasts events from Redis Pub/Sub
 
 import json
 import asyncio
+import logging
 import redis.asyncio as redis
 from typing import Dict, Set, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketManager:
@@ -30,13 +33,14 @@ class WebSocketManager:
         """
         Connect a WebSocket client
         
+        NOTE: The websocket should already be accepted before calling this method.
+        This method only manages the connection state and subscriptions.
+        
         Args:
-            websocket: WebSocket connection
+            websocket: WebSocket connection (already accepted)
             tenant_id: Tenant ID for isolation
             user_id: User ID for tracking
         """
-        await websocket.accept()
-        
         # Initialize tenant/user structure if needed
         if tenant_id not in self.active_connections:
             self.active_connections[tenant_id] = {}
@@ -50,7 +54,11 @@ class WebSocketManager:
         if tenant_id not in self.subscribed_tenants:
             await self._subscribe_to_tenant(tenant_id)
         
-        print(f"✅ WebSocket connected: tenant={tenant_id}, user={user_id}, total_connections={self._count_connections()}")
+        logger.info("WebSocket connected", extra={
+            'tenant_id': tenant_id,
+            'user_id': user_id,
+            'total_connections': self._count_connections()
+        })
     
     def disconnect(self, websocket: WebSocket, tenant_id: str, user_id: str):
         """
@@ -74,7 +82,11 @@ class WebSocketManager:
                 del self.active_connections[tenant_id]
                 self.subscribed_tenants.discard(tenant_id)
         
-        print(f"❌ WebSocket disconnected: tenant={tenant_id}, user={user_id}, total_connections={self._count_connections()}")
+        logger.info("WebSocket disconnected", extra={
+            'tenant_id': tenant_id,
+            'user_id': user_id,
+            'total_connections': self._count_connections()
+        })
     
     async def _subscribe_to_tenant(self, tenant_id: str):
         """Subscribe to Redis Pub/Sub channel for a tenant"""
@@ -86,14 +98,18 @@ class WebSocketManager:
             try:
                 await self.redis_pubsub.subscribe(channel)
                 self.subscribed_tenants.add(tenant_id)
-                print(f"📡 Subscribed to Redis channel: {channel}")
+                logger.info("Subscribed to Redis channel", extra={'channel': channel})
             except Exception as e:
-                print(f"❌ WebSocketManager: Failed to subscribe to {channel}: {e}")
+                logger.error("WebSocketManager: Failed to subscribe to Redis channel", extra={
+                    'channel': channel,
+                    'error': str(e)
+                })
     
     async def _init_redis(self):
         """Initialize Redis connection for Pub/Sub"""
         try:
-            self.redis_subscriber = await redis.from_url(
+            # redis.from_url() returns synchronously, not a coroutine
+            self.redis_subscriber = redis.from_url(
                 settings.REDIS_URL,
                 encoding="utf-8",
                 decode_responses=True
@@ -105,9 +121,9 @@ class WebSocketManager:
                 self._running = True
                 asyncio.create_task(self._listen_to_redis())
             
-            print("✅ WebSocketManager: Redis Pub/Sub initialized")
+            logger.info("WebSocketManager: Redis Pub/Sub initialized")
         except Exception as e:
-            print(f"❌ WebSocketManager: Redis initialization failed: {e}")
+            logger.error("WebSocketManager: Redis initialization failed", extra={'error': str(e)})
             self.redis_subscriber = None
             self.redis_pubsub = None
     
@@ -130,7 +146,7 @@ class WebSocketManager:
                 if message and message.get('type') == 'message':
                     await self._handle_redis_message(message)
             except Exception as e:
-                print(f"❌ WebSocketManager: Error listening to Redis: {e}")
+                logger.error("WebSocketManager: Error listening to Redis", extra={'error': str(e)})
                 await asyncio.sleep(1)
     
     async def _handle_redis_message(self, message: dict):
@@ -144,13 +160,16 @@ class WebSocketManager:
             
             # Validate tenant_id matches event tenant_id
             if data.get('tenant_id') != tenant_id:
-                print(f"⚠️ WebSocketManager: Tenant ID mismatch: channel={tenant_id}, event={data.get('tenant_id')}")
+                logger.warning("WebSocketManager: Tenant ID mismatch", extra={
+                    'channel_tenant_id': tenant_id,
+                    'event_tenant_id': data.get('tenant_id')
+                })
                 return
             
             # Broadcast to all connections for this tenant
             await self._broadcast_to_tenant(tenant_id, data)
         except Exception as e:
-            print(f"❌ WebSocketManager: Error handling Redis message: {e}")
+            logger.error("WebSocketManager: Error handling Redis message", extra={'error': str(e)})
     
     async def _broadcast_to_tenant(self, tenant_id: str, event: dict):
         """Broadcast event to all WebSocket connections for a tenant"""
@@ -165,7 +184,7 @@ class WebSocketManager:
                 try:
                     await connection.send_json(event)
                 except Exception as e:
-                    print(f"⚠️ WebSocketManager: Error sending to connection: {e}")
+                    logger.warning("WebSocketManager: Error sending to connection", extra={'error': str(e)})
                     connections_to_remove.append((tenant_id, user_id, connection))
         
         # Remove dead connections
@@ -187,7 +206,7 @@ class WebSocketManager:
             await self.redis_pubsub.unsubscribe()
         if self.redis_subscriber:
             await self.redis_subscriber.close()
-        print("🛑 WebSocketManager: Closed all connections")
+        logger.info("WebSocketManager: Closed all connections")
 
 
 # Global WebSocket manager instance

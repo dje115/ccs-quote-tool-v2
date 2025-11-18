@@ -19,15 +19,26 @@ const GlobalAIMonitor: React.FC = () => {
 
   // Initial load of running analyses - only if authenticated
   useEffect(() => {
-    // Check if user is authenticated before making API calls
-    const token = localStorage.getItem('access_token') || localStorage.getItem('token');
-    if (!token) {
-      // Not authenticated, skip API call
-      return;
-    }
-
+    // SECURITY: Gate on proven session state (/auth/me) instead of localStorage
+    // HttpOnly cookies cannot be read by JavaScript, so we verify auth via API call
     const loadRunningAnalyses = async () => {
       try {
+        // First verify authentication via /auth/me endpoint
+        // This ensures we have a valid session before making other API calls
+        const { authAPI } = await import('../services/api');
+        try {
+          await authAPI.getCurrentUser();
+        } catch (authError: any) {
+          // Not authenticated - skip loading analyses
+          if (authError?.response?.status === 401 || authError?.response?.status === 403) {
+            return;
+          }
+          // Other errors - log but continue (might be network issue)
+          console.error('[GlobalAIMonitor] Auth check failed:', authError);
+          return;
+        }
+
+        // User is authenticated - load running analyses
         // Use dedicated endpoint for better performance
         const response = await aiAnalysisAPI.getStatus();
         const { running, queued } = response.data;

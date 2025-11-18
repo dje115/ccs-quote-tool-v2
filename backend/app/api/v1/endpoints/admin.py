@@ -1,12 +1,17 @@
 """Admin endpoints for system administration"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
+import logging
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.dependencies import get_current_user
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 from app.core.security import get_password_hash
 from app.models.tenant import User, Tenant, UserRole, TenantStatus
 from app.models.crm import Customer
@@ -58,43 +63,42 @@ class DashboardResponse(BaseModel):
 
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard_stats(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get admin dashboard statistics"""
+    """
+    Get admin dashboard statistics
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
-        # Count tenants by status
-        active_tenants = db.execute(
-            select(func.count(Tenant.id)).where(
-                Tenant.status == TenantStatus.ACTIVE
-            )
-        ).scalar()
+        import asyncio
         
-        trial_tenants = db.execute(
-            select(func.count(Tenant.id)).where(
-                Tenant.status == TenantStatus.TRIAL
-            )
-        ).scalar()
+        # Count tenants by status and total users in parallel
+        active_stmt = select(func.count(Tenant.id)).where(Tenant.status == TenantStatus.ACTIVE)
+        trial_stmt = select(func.count(Tenant.id)).where(Tenant.status == TenantStatus.TRIAL)
+        suspended_stmt = select(func.count(Tenant.id)).where(Tenant.status == TenantStatus.SUSPENDED)
+        users_stmt = select(func.count(User.id))
         
-        suspended_tenants = db.execute(
-            select(func.count(Tenant.id)).where(
-                Tenant.status == TenantStatus.SUSPENDED
-            )
-        ).scalar()
+        active_result, trial_result, suspended_result, users_result = await asyncio.gather(
+            db.execute(active_stmt),
+            db.execute(trial_stmt),
+            db.execute(suspended_stmt),
+            db.execute(users_stmt)
+        )
         
-        # Count total users
-        total_users = db.execute(
-            select(func.count(User.id))
-        ).scalar()
+        active_tenants = active_result.scalar() or 0
+        trial_tenants = trial_result.scalar() or 0
+        suspended_tenants = suspended_result.scalar() or 0
+        total_users = users_result.scalar() or 0
         
         # Get recent tenants (last 5)
         stmt = select(Tenant).order_by(Tenant.created_at.desc()).limit(5)
-        
-        result = db.execute(stmt)
+        result = await db.execute(stmt)
         recent_tenants_data = result.scalars().all()
         
         recent_tenants = [
@@ -110,27 +114,29 @@ async def get_dashboard_stats(
         
         return DashboardResponse(
             stats=DashboardStats(
-                active_tenants=active_tenants or 0,
-                trial_tenants=trial_tenants or 0,
-                suspended_tenants=suspended_tenants or 0,
-                total_users=total_users or 0
+                active_tenants=active_tenants,
+                trial_tenants=trial_tenants,
+                suspended_tenants=suspended_tenants,
+                total_users=total_users
             ),
             recent_tenants=recent_tenants
         )
         
     except Exception as e:
-        print(f"[ERROR] Failed to load dashboard stats: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to load dashboard stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/users", response_model=List[UserResponse])
 async def list_all_users(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List all users across all tenants (admin only)"""
+    """
+    List all users across all tenants (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -141,7 +147,7 @@ async def list_all_users(
             Tenant, User.tenant_id == Tenant.id
         ).order_by(Tenant.name, User.email)
         
-        result = db.execute(stmt)
+        result = await db.execute(stmt)
         rows = result.all()
         
         users = []
@@ -161,9 +167,7 @@ async def list_all_users(
         return users
         
     except Exception as e:
-        print(f"[ERROR] Failed to list users: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to list users: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -171,10 +175,14 @@ async def list_all_users(
 async def reset_user_password(
     user_id: str,
     request: ResetPasswordRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Reset a user's password (admin only)"""
+    """
+    Reset a user's password (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -182,15 +190,15 @@ async def reset_user_password(
     try:
         # Find the user
         stmt = select(User).where(User.id == user_id)
-        result = db.execute(stmt)
-        user = result.scalars().first()
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
         # Hash and update the password
         user.hashed_password = get_password_hash(request.new_password)
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -200,10 +208,8 @@ async def reset_user_password(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to reset password: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        logger.error(f"Failed to reset password: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -251,10 +257,14 @@ async def list_tenants_paginated(
     size: int = Query(20, ge=1, le=100),
     search: str = Query(""),
     status: str = Query(""),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get paginated list of tenants with search and filter"""
+    """
+    Get paginated list of tenants with search and filter
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -283,14 +293,15 @@ async def list_tenants_paginated(
         
         # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())
-        total = db.execute(count_stmt).scalar()
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar() or 0
         
         # Apply pagination
         stmt = stmt.order_by(Tenant.created_at.desc())
         stmt = stmt.offset((page - 1) * size).limit(size)
         
         # Execute query
-        result = db.execute(stmt)
+        result = await db.execute(stmt)
         tenants_data = result.scalars().all()
         
         tenants = [
@@ -308,43 +319,50 @@ async def list_tenants_paginated(
         ]
         
         return PaginatedTenantsResponse(
-            total=total or 0,
+            total=total,
             page=page,
             size=size,
             tenants=tenants
         )
         
     except Exception as e:
-        print(f"[ERROR] Failed to list tenants: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to list tenants: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/tenants")
 async def create_tenant_admin(
     tenant_data: TenantCreateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create a new tenant (admin only)"""
+    """
+    Create a new tenant (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
+        import uuid
+        
         # Check if slug already exists
-        existing = db.query(Tenant).filter(Tenant.slug == tenant_data.slug).first()
+        existing_stmt = select(Tenant).where(Tenant.slug == tenant_data.slug)
+        existing_result = await db.execute(existing_stmt)
+        existing = existing_result.scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=400, detail="Tenant slug already exists")
         
         # Check if email already exists
-        existing_user = db.query(User).filter(User.email == tenant_data.admin_email).first()
+        existing_user_stmt = select(User).where(User.email == tenant_data.admin_email)
+        existing_user_result = await db.execute(existing_user_stmt)
+        existing_user = existing_user_result.scalar_one_or_none()
         if existing_user:
             raise HTTPException(status_code=400, detail="Admin email already exists")
         
         # Create tenant
-        import uuid
         tenant = Tenant(
             id=str(uuid.uuid4()),
             name=tenant_data.name,
@@ -355,7 +373,7 @@ async def create_tenant_admin(
             settings={}
         )
         db.add(tenant)
-        db.flush()
+        await db.flush()
         
         # Create admin user
         admin_user = User(
@@ -372,7 +390,7 @@ async def create_tenant_admin(
             permissions=[]
         )
         db.add(admin_user)
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -383,10 +401,8 @@ async def create_tenant_admin(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to create tenant: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        logger.error(f"Failed to create tenant: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -394,16 +410,22 @@ async def create_tenant_admin(
 async def update_tenant_admin(
     tenant_id: str,
     tenant_data: TenantUpdateRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update a tenant (admin only)"""
+    """
+    Update a tenant (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -420,7 +442,7 @@ async def update_tenant_admin(
         if tenant_data.plan:
             tenant.plan = tenant_data.plan
         
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -430,42 +452,46 @@ async def update_tenant_admin(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to update tenant: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        logger.error(f"Failed to update tenant: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/tenants/{tenant_id}")
 async def deactivate_tenant_admin(
     tenant_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Deactivate/suspend a tenant (admin only)"""
+    """
+    Deactivate/suspend a tenant (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
         tenant.status = TenantStatus.SUSPENDED
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
             "message": "Tenant deactivated successfully"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to deactivate tenant: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        logger.error(f"Failed to deactivate tenant: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -479,18 +505,24 @@ class ApiKeyResponse(BaseModel):
 
 
 @router.get("/api-keys", response_model=List[ApiKeyResponse])
-async def get_global_api_keys(
-    db: Session = Depends(get_db),
+async def get_global_api_keys_legacy(
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get global API keys (admin only)"""
+    """
+    Get global API keys (admin only) - Legacy endpoint
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
         # Get the first tenant (system tenant) for global keys
-        system_tenant = db.query(Tenant).filter(Tenant.slug == "ccs").first()
+        stmt = select(Tenant).where(Tenant.slug == "ccs")
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         
         if not system_tenant:
             return []
@@ -520,9 +552,7 @@ async def get_global_api_keys(
         ]
         
     except Exception as e:
-        print(f"[ERROR] Failed to get API keys: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to get API keys: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -539,17 +569,23 @@ class ApiUsageResponse(BaseModel):
 
 @router.get("/api-usage", response_model=List[ApiUsageResponse])
 async def get_api_usage(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get API usage statistics (admin only)"""
+    """
+    Get API usage statistics (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
         # Get all tenants and sum up their usage
-        tenants = db.query(Tenant).all()
+        stmt = select(Tenant)
+        result = await db.execute(stmt)
+        tenants = result.scalars().all()
         
         total_calls = sum(t.api_calls_this_month or 0 for t in tenants)
         total_limit = sum(t.api_limit_monthly or 0 for t in tenants)
@@ -578,9 +614,7 @@ async def get_api_usage(
         ]
         
     except Exception as e:
-        print(f"[ERROR] Failed to get API usage: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to get API usage: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -612,17 +646,23 @@ class SystemSettings(BaseModel):
 
 @router.get("/settings")
 async def get_system_settings(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get system settings (admin only)"""
+    """
+    Get system settings (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
         # Get the system tenant for settings
-        system_tenant = db.query(Tenant).filter(Tenant.slug == "ccs").first()
+        stmt = select(Tenant).where(Tenant.slug == "ccs")
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         
         if not system_tenant or not system_tenant.settings:
             # Return default settings
@@ -679,26 +719,30 @@ async def get_system_settings(
         )
         
     except Exception as e:
-        print(f"[ERROR] Failed to get settings: {e}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to get settings: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/settings")
 async def update_system_settings(
     settings_data: SystemSettings,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update system settings (admin only)"""
+    """
+    Update system settings (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     # Check if user is admin
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
         # Get the system tenant for settings
-        system_tenant = db.query(Tenant).filter(Tenant.slug == "ccs").first()
+        stmt = select(Tenant).where(Tenant.slug == "ccs")
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         
         if not system_tenant:
             raise HTTPException(status_code=404, detail="System tenant not found")
@@ -735,7 +779,7 @@ async def update_system_settings(
         from sqlalchemy.orm.attributes import flag_modified
         flag_modified(system_tenant, 'settings')
         
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -745,10 +789,8 @@ async def update_system_settings(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to update settings: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        logger.error(f"Failed to update settings: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -768,14 +810,17 @@ class GlobalAPIKeysUpdate(BaseModel):
 
 @router.get("/api-keys", response_model=GlobalAPIKeysResponse)
 async def get_global_api_keys(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get global/system-wide API keys from database
+    """
+    Get global/system-wide API keys from database
     
     These keys act as fallbacks when tenant-specific keys are not configured.
     Stored in database in a special 'System' tenant for easy management.
     Falls back to environment variables if not set in database.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -784,9 +829,11 @@ async def get_global_api_keys(
         import os
         
         # Get System tenant from database (system-wide keys only)
-        system_tenant = db.query(Tenant).filter(
+        stmt = select(Tenant).where(
             (Tenant.name == "System") | (Tenant.plan == "system")
-        ).first()
+        )
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         
         if system_tenant:
             # Return keys from database
@@ -803,26 +850,26 @@ async def get_global_api_keys(
                 google_maps_api_key=os.getenv("GOOGLE_MAPS_API_KEY", "")
             )
     except Exception as e:
-        print(f"[ERROR] Failed to get global API keys: {e}")
+        logger.error(f"Failed to get global API keys: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api-keys")
 async def update_global_api_keys(
     api_keys: GlobalAPIKeysUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    print(f"[DEBUG] Received API keys update request")
-    print(f"[DEBUG] api_keys type: {type(api_keys)}")
-    print(f"[DEBUG] api_keys data: {api_keys}")
-    """Update global/system-wide API keys in database
+    """
+    Update global/system-wide API keys in database
     
     IMPORTANT: These keys act as fallbacks for all tenants.
     When a tenant doesn't have their own API keys, these system-wide keys are used.
     
     Keys are stored in the database in a special 'System' tenant.
     This tenant is created automatically if it doesn't exist.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -832,9 +879,11 @@ async def update_global_api_keys(
         import uuid
         
         # Get or create System tenant (system-wide keys only)
-        system_tenant = db.query(Tenant).filter(
+        stmt = select(Tenant).where(
             (Tenant.name == "System") | (Tenant.plan == "system")
-        ).first()
+        )
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         
         if not system_tenant:
             # Create System tenant for storing global API keys
@@ -847,7 +896,7 @@ async def update_global_api_keys(
                 plan="system"
             )
             db.add(system_tenant)
-            db.flush()
+            await db.flush()
         
         # Update API keys
         if api_keys.openai_api_key is not None:
@@ -857,26 +906,48 @@ async def update_global_api_keys(
         if api_keys.google_maps_api_key is not None:
             system_tenant.google_maps_api_key = api_keys.google_maps_api_key.strip() or None
         
-        db.commit()
+        await db.commit()
+        
+        # Invalidate API key cache for all tenants (system keys affect all tenants)
+        # Since system keys are fallbacks, we need to invalidate all tenant caches
+        # For efficiency, we'll just let the cache expire naturally (1 hour TTL)
+        # Or we could iterate through all tenants, but that's expensive
+        # Instead, we'll use a cache version key that forces refresh
+        try:
+            from app.core.redis import redis_client
+            if redis_client:
+                import redis
+                sync_redis = redis.from_url(
+                    settings.REDIS_URL,
+                    encoding="utf-8",
+                    decode_responses=True
+                )
+                # Increment cache version to invalidate all tenant caches
+                sync_redis.incr("api_keys:cache_version")
+        except Exception:
+            # Cache invalidation failed, but that's okay
+            pass
         
         return {
             "success": True,
             "message": "System-wide API keys saved to database successfully"
         }
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to update global API keys: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        logger.error(f"Failed to update global API keys: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/test-openai")
 async def test_openai_api(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Test OpenAI API connection using database keys (with env fallback)"""
+    """
+    Test OpenAI API connection using database keys (with env fallback)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -886,9 +957,11 @@ async def test_openai_api(
         
         # Check database first (System tenant only), then fall back to environment
         api_key = None
-        system_tenant = db.query(Tenant).filter(
+        stmt = select(Tenant).where(
             (Tenant.name == "System") | (Tenant.plan == "system")
-        ).first()
+        )
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         if system_tenant and system_tenant.openai_api_key:
             api_key = system_tenant.openai_api_key
         else:
@@ -911,15 +984,20 @@ async def test_openai_api(
                 return {"success": False, "message": f"API returned status {response.status_code}"}
                 
     except Exception as e:
+        logger.error(f"OpenAI API test failed: {e}", exc_info=True)
         return {"success": False, "message": f"Connection failed: {str(e)}"}
 
 
 @router.post("/test-companies-house")
 async def test_companies_house_api(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Test Companies House API connection using database keys (with env fallback)"""
+    """
+    Test Companies House API connection using database keys (with env fallback)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -930,9 +1008,11 @@ async def test_companies_house_api(
         
         # Check database first (System tenant only), then fall back to environment
         api_key = None
-        system_tenant = db.query(Tenant).filter(
+        stmt = select(Tenant).where(
             (Tenant.name == "System") | (Tenant.plan == "system")
-        ).first()
+        )
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         if system_tenant and system_tenant.companies_house_api_key:
             api_key = system_tenant.companies_house_api_key
         else:
@@ -956,15 +1036,20 @@ async def test_companies_house_api(
                 return {"success": False, "message": f"API returned status {response.status_code}"}
                 
     except Exception as e:
+        logger.error(f"Companies House API test failed: {e}", exc_info=True)
         return {"success": False, "message": f"Connection failed: {str(e)}"}
 
 
 @router.post("/test-google-maps")
 async def test_google_maps_api(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Test Google Maps API connection using database keys (with env fallback)"""
+    """
+    Test Google Maps API connection using database keys (with env fallback)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -974,9 +1059,11 @@ async def test_google_maps_api(
         
         # Check database first (System tenant only), then fall back to environment
         api_key = None
-        system_tenant = db.query(Tenant).filter(
+        stmt = select(Tenant).where(
             (Tenant.name == "System") | (Tenant.plan == "system")
-        ).first()
+        )
+        result = await db.execute(stmt)
+        system_tenant = result.scalar_one_or_none()
         if system_tenant and system_tenant.google_maps_api_key:
             api_key = system_tenant.google_maps_api_key
         else:
@@ -1003,27 +1090,32 @@ async def test_google_maps_api(
                 return {"success": False, "message": f"API returned status {response.status_code}"}
                 
     except Exception as e:
+        logger.error(f"Google Maps API test failed: {e}", exc_info=True)
         return {"success": False, "message": f"Connection failed: {str(e)}"}
 
 
 @router.post("/reset-stuck-tasks")
 async def reset_stuck_ai_tasks(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Reset any stuck AI analysis tasks
     Admin only - manually trigger cleanup of running/queued tasks
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     # Only allow admin users
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role != UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
         # Find all customers with active AI analysis tasks
-        stuck_customers = db.query(Customer).filter(
+        stmt = select(Customer).where(
             Customer.ai_analysis_status.in_(['running', 'queued'])
-        ).all()
+        )
+        result = await db.execute(stmt)
+        stuck_customers = result.scalars().all()
         
         if not stuck_customers:
             return {
@@ -1045,7 +1137,7 @@ async def reset_stuck_ai_tasks(
             customer.ai_analysis_status = None
             customer.ai_analysis_task_id = None
         
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -1055,5 +1147,6 @@ async def reset_stuck_ai_tasks(
         }
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        logger.error(f"Failed to reset stuck tasks: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to reset tasks: {str(e)}")

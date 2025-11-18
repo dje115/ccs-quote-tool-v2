@@ -5,12 +5,13 @@ Contact management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from pydantic import BaseModel, EmailStr
 import uuid
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.dependencies import get_current_user, check_permission
 from app.models.crm import Contact, ContactRole
 from app.models.tenant import User
@@ -56,9 +57,13 @@ class ContactResponse(BaseModel):
 async def list_customer_contacts(
     customer_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List all contacts for a customer"""
+    """
+    List all contacts for a customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Contact).where(
@@ -66,7 +71,7 @@ async def list_customer_contacts(
         Contact.tenant_id == current_user.tenant_id,
         Contact.is_deleted == False
     )
-    result = db.execute(stmt)
+    result = await db.execute(stmt)
     contacts = result.scalars().all()
     
     return contacts
@@ -76,9 +81,13 @@ async def list_customer_contacts(
 async def create_contact(
     contact_data: ContactCreate,
     current_user: User = Depends(check_permission("contact:create")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create new contact"""
+    """
+    Create new contact
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     
     try:
         contact = Contact(
@@ -98,13 +107,16 @@ async def create_contact(
         )
         
         db.add(contact)
-        db.commit()
-        db.refresh(contact)
+        await db.commit()
+        await db.refresh(contact)
         
         return contact
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating contact: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating contact: {str(e)}"
@@ -116,9 +128,13 @@ async def update_contact(
     contact_id: str,
     contact_data: ContactCreate,
     current_user: User = Depends(check_permission("contact:update")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update contact"""
+    """
+    Update contact
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Contact).where(
@@ -126,8 +142,8 @@ async def update_contact(
         Contact.tenant_id == current_user.tenant_id,
         Contact.is_deleted == False
     )
-    result = db.execute(stmt)
-    contact = result.scalars().first()
+    result = await db.execute(stmt)
+    contact = result.scalar_one_or_none()
     
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
@@ -144,8 +160,8 @@ async def update_contact(
     contact.notes = contact_data.notes
     contact.is_primary = contact_data.is_primary
     
-    db.commit()
-    db.refresh(contact)
+    await db.commit()
+    await db.refresh(contact)
     
     return contact
 
@@ -154,9 +170,13 @@ async def update_contact(
 async def delete_contact(
     contact_id: str,
     current_user: User = Depends(check_permission("contact:delete")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Soft delete contact"""
+    """
+    Soft delete contact
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     from sqlalchemy import select
     
     stmt = select(Contact).where(
@@ -164,14 +184,14 @@ async def delete_contact(
         Contact.tenant_id == current_user.tenant_id,
         Contact.is_deleted == False
     )
-    result = db.execute(stmt)
-    contact = result.scalars().first()
+    result = await db.execute(stmt)
+    contact = result.scalar_one_or_none()
     
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     
     contact.is_deleted = True
     contact.deleted_at = datetime.utcnow()
-    db.commit()
+    await db.commit()
     
     return None

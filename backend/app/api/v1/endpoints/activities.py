@@ -11,12 +11,14 @@ Handles all sales activity operations including:
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import asyncio
 from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.dependencies import get_db, get_current_user, get_current_tenant
+from app.core.database import get_async_db
 from app.models.tenant import User, Tenant
 from app.models.sales import SalesActivity, ActivityType, ActivityOutcome
 from app.services.activity_service import ActivityService
@@ -72,7 +74,7 @@ async def create_activity(
     activity: ActivityCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Create a new sales activity
@@ -81,30 +83,43 @@ async def create_activity(
     - Clean up and structure notes
     - Suggest next actions
     - Extract key information
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
-    print(f"[CREATE ACTIVITY] Type: {activity.activity_type}, Customer: {activity.customer_id}")
-    print(f"[CREATE ACTIVITY] Notes: {activity.notes[:100]}...")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[CREATE ACTIVITY] Type: {activity.activity_type}, Customer: {activity.customer_id}")
+    logger.info(f"[CREATE ACTIVITY] Notes: {activity.notes[:100]}...")
     
     try:
         # Map string to enum
         activity_type_enum = ActivityType[activity.activity_type.upper()]
         outcome_enum = ActivityOutcome[activity.outcome.upper()] if activity.outcome else None
         
-        service = ActivityService(db, current_tenant.id)
+        # ActivityService currently expects sync session - use sync wrapper
+        # TODO: Refactor ActivityService to support async sessions
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = ActivityService(sync_db, current_tenant.id)
+            
+            new_activity = await service.create_activity(
+                customer_id=activity.customer_id,
+                user_id=current_user.id,
+                activity_type=activity_type_enum,
+                notes=activity.notes,
+                subject=activity.subject,
+                contact_id=activity.contact_id,
+                duration_minutes=activity.duration_minutes,
+                outcome=outcome_enum,
+                process_with_ai=activity.process_with_ai
+            )
+        finally:
+            sync_db.close()
         
-        new_activity = await service.create_activity(
-            customer_id=activity.customer_id,
-            user_id=current_user.id,
-            activity_type=activity_type_enum,
-            notes=activity.notes,
-            subject=activity.subject,
-            contact_id=activity.contact_id,
-            duration_minutes=activity.duration_minutes,
-            outcome=outcome_enum,
-            process_with_ai=activity.process_with_ai
-        )
-        
-        print(f"✓ Activity created with AI enhancement: {new_activity.id}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"✓ Activity created with AI enhancement: {new_activity.id}")
         
         # Publish activity.created event (async, non-blocking)
         from app.core.events import get_event_publisher
@@ -132,9 +147,9 @@ async def create_activity(
             detail=f"Invalid activity type or outcome: {str(e)}"
         )
     except Exception as e:
-        print(f"[ERROR] Failed to create activity: {e}")
-        import traceback
-        traceback.print_exc()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[ERROR] Failed to create activity: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create activity: {str(e)}"
@@ -148,27 +163,37 @@ async def get_customer_activities(
     limit: int = 50,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get all activities for a customer"""
+    """
+    Get all activities for a customer
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ActivityService(db, current_tenant.id)
-        
-        activity_type_enum = None
-        if activity_type:
-            try:
-                activity_type_enum = ActivityType[activity_type.upper()]
-            except KeyError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid activity type: {activity_type}"
-                )
-        
-        activities = service.get_activities(
-            customer_id=customer_id,
-            activity_type=activity_type_enum,
-            limit=limit
-        )
+        # ActivityService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = ActivityService(sync_db, current_tenant.id)
+            
+            activity_type_enum = None
+            if activity_type:
+                try:
+                    activity_type_enum = ActivityType[activity_type.upper()]
+                except KeyError:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid activity type: {activity_type}"
+                    )
+            
+            activities = service.get_activities(
+                customer_id=customer_id,
+                activity_type=activity_type_enum,
+                limit=limit
+            )
+        finally:
+            sync_db.close()
         
         # Convert SQLAlchemy models to Pydantic models
         return [ActivityResponse.model_validate(activity) for activity in activities]
@@ -176,9 +201,9 @@ async def get_customer_activities(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Failed to get activities: {e}")
-        import traceback
-        traceback.print_exc()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[ERROR] Failed to get activities: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get activities: {str(e)}"
@@ -191,7 +216,7 @@ async def get_action_suggestions(
     force_refresh: bool = False,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get AI-powered action suggestions for a customer
@@ -205,23 +230,31 @@ async def get_action_suggestions(
     
     Query Parameters:
     - force_refresh: Set to true to regenerate suggestions even if cached. Default: false (use cache if available)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
+    import logging
+    logger = logging.getLogger(__name__)
     cache_status = "refresh" if force_refresh else "cache-first"
-    print(f"[ACTION SUGGESTIONS] Getting for customer: {customer_id} (mode: {cache_status})")
+    logger.info(f"[ACTION SUGGESTIONS] Getting for customer: {customer_id} (mode: {cache_status})")
     
     try:
-        service = ActivityService(db, current_tenant.id)
-        result = await service.generate_action_suggestions(customer_id, force_refresh=force_refresh)
+        # ActivityService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = ActivityService(sync_db, current_tenant.id)
+            result = await service.generate_action_suggestions(customer_id, force_refresh=force_refresh)
+        finally:
+            sync_db.close()
         
         cached_msg = " (cached)" if result.get('cached') else " (generated)"
-        print(f"✓ Got action suggestions for customer {customer_id}{cached_msg}")
+        logger.info(f"✓ Got action suggestions for customer {customer_id}{cached_msg}")
         
         return result
         
     except Exception as e:
-        print(f"[ERROR] Failed to get suggestions: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"[ERROR] Failed to get suggestions: {e}", exc_info=True)
         return {
             'success': False,
             'suggestions': None,
@@ -235,7 +268,7 @@ async def refresh_suggestions_background(
     customer_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Queue a background task to refresh AI action suggestions for a customer
@@ -243,12 +276,16 @@ async def refresh_suggestions_background(
     This endpoint immediately returns and the suggestions are generated in the background.
     The user can continue working while the AI processes the request.
     Once complete, the cached suggestions will be available on the next page load.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
-    print(f"\n{'='*80}")
-    print(f"🔄 QUEUEING SUGGESTION REFRESH TO CELERY")
-    print(f"Customer ID: {customer_id}")
-    print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
-    print(f"{'='*80}\n")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"\n{'='*80}")
+    logger.info(f"🔄 QUEUEING SUGGESTION REFRESH TO CELERY")
+    logger.info(f"Customer ID: {customer_id}")
+    logger.info(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    logger.info(f"{'='*80}\n")
     
     # Queue the refresh task to Celery
     task = celery_app.send_task(
@@ -256,7 +293,7 @@ async def refresh_suggestions_background(
         args=[customer_id, str(current_tenant.id)]
     )
     
-    print(f"✓ Task queued: {task.id}")
+    logger.info(f"✓ Task queued: {task.id}")
     
     return {
         'success': True,
@@ -271,17 +308,29 @@ async def get_pending_follow_ups(
     days_ahead: int = 7,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get all activities requiring follow-up in the next N days"""
+    """
+    Get all activities requiring follow-up in the next N days
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = ActivityService(db, current_tenant.id)
-        follow_ups = service.get_pending_follow_ups(days_ahead)
+        # ActivityService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = ActivityService(sync_db, current_tenant.id)
+            follow_ups = service.get_pending_follow_ups(days_ahead)
+        finally:
+            sync_db.close()
         
         return follow_ups
         
     except Exception as e:
-        print(f"[ERROR] Failed to get follow-ups: {e}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[ERROR] Failed to get follow-ups: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get follow-ups: {str(e)}"

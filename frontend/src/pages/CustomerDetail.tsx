@@ -70,6 +70,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { customerAPI, contactAPI, quoteAPI, helpdeskAPI } from '../services/api';
 import { useAbortController } from '../hooks/useAbortController';
+import axios from 'axios';
 
 // Get API base URL (works in both React and Vite)
 const getApiBaseUrl = () => {
@@ -124,26 +125,16 @@ const CustomerDetail: React.FC = () => {
     try {
       setLoading(true);
       
-      // Create axios cancel tokens for each request
-      const customerCancelToken = axios.CancelToken.source();
-      const contactsCancelToken = axios.CancelToken.source();
-      const quotesCancelToken = axios.CancelToken.source();
-      const ticketsCancelToken = axios.CancelToken.source();
-      
-      // Abort all requests if signal is aborted
+      // Abort all requests if signal is already aborted
       if (signal?.aborted) {
-        customerCancelToken.cancel('Component unmounted');
-        contactsCancelToken.cancel('Component unmounted');
-        quotesCancelToken.cancel('Component unmounted');
-        ticketsCancelToken.cancel('Component unmounted');
         return;
       }
       
       const [customerRes, contactsRes, quotesRes, ticketsRes] = await Promise.all([
-        customerAPI.get(id, { cancelToken: customerCancelToken.token }),
-        contactAPI.list(id, { cancelToken: contactsCancelToken.token }),
-        quoteAPI.list({ customer_id: id }, { cancelToken: quotesCancelToken.token }),
-        helpdeskAPI.getTickets({ customer_id: id }, { cancelToken: ticketsCancelToken.token })
+        customerAPI.get(id, { signal }),
+        contactAPI.list(id, { signal }),
+        quoteAPI.list({ customer_id: id }, { signal }),
+        helpdeskAPI.getTickets({ customer_id: id }, { signal })
       ]);
 
       // Check if request was cancelled before updating state
@@ -159,10 +150,14 @@ const CustomerDetail: React.FC = () => {
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
     } catch (error: any) {
       // Ignore cancellation errors
-      if (axios.isCancel(error) || error.name === 'CanceledError') {
+      if (axios.isCancel(error) || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
         return;
       }
       console.error('Error loading customer data:', error);
+      // Set error state so UI can show appropriate message
+      if (error.response?.status === 404) {
+        // Customer not found - this is handled by the UI showing "Customer not found"
+      }
     } finally {
       // Only update loading state if not cancelled
       if (!signal?.aborted) {

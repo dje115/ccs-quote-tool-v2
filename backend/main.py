@@ -19,7 +19,7 @@ from app.core.celery import init_celery
 from app.core.middleware import TenantMiddleware, LoggingMiddleware
 from app.core.logging import setup_logging, get_logger
 from app.api.v1.api import api_router
-from app.api.v1.endpoints.version import get_version
+# Version endpoint is included via api_router, no need to import here
 
 # Setup logging first
 setup_logging(level="INFO" if settings.ENVIRONMENT == "production" else "DEBUG")
@@ -88,8 +88,8 @@ async def lifespan(app: FastAPI):
     logger.info("Cleanup complete")
 
 
-# Get version from VERSION file or environment
-APP_VERSION = get_version()
+# Get version from settings (which reads from VERSION file or APP_VERSION env var)
+APP_VERSION = settings.VERSION
 
 # Create FastAPI application
 app = FastAPI(

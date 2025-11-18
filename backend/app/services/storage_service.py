@@ -4,7 +4,7 @@ Storage Service
 Handles file storage using MinIO (S3-compatible object storage)
 """
 
-from typing import Optional, BinaryIO, Dict, Any
+from typing import Optional, BinaryIO, Dict, Any, List
 from minio import Minio
 from minio.error import S3Error
 from minio.commonconfig import Tags
@@ -236,6 +236,99 @@ class StorageService:
             return True
         except S3Error:
             return False
+    
+    async def list_files(
+        self,
+        prefix: Optional[str] = None,
+        bucket_name: Optional[str] = None,
+        recursive: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        List files in a bucket with optional prefix
+        
+        Args:
+            prefix: Prefix to filter objects (e.g., "tenant_id/user_id/")
+            bucket_name: Bucket name (defaults to configured bucket)
+            recursive: Whether to list recursively
+        
+        Returns:
+            List of file dictionaries with name, size, last_modified, etc.
+        """
+        try:
+            import asyncio
+            from datetime import datetime
+            
+            bucket = bucket_name or self.default_bucket
+            files = []
+            
+            # Wrap synchronous MinIO call in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            objects = await loop.run_in_executor(
+                None,
+                lambda: list(self.client.list_objects(
+                    bucket_name=bucket,
+                    prefix=prefix or "",
+                    recursive=recursive
+                ))
+            )
+            
+            for obj in objects:
+                files.append({
+                    "name": obj.object_name,
+                    "size": obj.size,
+                    "last_modified": obj.last_modified.isoformat() if obj.last_modified else None,
+                    "etag": obj.etag,
+                    "content_type": obj.content_type if hasattr(obj, 'content_type') else None,
+                    "is_dir": obj.is_dir if hasattr(obj, 'is_dir') else False
+                })
+            
+            return files
+            
+        except S3Error as e:
+            logger.error(f"Error listing files: {e}")
+            raise
+    
+    async def get_file_info(
+        self,
+        object_name: str,
+        bucket_name: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get file metadata/info
+        
+        Args:
+            object_name: Object name (path) in bucket
+            bucket_name: Bucket name (defaults to configured bucket)
+        
+        Returns:
+            Dictionary with file metadata or None if not found
+        """
+        try:
+            import asyncio
+            
+            bucket = bucket_name or self.default_bucket
+            
+            # Wrap synchronous MinIO call in executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            stat = await loop.run_in_executor(
+                None,
+                lambda: self.client.stat_object(bucket, object_name)
+            )
+            
+            return {
+                "name": object_name,
+                "size": stat.size,
+                "last_modified": stat.last_modified.isoformat() if stat.last_modified else None,
+                "etag": stat.etag,
+                "content_type": stat.content_type,
+                "metadata": stat.metadata if hasattr(stat, 'metadata') else {}
+            }
+            
+        except S3Error as e:
+            if e.code == 'NoSuchKey':
+                return None
+            logger.error(f"Error getting file info: {e}")
+            raise
 
 
 # Global storage service instance

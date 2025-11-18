@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
 Celery configuration for background task processing
-Used for long-running operations like lead generation campaigns
+Used for long-running operations like lead generation campaigns, quote analysis, etc.
+
+CONSOLIDATED: This is the single source of truth for Celery configuration.
+All Celery workers and beat schedulers should import from this module.
 """
 from celery import Celery
-import os
+from app.core.config import settings
 
-# Initialize Celery
+# Initialize Celery with settings from config
 celery_app = Celery(
     "ccs_quote_tool",
-    broker=os.getenv("REDIS_URL", "redis://redis:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://redis:6379/0"),
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "app.tasks.campaign_tasks", 
         "app.tasks.activity_tasks", 

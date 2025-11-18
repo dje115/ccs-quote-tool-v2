@@ -5,6 +5,7 @@ Settings and configuration endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel
 import uuid
@@ -14,7 +15,7 @@ from openai import OpenAI
 import googlemaps
 import httpx
 
-from app.core.database import get_db
+from app.core.database import get_db, get_async_db
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
 from app.models.tenant import Tenant
 from app.schemas.sales import TenantProfileUpdate, TenantProfileResponse
@@ -54,12 +55,20 @@ def get_tenant_api_key(tenant: Tenant, key_type: str) -> Optional[str]:
 async def save_api_keys(
     request: APIKeyRequest,
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Save API keys to tenant settings"""
+    """
+    Save API keys to tenant settings
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
+        from sqlalchemy import select
+        
         # Get current tenant
-        tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -71,7 +80,11 @@ async def save_api_keys(
         if request.google_maps_api_key is not None:
             tenant.google_maps_api_key = request.google_maps_api_key
         
-        db.commit()
+        await db.commit()
+        
+        # Invalidate API key cache for this tenant
+        from app.core.api_keys import invalidate_api_key_cache
+        invalidate_api_key_cache(tenant.id)
         
         return APIKeyResponse(
             openai_configured=bool(tenant.openai_api_key),
@@ -80,7 +93,10 @@ async def save_api_keys(
         )
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error saving API keys: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error saving API keys: {str(e)}"
@@ -90,12 +106,20 @@ async def save_api_keys(
 @router.get("/api-keys", response_model=APIKeyResponse)
 async def get_api_key_status(
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get current API key status"""
+    """
+    Get current API key status
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
+        from sqlalchemy import select
+        
         # Get current tenant
-        tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -106,6 +130,9 @@ async def get_api_key_status(
         )
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error retrieving API keys: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving API keys: {str(e)}"
@@ -115,12 +142,20 @@ async def get_api_key_status(
 @router.post("/test-openai", response_model=APITestResponse)
 async def test_openai_api(
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Test OpenAI API connection"""
+    """
+    Test OpenAI API connection
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
+        from sqlalchemy import select
+        
         # Get API key from tenant or environment fallback
-        tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -136,18 +171,24 @@ async def test_openai_api(
         try:
             from app.services.ai_provider_service import AIProviderService
             
-            provider_service = AIProviderService(db, tenant_id=current_user.tenant_id)
-            
-            # Use generate_with_rendered_prompts to handle model-specific parameters
-            response = await provider_service.generate_with_rendered_prompts(
-                prompt=None,
-                system_prompt="You are a helpful assistant.",
-                user_prompt="Say 'Connection successful'",
-                model="gpt-5",
-                max_tokens=50
-            )
-            
-            result = response.content
+            # AIProviderService currently expects sync session - use sync wrapper
+            from app.core.database import SessionLocal
+            sync_db = SessionLocal()
+            try:
+                provider_service = AIProviderService(sync_db, tenant_id=current_user.tenant_id)
+                
+                # Use generate_with_rendered_prompts to handle model-specific parameters
+                response = await provider_service.generate_with_rendered_prompts(
+                    prompt=None,
+                    system_prompt="You are a helpful assistant.",
+                    user_prompt="Say 'Connection successful'",
+                    model="gpt-5",
+                    max_tokens=50
+                )
+                
+                result = response.content
+            finally:
+                sync_db.close()
             
             return APITestResponse(
                 success=True,
@@ -170,12 +211,20 @@ async def test_openai_api(
 @router.post("/test-google-maps", response_model=APITestResponse)
 async def test_google_maps_api(
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Test Google Maps API connection"""
+    """
+    Test Google Maps API connection
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
+        from sqlalchemy import select
+        
         # Get API key from tenant or environment fallback
-        tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -221,12 +270,20 @@ async def test_google_maps_api(
 @router.post("/test-companies-house", response_model=APITestResponse)
 async def test_companies_house_api(
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Test Companies House API connection"""
+    """
+    Test Companies House API connection
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
+        from sqlalchemy import select
+        
         # Get API key from tenant or environment fallback
-        tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -288,12 +345,20 @@ async def test_companies_house_api(
 @router.get("/api-status")
 async def get_api_status(
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get current API status for all services"""
+    """
+    Get API status
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
+        from sqlalchemy import select
+        
         # Get API keys from tenant or environment fallback
-        tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        stmt = select(Tenant).where(Tenant.id == current_user.tenant_id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -302,7 +367,9 @@ async def get_api_status(
         companies_house_key = get_tenant_api_key(tenant, "companies_house")
         
         # Get system-wide keys from default tenant (CCS Quote Tool)
-        default_tenant = db.query(Tenant).filter(Tenant.name == "CCS Quote Tool").first()
+        default_stmt = select(Tenant).where(Tenant.name == "CCS Quote Tool")
+        default_result = await db.execute(default_stmt)
+        default_tenant = default_result.scalar_one_or_none()
         
         # Determine status based on tenant key vs system-wide key
         def get_status_info(tenant_key, system_key, key_type):
@@ -344,6 +411,9 @@ async def get_api_status(
         }
         
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error checking API status: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error checking API status: {str(e)}"
@@ -358,7 +428,7 @@ async def get_api_status(
 async def get_company_profile(
     current_user = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get tenant company profile
@@ -371,6 +441,8 @@ async def get_company_profile(
     - Sales methodology
     - Elevator pitch
     - AI analysis of tenant's business
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     return TenantProfileResponse(
         company_name=current_tenant.company_name,
@@ -400,13 +472,15 @@ async def update_company_profile(
     profile: TenantProfileUpdate,
     current_user = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Update tenant company profile
     
     This information is used by the AI Sales Assistant to provide
     intelligent, context-aware sales guidance.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
         from sqlalchemy.orm.attributes import flag_modified
@@ -452,8 +526,8 @@ async def update_company_profile(
         if profile.use_text_logo is not None:
             current_tenant.use_text_logo = profile.use_text_logo
         
-        db.commit()
-        db.refresh(current_tenant)
+        await db.commit()
+        await db.refresh(current_tenant)
         
         return TenantProfileResponse(
             company_name=current_tenant.company_name,
@@ -478,10 +552,10 @@ async def update_company_profile(
         )
         
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Failed to update company profile: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[ERROR] Failed to update company profile: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating company profile: {str(e)}"
@@ -492,7 +566,7 @@ async def update_company_profile(
 async def analyze_company_profile(
     current_user = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Run AI analysis on tenant's own company
@@ -506,10 +580,17 @@ async def analyze_company_profile(
     
     This analysis is then used by the AI Sales Assistant to provide
     intelligent, personalized sales guidance.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        # Get API keys
-        api_keys = get_api_keys(db, current_tenant)
+        # Get API keys (use sync session for get_api_keys)
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+        finally:
+            sync_db.close()
         
         if not api_keys.openai:
             raise HTTPException(
@@ -517,75 +598,79 @@ async def analyze_company_profile(
                 detail="OpenAI API key not configured. Please add your API key in settings."
             )
         
-        # Initialize AI service with tenant context
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
-        
-        # Get prompt from database
-        from app.services.ai_prompt_service import AIPromptService
-        from app.models.ai_prompt import PromptCategory
-        
-        prompt_service = AIPromptService(db, tenant_id=current_tenant.id)
-        prompt_obj = await prompt_service.get_prompt(
-            category=PromptCategory.COMPANY_PROFILE_ANALYSIS.value,
-            tenant_id=current_tenant.id
-        )
-        
-        if not prompt_obj:
-            raise HTTPException(
-                status_code=400,
-                detail="Company profile analysis prompt not configured. Please configure prompts in the admin section."
+        # Initialize AI service with tenant context (use sync session for AIAnalysisService)
+        sync_db2 = SessionLocal()
+        try:
+            ai_service = AIAnalysisService(
+                openai_api_key=api_keys.openai,
+                companies_house_api_key=api_keys.companies_house,
+                google_maps_api_key=api_keys.google_maps,
+                tenant_id=current_tenant.id,
+                db=sync_db2
             )
+            
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            from app.models.ai_prompt import PromptCategory
+            
+            prompt_service = AIPromptService(sync_db2, tenant_id=current_tenant.id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.COMPANY_PROFILE_ANALYSIS.value,
+                tenant_id=current_tenant.id
+            )
+            
+            if not prompt_obj:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Company profile analysis prompt not configured. Please configure prompts in the admin section."
+                )
+            
+            # Render prompt with variables
+            rendered = prompt_service.render_prompt(prompt_obj, {
+                "company_name": current_tenant.company_name or current_tenant.name,
+                "company_websites": ', '.join(current_tenant.company_websites or ['None provided - consider crawling these to gather more information']),
+                "company_description": current_tenant.company_description or 'Not provided',
+                "products_services": ', '.join(current_tenant.products_services or []),
+                "unique_selling_points": ', '.join(current_tenant.unique_selling_points or []),
+                "target_markets": ', '.join(current_tenant.target_markets or []),
+                "sales_methodology": current_tenant.sales_methodology or 'Not specified',
+                "elevator_pitch": current_tenant.elevator_pitch or 'Not provided'
+            })
+            
+            user_prompt = rendered['user_prompt']
+            system_prompt = rendered['system_prompt']
+            model = rendered['model']
+            max_tokens = rendered['max_tokens']
+            
+            # Get AI analysis using AIProviderService for proper model handling
+            from app.services.ai_provider_service import AIProviderService
+            
+            provider_service = AIProviderService(sync_db2, tenant_id=current_tenant.id)
+            
+            response = await provider_service.generate_with_rendered_prompts(
+                prompt=prompt_obj,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                model=model,
+                max_tokens=max_tokens,
+                timeout=180.0,
+                response_format={"type": "json_object"}
+            )
+            
+            analysis_text = response.content
+            
+            # Parse JSON response
+            import json
+            analysis = json.loads(analysis_text)
+        finally:
+            sync_db2.close()
         
-        # Render prompt with variables
-        rendered = prompt_service.render_prompt(prompt_obj, {
-            "company_name": current_tenant.company_name or current_tenant.name,
-            "company_websites": ', '.join(current_tenant.company_websites or ['None provided - consider crawling these to gather more information']),
-            "company_description": current_tenant.company_description or 'Not provided',
-            "products_services": ', '.join(current_tenant.products_services or []),
-            "unique_selling_points": ', '.join(current_tenant.unique_selling_points or []),
-            "target_markets": ', '.join(current_tenant.target_markets or []),
-            "sales_methodology": current_tenant.sales_methodology or 'Not specified',
-            "elevator_pitch": current_tenant.elevator_pitch or 'Not provided'
-        })
-        
-        user_prompt = rendered['user_prompt']
-        system_prompt = rendered['system_prompt']
-        model = rendered['model']
-        max_tokens = rendered['max_tokens']
-        
-        # Get AI analysis using AIProviderService for proper model handling
-        from app.services.ai_provider_service import AIProviderService
-        
-        provider_service = AIProviderService(db, tenant_id=current_tenant.id)
-        
-        response = await provider_service.generate_with_rendered_prompts(
-            prompt=prompt_obj,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=model,
-            max_tokens=max_tokens,
-            timeout=180.0,
-            response_format={"type": "json_object"}
-        )
-        
-        analysis_text = response.content
-        
-        # Parse JSON response
-        import json
-        analysis = json.loads(analysis_text)
-        
-        # Store analysis in tenant record
+        # Store analysis in tenant record (use async session)
         current_tenant.company_analysis = analysis
         current_tenant.company_analysis_date = datetime.utcnow()
         
-        db.commit()
-        db.refresh(current_tenant)
+        await db.commit()
+        await db.refresh(current_tenant)
         
         return {
             "success": True,
@@ -595,10 +680,10 @@ async def analyze_company_profile(
         }
         
     except Exception as e:
-        db.rollback()
-        print(f"[ERROR] Company analysis failed: {e}")
-        import traceback
-        print(traceback.format_exc())
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[ERROR] Company analysis failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error analyzing company profile: {str(e)}"
@@ -609,7 +694,7 @@ async def analyze_company_profile(
 async def auto_fill_company_profile(
     current_user = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     AI-powered auto-fill for tenant company profile
@@ -622,25 +707,23 @@ async def auto_fill_company_profile(
     - Keyword analysis
     
     Similar to customer analysis but for the tenant's own company.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        # Get API keys
-        api_keys = get_api_keys(db, current_tenant)
+        # Get API keys (use sync session for get_api_keys)
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            api_keys = get_api_keys(sync_db, current_tenant)
+        finally:
+            sync_db.close()
         
         if not api_keys.openai:
             raise HTTPException(
                 status_code=400,
                 detail="OpenAI API key not configured. Please add your API key in settings."
             )
-        
-        # Initialize AI service with tenant context
-        ai_service = AIAnalysisService(
-            openai_api_key=api_keys.openai,
-            companies_house_api_key=api_keys.companies_house,
-            google_maps_api_key=api_keys.google_maps,
-            tenant_id=current_tenant.id,
-            db=db
-        )
         
         company_name = current_tenant.company_name or current_tenant.name
         websites = current_tenant.company_websites or []
@@ -855,24 +938,29 @@ Format your response as JSON with these keys:
 If information is missing or unclear, make reasonable inferences based on the company name and industry.
 """
         
-        # Use AIProviderService for proper model handling
+        # Use AIProviderService for proper model handling (use sync session wrapper)
         from app.services.ai_provider_service import AIProviderService
+        from app.core.database import SessionLocal
         
-        provider_service = AIProviderService(db, tenant_id=current_tenant.id)
-        
-        response = await provider_service.generate_with_rendered_prompts(
-            prompt=None,
-            system_prompt="You are a business intelligence analyst specializing in company research and data extraction. Provide detailed, accurate information in JSON format.",
-            user_prompt=analysis_prompt,
-            model="gpt-5-mini",
-            max_tokens=20000,
-            timeout=240.0,
-            response_format={"type": "json_object"}
-        )
-        
-        result_text = response.content
-        import json
-        result = json.loads(result_text)
+        sync_db2 = SessionLocal()
+        try:
+            provider_service = AIProviderService(sync_db2, tenant_id=current_tenant.id)
+            
+            response = await provider_service.generate_with_rendered_prompts(
+                prompt=None,
+                system_prompt="You are a business intelligence analyst specializing in company research and data extraction. Provide detailed, accurate information in JSON format.",
+                user_prompt=analysis_prompt,
+                model="gpt-5-mini",
+                max_tokens=20000,
+                timeout=240.0,
+                response_format={"type": "json_object"}
+            )
+            
+            result_text = response.content
+            import json
+            result = json.loads(result_text)
+        finally:
+            sync_db2.close()
         
         # Save the keywords to the database immediately (they'll be used in future marketing modules)
         # Store keywords mapped to the primary website
@@ -886,8 +974,8 @@ If information is missing or unclear, make reasonable inferences based on the co
             # Store keywords for this website
             current_tenant.website_keywords[primary_website] = keywords
             flag_modified(current_tenant, "website_keywords")
-            db.commit()
-            db.refresh(current_tenant)
+            await db.commit()
+            await db.refresh(current_tenant)
         
         # Build sources array
         sources_list = []
@@ -933,9 +1021,9 @@ If information is missing or unclear, make reasonable inferences based on the co
         }
         
     except Exception as e:
-        print(f"[ERROR] Auto-fill failed: {e}")
-        import traceback
-        print(traceback.format_exc())
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[ERROR] Auto-fill failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error auto-filling company profile: {str(e)}"

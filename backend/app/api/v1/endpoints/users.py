@@ -4,13 +4,14 @@ User management endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 from pydantic import BaseModel, EmailStr
 import uuid
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.dependencies import get_current_user, get_current_admin_user
 from app.core.security import get_password_hash
 from app.models.tenant import User, UserRole
@@ -68,12 +69,18 @@ async def list_users(
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List all users in current tenant (admin only)"""
-    users = db.query(User).filter_by(
-        tenant_id=current_user.tenant_id
-    ).offset(skip).limit(limit).all()
+    """
+    List all users in current tenant (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(User).where(
+        User.tenant_id == current_user.tenant_id
+    ).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    users = result.scalars().all()
     return users
 
 
@@ -81,12 +88,18 @@ async def list_users(
 async def create_user(
     user_data: UserCreate,
     current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create new user in current tenant (admin only)"""
+    """
+    Create new user in current tenant (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     
     # Check if email already exists
-    existing_user = db.query(User).filter_by(email=user_data.email).first()
+    email_stmt = select(User).where(User.email == user_data.email)
+    email_result = await db.execute(email_stmt)
+    existing_user = email_result.scalar_one_or_none()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -94,7 +107,9 @@ async def create_user(
         )
     
     # Check if username already exists
-    existing_username = db.query(User).filter_by(username=user_data.username).first()
+    username_stmt = select(User).where(User.username == user_data.username)
+    username_result = await db.execute(username_stmt)
+    existing_username = username_result.scalar_one_or_none()
     if existing_username:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -123,13 +138,13 @@ async def create_user(
         )
         
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
         
         return user
         
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating user: {str(e)}"
@@ -141,13 +156,19 @@ async def update_user(
     user_id: str,
     user_update: UserUpdate,
     current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update user (admin only)"""
-    user = db.query(User).filter_by(
-        id=user_id,
-        tenant_id=current_user.tenant_id
-    ).first()
+    """
+    Update user (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(User).where(
+        User.id == user_id,
+        User.tenant_id == current_user.tenant_id
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -166,8 +187,8 @@ async def update_user(
     if user_update.is_active is not None:
         user.is_active = user_update.is_active
     
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     
     return user
 
@@ -176,13 +197,19 @@ async def update_user(
 async def delete_user(
     user_id: str,
     current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Deactivate user (admin only)"""
-    user = db.query(User).filter_by(
-        id=user_id,
-        tenant_id=current_user.tenant_id
-    ).first()
+    """
+    Deactivate user (admin only)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    stmt = select(User).where(
+        User.id == user_id,
+        User.tenant_id == current_user.tenant_id
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -196,7 +223,7 @@ async def delete_user(
     
     # Soft delete - just deactivate
     user.is_active = False
-    db.commit()
+    await db.commit()
     
     return None
 

@@ -5,11 +5,13 @@ Helpdesk API Endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
 from app.core.dependencies import get_db, get_current_user, get_current_tenant, check_permission
+from app.core.database import get_async_db
 from app.models.tenant import User, Tenant
 from app.models.helpdesk import TicketStatus, TicketPriority, TicketType
 from app.services.helpdesk_service import HelpdeskService
@@ -60,25 +62,39 @@ async def create_ticket(
     ticket_data: TicketCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a new support ticket"""
+    """
+    Create a new support ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        ticket = await service.create_ticket(
-            subject=ticket_data.subject,
-            description=ticket_data.description,
-            customer_id=ticket_data.customer_id,
-            contact_id=ticket_data.contact_id,
-            ticket_type=ticket_data.ticket_type,
-            priority=ticket_data.priority,
-            created_by_user_id=current_user.id,
-            related_quote_id=ticket_data.related_quote_id,
-            related_contract_id=ticket_data.related_contract_id,
-            tags=ticket_data.tags
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        # TODO: Refactor HelpdeskService to support async sessions
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            ticket = await service.create_ticket(
+                subject=ticket_data.subject,
+                description=ticket_data.description,
+                customer_id=ticket_data.customer_id,
+                contact_id=ticket_data.contact_id,
+                ticket_type=ticket_data.ticket_type,
+                priority=ticket_data.priority,
+                created_by_user_id=current_user.id,
+                related_quote_id=ticket_data.related_quote_id,
+                related_contract_id=ticket_data.related_contract_id,
+                tags=ticket_data.tags
+            )
+        finally:
+            sync_db.close()
         return ticket
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating ticket: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating ticket: {str(e)}"
@@ -88,50 +104,68 @@ async def create_ticket(
 @router.post("/tickets/customer", status_code=status.HTTP_201_CREATED)
 async def create_customer_ticket(
     ticket_data: CustomerTicketCreate,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a ticket from customer portal (no auth required)"""
+    """
+    Create a ticket from customer portal (no auth required)
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         # Get tenant from customer email domain or default tenant
         # For now, use default tenant
         from app.models.tenant import Tenant
-        tenant = db.query(Tenant).filter(Tenant.code == "ccs").first()
+        from app.models.crm import Customer
+        from sqlalchemy import select
+        
+        tenant_stmt = select(Tenant).where(Tenant.code == "ccs")
+        tenant_result = await db.execute(tenant_stmt)
+        tenant = tenant_result.scalar_one_or_none()
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
-        service = HelpdeskService(db, tenant.id)
-        
-        # Find or create customer by email
-        from app.models.customer import Customer
-        customer = db.query(Customer).filter(
-            Customer.tenant_id == tenant.id,
-            Customer.email == ticket_data.contact_email
-        ).first()
-        
-        customer_id = customer.id if customer else None
-        
-        ticket = await service.create_ticket(
-            subject=ticket_data.subject,
-            description=ticket_data.description,
-            customer_id=customer_id,
-            ticket_type=ticket_data.ticket_type,
-            priority=ticket_data.priority,
-            tags=None
-        )
-        
-        # Add initial comment from customer
-        await service.add_comment(
-            ticket_id=ticket.id,
-            comment=ticket_data.description,
-            author_name=ticket_data.contact_name,
-            author_email=ticket_data.contact_email,
-            is_internal=False
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, tenant.id)
+            
+            # Find or create customer by email (use sync session for this query)
+            customer = sync_db.query(Customer).filter(
+                Customer.tenant_id == tenant.id,
+                Customer.main_email == ticket_data.contact_email
+            ).first()
+            
+            customer_id = customer.id if customer else None
+            
+            ticket = await service.create_ticket(
+                subject=ticket_data.subject,
+                description=ticket_data.description,
+                customer_id=customer_id,
+                ticket_type=ticket_data.ticket_type,
+                priority=ticket_data.priority,
+                tags=None
+            )
+            
+            # Add initial comment from customer
+            await service.add_comment(
+                ticket_id=ticket.id,
+                comment=ticket_data.description,
+                author_id=None,
+                author_name=ticket_data.contact_name,
+                author_email=ticket_data.contact_email,
+                is_internal=False
+            )
+        finally:
+            sync_db.close()
         
         return ticket
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating customer ticket: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating customer ticket: {str(e)}"
@@ -149,22 +183,35 @@ async def list_tickets(
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List tickets with filters"""
+    """
+    List tickets with filters
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        tickets = service.get_tickets(
-            status=status,
-            priority=priority,
-            assigned_to_id=assigned_to_id or (current_user.id if assigned_to_id == "me" else None),
-            customer_id=customer_id,
-            ticket_type=ticket_type,
-            limit=limit,
-            offset=offset
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            tickets = service.get_tickets(
+                status=status,
+                priority=priority,
+                assigned_to_id=assigned_to_id or (current_user.id if assigned_to_id == "me" else None),
+                customer_id=customer_id,
+                ticket_type=ticket_type,
+                limit=limit,
+                offset=offset
+            )
+        finally:
+            sync_db.close()
         return {"tickets": tickets, "count": len(tickets)}
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error listing tickets: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error listing tickets: {str(e)}"
@@ -175,14 +222,27 @@ async def list_tickets(
 async def get_ticket_stats(
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get ticket statistics"""
+    """
+    Get ticket statistics
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        stats = service.get_ticket_stats()
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            stats = service.get_ticket_stats()
+        finally:
+            sync_db.close()
         return stats
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting stats: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting stats: {str(e)}"
@@ -194,21 +254,29 @@ async def get_ticket(
     ticket_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get ticket details with comments and history"""
+    """
+    Get ticket details with comments and history
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.helpdesk import Ticket, TicketComment, TicketHistory
         from sqlalchemy.orm import joinedload
+        from sqlalchemy import select
         
-        ticket = db.query(Ticket).options(
+        # Use async session with select
+        stmt = select(Ticket).options(
             joinedload(Ticket.comments),
             joinedload(Ticket.history),
             joinedload(Ticket.assigned_to)
-        ).filter(
+        ).where(
             Ticket.id == ticket_id,
             Ticket.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
         
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -290,22 +358,35 @@ async def add_comment(
     comment_data: TicketCommentCreate,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Add a comment to a ticket and trigger AI analysis"""
+    """
+    Add a comment to a ticket and trigger AI analysis
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        comment = await service.add_comment(
-            ticket_id=ticket_id,
-            comment=comment_data.comment,
-            author_id=current_user.id,
-            is_internal=comment_data.is_internal,
-            status_change=comment_data.status_change
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            comment = await service.add_comment(
+                ticket_id=ticket_id,
+                comment=comment_data.comment,
+                author_id=current_user.id,
+                is_internal=comment_data.is_internal,
+                status_change=comment_data.status_change
+            )
+        finally:
+            sync_db.close()
         return comment
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error adding comment: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error adding comment: {str(e)}"
@@ -317,24 +398,38 @@ async def analyze_ticket(
     ticket_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Manually trigger AI analysis for a ticket"""
+    """
+    Manually trigger AI analysis for a ticket
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.helpdesk import Ticket
-        ticket = db.query(Ticket).filter(
+        from sqlalchemy import select
+        
+        stmt = select(Ticket).where(
             Ticket.id == ticket_id,
             Ticket.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
         
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         
-        service = HelpdeskService(db, current_user.tenant_id)
-        await service._analyze_ticket_with_full_history(ticket)
-        
-        # Reload ticket to get updated AI analysis
-        db.refresh(ticket)
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            await service._analyze_ticket_with_full_history(ticket)
+            
+            # Reload ticket to get updated AI analysis
+            sync_db.refresh(ticket)
+        finally:
+            sync_db.close()
         
         return {
             "success": True,
@@ -349,6 +444,9 @@ async def analyze_ticket(
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing ticket: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error analyzing ticket: {str(e)}"
@@ -361,20 +459,33 @@ async def assign_ticket(
     assigned_to_id: str,
     current_user: User = Depends(check_permission("ticket:assign")),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Assign a ticket to a user"""
+    """
+    Assign a ticket to a user
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        ticket = service.assign_ticket(
-            ticket_id=ticket_id,
-            assigned_to_id=assigned_to_id,
-            assigned_by_id=current_user.id
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            ticket = service.assign_ticket(
+                ticket_id=ticket_id,
+                assigned_to_id=assigned_to_id,
+                assigned_by_id=current_user.id
+            )
+        finally:
+            sync_db.close()
         return ticket
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error assigning ticket: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error assigning ticket: {str(e)}"
@@ -387,41 +498,36 @@ async def update_priority(
     priority: TicketPriority,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Update ticket priority"""
+    """
+    Update ticket priority
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        ticket = service.update_priority(
-            ticket_id=ticket_id,
-            priority=priority,
-            changed_by_id=current_user.id
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            ticket = service.update_priority(
+                ticket_id=ticket_id,
+                priority=priority,
+                changed_by_id=current_user.id
+            )
+        finally:
+            sync_db.close()
         return ticket
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating priority: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating priority: {str(e)}"
-        )
-
-
-@router.get("/tickets/stats")
-async def get_ticket_stats(
-    current_user: User = Depends(get_current_user),
-    current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
-):
-    """Get ticket statistics"""
-    try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        stats = service.get_ticket_stats()
-        return stats
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting stats: {str(e)}"
         )
 
 
@@ -432,18 +538,31 @@ async def search_knowledge_base(
     limit: int = Query(10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Search knowledge base using AI-powered semantic search"""
+    """
+    Search knowledge base using AI-powered semantic search
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        results = await service.search_knowledge_base(
-            query=q,
-            category=category,
-            limit=limit
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            results = await service.search_knowledge_base(
+                query=q,
+                category=category,
+                limit=limit
+            )
+        finally:
+            sync_db.close()
         return {"results": results, "query": q}
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error searching knowledge base: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error searching knowledge base: {str(e)}"
@@ -455,23 +574,36 @@ async def create_knowledge_base_article(
     article_data: KnowledgeBaseArticleCreate,
     current_user: User = Depends(check_permission("kb:create")),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Create a knowledge base article"""
+    """
+    Create a knowledge base article
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
-        service = HelpdeskService(db, current_user.tenant_id)
-        article = service.create_knowledge_base_article(
-            title=article_data.title,
-            content=article_data.content,
-            summary=article_data.summary,
-            category=article_data.category,
-            tags=article_data.tags,
-            author_id=current_user.id,
-            is_published=article_data.is_published,
-            is_featured=article_data.is_featured
-        )
+        # HelpdeskService currently expects sync session - use sync wrapper
+        from app.core.database import SessionLocal
+        sync_db = SessionLocal()
+        try:
+            service = HelpdeskService(sync_db, current_user.tenant_id)
+            article = service.create_knowledge_base_article(
+                title=article_data.title,
+                content=article_data.content,
+                summary=article_data.summary,
+                category=article_data.category,
+                tags=article_data.tags,
+                author_id=current_user.id,
+                is_published=article_data.is_published,
+                is_featured=article_data.is_featured
+            )
+        finally:
+            sync_db.close()
         return article
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating article: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating article: {str(e)}"
@@ -484,22 +616,30 @@ async def list_knowledge_base_articles(
     published_only: bool = Query(True),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """List knowledge base articles"""
+    """
+    List knowledge base articles
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.helpdesk import KnowledgeBaseArticle
-        query = db.query(KnowledgeBaseArticle).filter(
+        from sqlalchemy import select
+        
+        stmt = select(KnowledgeBaseArticle).where(
             KnowledgeBaseArticle.tenant_id == current_user.tenant_id
         )
         
         if published_only:
-            query = query.filter(KnowledgeBaseArticle.is_published == True)
+            stmt = stmt.where(KnowledgeBaseArticle.is_published == True)
         
         if category:
-            query = query.filter(KnowledgeBaseArticle.category == category)
+            stmt = stmt.where(KnowledgeBaseArticle.category == category)
         
-        articles = query.order_by(KnowledgeBaseArticle.created_at.desc()).all()
+        stmt = stmt.order_by(KnowledgeBaseArticle.created_at.desc())
+        result = await db.execute(stmt)
+        articles = result.scalars().all()
         return {"articles": articles}
     except Exception as e:
         raise HTTPException(
@@ -513,27 +653,38 @@ async def get_knowledge_base_article(
     article_id: str,
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Get knowledge base article"""
+    """
+    Get knowledge base article
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
     try:
         from app.models.helpdesk import KnowledgeBaseArticle
-        article = db.query(KnowledgeBaseArticle).filter(
+        from sqlalchemy import select
+        
+        stmt = select(KnowledgeBaseArticle).where(
             KnowledgeBaseArticle.id == article_id,
             KnowledgeBaseArticle.tenant_id == current_user.tenant_id
-        ).first()
+        )
+        result = await db.execute(stmt)
+        article = result.scalar_one_or_none()
         
         if not article:
             raise HTTPException(status_code=404, detail="Article not found")
         
         # Increment view count
         article.view_count += 1
-        db.commit()
+        await db.commit()
         
         return article
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting article: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting article: {str(e)}"

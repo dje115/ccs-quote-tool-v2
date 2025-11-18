@@ -32,3 +32,4 @@ COMMENT ON COLUMN suppliers.scraping_method IS 'Scraping method: generic (web sc
 COMMENT ON COLUMN suppliers.scraping_enabled IS 'Whether web scraping is enabled for this supplier';
 
 
+

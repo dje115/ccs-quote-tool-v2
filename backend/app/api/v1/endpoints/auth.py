@@ -116,13 +116,17 @@ async def login(
 
 
 class RefreshTokenRequest(BaseModel):
-    """Request model for refresh token endpoint"""
-    refresh_token: str
+    """Request model for refresh token endpoint
+    
+    SECURITY: refresh_token is optional to support HttpOnly cookie-only clients.
+    If not provided in body, the endpoint will use the cookie value.
+    """
+    refresh_token: Optional[str] = None
 
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    request: RefreshTokenRequest,
+    request: Optional[RefreshTokenRequest] = None,
     response: Response = None,
     refresh_token_cookie: Optional[str] = Cookie(None, alias="refresh_token"),
     db: Session = Depends(get_db)
@@ -135,11 +139,12 @@ async def refresh_token(
     a refresh token is stolen.
     
     Supports both HttpOnly cookies (preferred) and request body (backward compatibility).
+    If refresh_token is provided in both cookie and body, cookie takes precedence.
     """
     from app.core.security import decode_token
     
-    # Try to get refresh token from cookie first (more secure)
-    refresh_token_value = refresh_token_cookie or request.refresh_token
+    # Try to get refresh token from cookie first (more secure), then from body
+    refresh_token_value = refresh_token_cookie or (request.refresh_token if request else None)
     
     if not refresh_token_value:
         raise HTTPException(

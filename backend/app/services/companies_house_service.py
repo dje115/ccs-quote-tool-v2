@@ -14,41 +14,76 @@ from app.services.storage_service import get_storage_service
 
 
 class CompaniesHouseService:
-    """Service for Companies House API integration"""
+    """
+    Service for Companies House API integration
+    
+    PERFORMANCE: Reuses httpx.AsyncClient with connection pooling to avoid
+    creating new connections on every request. This significantly improves
+    performance and reduces connection overhead.
+    """
     
     def __init__(self, api_key: Optional[str] = None):
         self.base_url = settings.COMPANIES_HOUSE_BASE_URL
         self.api_key = api_key or settings.COMPANIES_HOUSE_API_KEY
         self.timeout = 30.0
+        
+        # Create reusable HTTP client with connection pooling
+        # Limits: max 10 connections, keep-alive for 30s
+        self._client: Optional[httpx.AsyncClient] = None
+        self._client_lock = asyncio.Lock()
+    
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create reusable HTTP client"""
+        if self._client is None:
+            async with self._client_lock:
+                if self._client is None:
+                    # Create client with connection pooling
+                    self._client = httpx.AsyncClient(
+                        timeout=self.timeout,
+                        limits=httpx.Limits(
+                            max_keepalive_connections=10,
+                            max_connections=20,
+                            keepalive_expiry=30.0
+                        )
+                    )
+        return self._client
+    
+    async def close(self):
+        """Close HTTP client and cleanup resources"""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
     
     async def search_company(self, company_name: str) -> Optional[Dict[str, Any]]:
         """Search for a company by name"""
         try:
             headers = {'Authorization': self.api_key}
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/search/companies",
-                    headers=headers,
-                    params={'q': company_name, 'items_per_page': 1}
-                )
-                response.raise_for_status()
-                data = response.json()
-                
-                if data.get('items'):
-                    company = data['items'][0]
-                    return {
-                        'company_number': company.get('company_number', ''),
-                        'company_status': company.get('company_status', ''),
-                        'company_type': company.get('company_type', ''),
-                        'title': company.get('title', ''),
-                        'address_snippet': company.get('address_snippet', ''),
-                        'description': company.get('description', ''),
-                        'date_of_creation': company.get('date_of_creation', '')
-                    }
-                return None
-                
+            client = await self._get_client()
+            response = await client.get(
+                f"{self.base_url}/search/companies",
+                headers=headers,
+                params={'q': company_name, 'items_per_page': 1}
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('items'):
+                company = data['items'][0]
+                return {
+                    'company_number': company.get('company_number', ''),
+                    'company_status': company.get('company_status', ''),
+                    'company_type': company.get('company_type', ''),
+                    'title': company.get('title', ''),
+                    'address_snippet': company.get('address_snippet', ''),
+                    'description': company.get('description', ''),
+                    'date_of_creation': company.get('date_of_creation', '')
+                }
+            return None
+            
         except Exception as e:
-            print(f"⚠️ Companies House search error: {e}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Companies House search error: {e}", exc_info=True)
             return None
     
     async def get_company_profile(self, company_number: str, customer_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict[str, Any]:
@@ -58,41 +93,62 @@ class CompaniesHouseService:
                 raise ValueError("tenant_id is required for tenant isolation")
                 
             headers = {'Authorization': self.api_key}
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Get basic company information
-                company_response = await client.get(
-                    f"{self.base_url}/company/{company_number}",
-                    headers=headers
-                )
-                company_response.raise_for_status()
-                company_data = company_response.json()
-                
-                # Get officers/directors
-                officers_data = await self._get_officers(company_number, client, headers)
-                
-                # Get filing history
-                filing_history = await self._get_filing_history(company_number, client, headers)
-                
-                # Get financial data (now returns dict with financial_history and accounts_documents)
-                financial_data_result = await self._get_financial_data(company_number, client, headers, customer_id, tenant_id)
-                financial_history = financial_data_result.get('financial_history', [])
-                accounts_documents = financial_data_result.get('accounts_documents', [])
-                
-                # Process into v1-compatible accounts_detail structure
-                accounts_detail = await self._build_accounts_detail(
-                    company_number, company_data, officers_data, filing_history, financial_history, client, headers
-                )
-                
-                return {
-                    "company_number": company_number,
-                    "company_profile": company_data,
-                    "officers": officers_data,
-                    "filing_history": filing_history,
-                    "financial_data": financial_history,  # Keep backward compatibility
-                    "accounts_documents": accounts_documents,  # New: MinIO paths for accounts documents
-                    "accounts_detail": accounts_detail,  # V1-compatible structure
-                    "retrieved_at": datetime.utcnow().isoformat()
-                }
+            client = await self._get_client()
+            
+            # Get basic company information
+            company_response = await client.get(
+                f"{self.base_url}/company/{company_number}",
+                headers=headers
+            )
+            company_response.raise_for_status()
+            company_data = company_response.json()
+            
+            # Get officers/directors, filing history, and financial data in parallel
+            # This reduces total time from sequential to parallel execution
+            officers_task = self._get_officers(company_number, client, headers)
+            filing_task = self._get_filing_history(company_number, client, headers)
+            financial_task = self._get_financial_data(company_number, client, headers, customer_id, tenant_id)
+            
+            # Wait for all parallel requests to complete
+            officers_data, filing_history, financial_data_result = await asyncio.gather(
+                officers_task,
+                filing_task,
+                financial_task,
+                return_exceptions=True
+            )
+            
+            # Handle exceptions from parallel tasks
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            if isinstance(officers_data, Exception):
+                logger.error(f"Error fetching officers: {officers_data}", exc_info=True)
+                officers_data = []
+            if isinstance(filing_history, Exception):
+                logger.error(f"Error fetching filing history: {filing_history}", exc_info=True)
+                filing_history = []
+            if isinstance(financial_data_result, Exception):
+                logger.error(f"Error fetching financial data: {financial_data_result}", exc_info=True)
+                financial_data_result = {'financial_history': [], 'accounts_documents': []}
+            
+            financial_history = financial_data_result.get('financial_history', [])
+            accounts_documents = financial_data_result.get('accounts_documents', [])
+            
+            # Process into v1-compatible accounts_detail structure
+            accounts_detail = await self._build_accounts_detail(
+                company_number, company_data, officers_data, filing_history, financial_history, client, headers
+            )
+            
+            return {
+                "company_number": company_number,
+                "company_profile": company_data,
+                "officers": officers_data,
+                "filing_history": filing_history,
+                "financial_data": financial_history,  # Keep backward compatibility
+                "accounts_documents": accounts_documents,  # New: MinIO paths for accounts documents
+                "accounts_detail": accounts_detail,  # V1-compatible structure
+                "retrieved_at": datetime.utcnow().isoformat()
+            }
                 
         except httpx.HTTPStatusError as e:
             return {"error": f"Companies House API error: {e.response.status_code} - {e.response.text}"}
