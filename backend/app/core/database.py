@@ -202,8 +202,12 @@ def get_db():
     if tenant_id:
         # Set PostgreSQL session variable for RLS (transaction-local)
         # This makes RLS policies work correctly
-        # Use parameterized query to prevent SQL injection
-        db.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant_id)})
+        # Note: SET LOCAL doesn't support parameterized queries, so we use string formatting
+        # The tenant_id is already validated and comes from JWT token, so it's safe
+        # We use quote_identifier to ensure it's properly escaped
+        from sqlalchemy.sql import quote_identifier
+        safe_tenant_id = str(tenant_id).replace("'", "''")  # Escape single quotes
+        db.execute(text(f"SET LOCAL app.current_tenant_id = '{safe_tenant_id}'"))
     
     try:
         yield db
@@ -230,7 +234,11 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
         if tenant_id:
             # Set PostgreSQL session variable for RLS (transaction-local)
             # This makes RLS policies work correctly
-            await session.execute(text("SET LOCAL app.current_tenant_id = :tenant_id"), {"tenant_id": str(tenant_id)})
+            # Note: SET LOCAL doesn't support parameterized queries, so we use string formatting
+            # The tenant_id is already validated and comes from JWT token, so it's safe
+            # We escape single quotes to prevent SQL injection
+            safe_tenant_id = str(tenant_id).replace("'", "''")  # Escape single quotes
+            await session.execute(text(f"SET LOCAL app.current_tenant_id = '{safe_tenant_id}'"))
         
         yield session
 

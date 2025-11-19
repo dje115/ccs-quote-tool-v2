@@ -42,8 +42,8 @@ export const useWebSocket = (): UseWebSocketReturn => {
     }
 
     // SECURITY: WebSocket handshake sends HttpOnly cookies automatically
-    // Backend WebSocket endpoint now reads token from cookies in handshake
-    // No need to get token from localStorage or API - cookies are sent automatically
+    // Backend WebSocket endpoint reads token from cookies in handshake (preferred)
+    // Fallback: Send token from localStorage in auth message if cookie not available
     // We still need to verify authentication by checking if user is logged in
     let isAuthenticated = false;
     try {
@@ -59,9 +59,9 @@ export const useWebSocket = (): UseWebSocketReturn => {
       return;
     }
     
-    // Token will be read from HttpOnly cookie by backend during WebSocket handshake
-    // We don't need to send it in the message anymore, but we'll send empty auth for compatibility
-    const token = ''; // Not used - backend reads from cookie
+    // Get token from localStorage as fallback (cookie might not be available in WebSocket handshake)
+    // Backend will prefer cookie if available, but will use this token as fallback
+    const token = localStorage.getItem('access_token') || '';
 
     // Get WebSocket URL from environment or construct from API URL
     // SECURITY: Token will be sent as first message, not in URL (prevents logging/caching)
@@ -115,11 +115,16 @@ export const useWebSocket = (): UseWebSocketReturn => {
         setIsConnected(true);
         reconnectAttemptsRef.current = 0;
         
-        // SECURITY: Token is read from HttpOnly cookie by backend during handshake
-        // We still send auth message for backward compatibility, but token is empty
-        // Backend will use cookie if available, or message token as fallback
+        // SECURITY: Token is read from HttpOnly cookie by backend during handshake (preferred)
+        // We also send token in auth message as fallback (cookie might not be available)
+        // Backend will prefer cookie if available, but will use message token as fallback
         try {
-          ws.send(JSON.stringify({ type: 'auth', token: token || '' }));
+          if (token) {
+            ws.send(JSON.stringify({ type: 'auth', token: token }));
+          } else {
+            // If no token available, still send auth message (backend will check cookie)
+            ws.send(JSON.stringify({ type: 'auth', token: '' }));
+          }
         } catch (error) {
           console.error('[WebSocket] Error sending auth message:', error);
           ws.close();

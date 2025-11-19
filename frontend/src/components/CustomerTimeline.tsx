@@ -21,7 +21,7 @@ import {
 import {
   Phone as PhoneIcon,
   Email as EmailIcon,
-  Meeting as MeetingIcon,
+  Event as MeetingIcon,
   Note as NoteIcon,
   Assignment as TicketIcon,
   Receipt as QuoteIcon,

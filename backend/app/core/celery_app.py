@@ -10,10 +10,11 @@ from celery import Celery
 from app.core.config import settings
 
 # Initialize Celery with settings from config
+# Use properties that fall back to REDIS_URL if CELERY_BROKER_URL is not set
 celery_app = Celery(
     "ccs_quote_tool",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=settings.celery_broker_url,
+    backend=settings.celery_result_backend,
     include=[
         "app.tasks.campaign_tasks", 
         "app.tasks.activity_tasks", 

@@ -271,6 +271,7 @@ async def get_ticket(
         from sqlalchemy import select
         
         # Use async session with select
+        # Note: When using joinedload with collections, we need unique() to avoid duplicate rows
         stmt = select(Ticket).options(
             joinedload(Ticket.comments),
             joinedload(Ticket.history),
@@ -280,7 +281,7 @@ async def get_ticket(
             Ticket.tenant_id == current_user.tenant_id
         )
         result = await db.execute(stmt)
-        ticket = result.scalar_one_or_none()
+        ticket = result.unique().scalar_one_or_none()
         
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")

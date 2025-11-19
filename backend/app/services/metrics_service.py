@@ -18,7 +18,8 @@ from sqlalchemy import select, and_, func, desc
 
 from app.models.helpdesk import Ticket, TicketStatus
 from app.models.quotes import Quote, QuoteStatus
-from app.models.crm import Customer, Lead, LeadStatus
+from app.models.crm import Customer
+from app.models.leads import Lead, LeadStatus
 from app.models.sales import SalesActivity
 
 logger = logging.getLogger(__name__)

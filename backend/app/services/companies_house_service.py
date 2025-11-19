@@ -3,6 +3,7 @@
 Companies House API Service for company data retrieval
 """
 
+import asyncio
 import httpx
 import json
 from typing import Dict, List, Optional, Any
@@ -225,46 +226,94 @@ class CompaniesHouseService:
                             print(f"[IXBRL] Year {i+1}: Attempting to retrieve document: {document_metadata_url}")
                             
                             # Get document metadata
+                            # Companies House Document API uses Basic Auth (same as main API)
+                            # Use httpx.BasicAuth for proper authentication
+                            import httpx
                             metadata_response = await client.get(
                                 document_metadata_url,
-                                headers={'api_key': self.api_key}
+                                auth=httpx.BasicAuth(self.api_key, '')
                             )
                             
                             if metadata_response.status_code == 200:
-                                metadata = metadata_response.json()
-                                resources = metadata.get('resources', [])
+                                # Check content type - Document API might return JSON metadata or XHTML content directly
+                                content_type_header = metadata_response.headers.get('content-type', '').lower()
                                 
-                                # Find iXBRL content type
-                                target_content_type = None
-                                for resource in resources:
-                                    ct = resource.get('content_type', '')
-                                    if 'xhtml' in ct.lower() or 'ixbrl' in ct.lower():
-                                        target_content_type = ct
-                                        content_type = ct
-                                        break
-                                
-                                if target_content_type:
-                                    # Extract document ID from URL
-                                    document_id = document_metadata_url.split('/')[-1]
-                                    content_url = f"https://document-api.company-information.service.gov.uk/document/{document_id}/content"
-                                    
-                                    # Download the iXBRL document
-                                    content_response = await client.get(
-                                        content_url,
-                                        headers={
-                                            'api_key': self.api_key,
-                                            'Accept': target_content_type
-                                        },
-                                        follow_redirects=True
-                                    )
-                                    
-                                    if content_response.status_code == 200:
-                                        content = content_response.text
-                                        print(f"[IXBRL] Year {i+1}: Downloaded via API, size: {len(content)} chars")
-                                    else:
-                                        print(f"[IXBRL] Year {i+1}: API download failed: {content_response.status_code}")
+                                if 'json' in content_type_header:
+                                    # It's JSON metadata - parse it
+                                    try:
+                                        metadata = metadata_response.json()
+                                        resources = metadata.get('resources', [])
+                                        
+                                        # Find iXBRL content type
+                                        target_content_type = None
+                                        for resource in resources:
+                                            ct = resource.get('content_type', '')
+                                            if 'xhtml' in ct.lower() or 'ixbrl' in ct.lower():
+                                                target_content_type = ct
+                                                content_type = ct
+                                                break
+                                        
+                                        if target_content_type:
+                                            # Extract document ID from URL
+                                            document_id = document_metadata_url.split('/')[-1]
+                                            content_url = f"https://document-api.company-information.service.gov.uk/document/{document_id}/content"
+                                            
+                                            # Download the iXBRL document
+                                            # Companies House Document API uses Basic Auth
+                                            import httpx
+                                            content_response = await client.get(
+                                                content_url,
+                                                auth=httpx.BasicAuth(self.api_key, ''),
+                                                headers={'Accept': target_content_type},
+                                                follow_redirects=True
+                                            )
+                                            
+                                            if content_response.status_code == 200:
+                                                content = content_response.text
+                                                print(f"[IXBRL] Year {i+1}: Downloaded via API, size: {len(content)} chars")
+                                            else:
+                                                print(f"[IXBRL] Year {i+1}: API download failed: {content_response.status_code}")
+                                        else:
+                                            print(f"[IXBRL] Year {i+1}: No suitable content type found in metadata")
+                                    except Exception as json_e:
+                                        print(f"[IXBRL] Year {i+1}: Error parsing metadata JSON: {json_e}")
+                                elif 'xhtml' in content_type_header or 'xml' in content_type_header or 'html' in content_type_header:
+                                    # It's already the document content (XHTML) - use it directly
+                                    content = metadata_response.text
+                                    content_type = content_type_header
+                                    print(f"[IXBRL] Year {i+1}: Document API returned content directly, size: {len(content)} chars")
                                 else:
-                                    print(f"[IXBRL] Year {i+1}: No suitable content type found")
+                                    # Try to parse as JSON anyway (fallback)
+                                    try:
+                                        metadata = metadata_response.json()
+                                        resources = metadata.get('resources', [])
+                                        print(f"[IXBRL] Year {i+1}: Parsed as JSON metadata, found {len(resources)} resources")
+                                        # Continue with resource processing...
+                                        target_content_type = None
+                                        for resource in resources:
+                                            ct = resource.get('content_type', '')
+                                            if 'xhtml' in ct.lower() or 'ixbrl' in ct.lower():
+                                                target_content_type = ct
+                                                content_type = ct
+                                                break
+                                        
+                                        if target_content_type:
+                                            document_id = document_metadata_url.split('/')[-1]
+                                            content_url = f"https://document-api.company-information.service.gov.uk/document/{document_id}/content"
+                                            import httpx
+                                            content_response = await client.get(
+                                                content_url,
+                                                auth=httpx.BasicAuth(self.api_key, ''),
+                                                headers={'Accept': target_content_type},
+                                                follow_redirects=True
+                                            )
+                                            
+                                            if content_response.status_code == 200:
+                                                content = content_response.text
+                                                print(f"[IXBRL] Year {i+1}: Downloaded via API, size: {len(content)} chars")
+                                    except Exception as parse_e:
+                                        print(f"[IXBRL] Year {i+1}: Could not parse response (not JSON or XHTML): {parse_e}")
+                                        print(f"[IXBRL] Year {i+1}: Content-Type: {content_type_header}, First 200 chars: {metadata_response.text[:200]}")
                             else:
                                 print(f"[IXBRL] Year {i+1}: Metadata failed: {metadata_response.status_code}")
                             

@@ -33,3 +33,4 @@ COMMENT ON COLUMN suppliers.scraping_enabled IS 'Whether web scraping is enabled
 
 
 
+

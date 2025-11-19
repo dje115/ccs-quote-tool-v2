@@ -31,6 +31,16 @@ class PromptCategory(str, enum.Enum):
     PRICING_ANALYSIS = "pricing_analysis"
     KNOWLEDGE_BASE_SEARCH = "knowledge_base_search"
     CUSTOMER_SERVICE = "customer_service"
+    DASHBOARD_ANALYTICS = "dashboard_analytics"
+    # Smart Quoting Module prompts
+    QUOTE_SCOPE_ANALYSIS = "quote_scope_analysis"
+    PRODUCT_RECOMMENDATION = "product_recommendation"
+    COMPONENT_SELECTION = "component_selection"
+    PRICING_RECOMMENDATION = "pricing_recommendation"
+    LABOR_ESTIMATION = "labor_estimation"
+    UPSELL_CROSSSELL = "upsell_crosssell"
+    QUOTE_EMAIL_COPY = "quote_email_copy"
+    QUOTE_SUMMARY = "quote_summary"
 
 
 class AIPrompt(Base, TimestampMixin):

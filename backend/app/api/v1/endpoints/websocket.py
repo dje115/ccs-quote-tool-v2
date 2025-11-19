@@ -98,16 +98,21 @@ async def websocket_endpoint(
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="First message must be auth message")
                     return
                 
-                token = auth_message.get("token")
+                # Get token from message (may be empty if cookie is being used)
+                message_token = auth_message.get("token", "")
+                if message_token:
+                    token = message_token
+                
+                # If still no token, authentication will fail below
                 if not token:
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token in auth message or cookie")
                     return
                     
             except asyncio.TimeoutError:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication timeout")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication timeout - no auth message received")
                 return
             except json.JSONDecodeError:
-                await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid auth message format")
+                await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid auth message format - expected JSON")
                 return
         
         # Authenticate connection
@@ -183,4 +188,5 @@ async def websocket_endpoint(
         if tenant_id and user_id:
             manager = get_websocket_manager()
             manager.disconnect(websocket, tenant_id, user_id)
+
 

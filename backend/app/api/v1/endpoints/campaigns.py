@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import time
@@ -9,7 +9,7 @@ import uuid
 import asyncio
 
 from app.core.database import get_async_db, SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant
 from app.models.leads import LeadGenerationCampaign, LeadGenerationStatus, Lead, LeadStatus
 from app.models.crm import Customer, CustomerStatus, BusinessSector, BusinessSize
@@ -739,4 +739,63 @@ async def convert_lead_to_customer(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to convert lead: {str(e)}"
+        )
+
+
+@router.post("/leads/{lead_id}/analyze")
+async def analyze_lead_with_ai(
+    lead_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Analyze a discovery lead with AI
+    
+    This endpoint queues an AI analysis task for the lead, similar to customer AI analysis.
+    The analysis will update the lead's AI analysis data and generate intelligence.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.services.lead_intelligence_service import LeadIntelligenceService
+        from app.core.database import SessionLocal
+        from sqlalchemy import select, and_
+        
+        # Get lead
+        lead_stmt = select(Lead).where(
+            and_(
+                Lead.id == lead_id,
+                Lead.tenant_id == current_user.tenant_id,
+                Lead.is_deleted == False
+            )
+        )
+        result = await db.execute(lead_stmt)
+        lead = result.scalar_one_or_none()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Use sync session for AI service
+        sync_db = SessionLocal()
+        try:
+            intelligence_service = LeadIntelligenceService(sync_db, current_user.tenant_id)
+            analysis = await intelligence_service.analyze_lead(lead)
+        finally:
+            sync_db.close()
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error analyzing lead: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze lead: {str(e)}"
         )

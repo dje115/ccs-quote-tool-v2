@@ -14,7 +14,8 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, desc
 
-from app.models.crm import Lead, LeadStatus, Customer
+from app.models.leads import Lead, LeadStatus
+from app.models.crm import Customer
 from app.models.quotes import Quote, QuoteStatus
 from app.services.ai_orchestration_service import AIOrchestrationService
 from app.models.ai_prompt import PromptCategory

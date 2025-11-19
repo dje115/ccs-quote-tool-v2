@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "CCS Quote Tool v2"
-    VERSION: str = "3.0.2"
+    VERSION: str = "3.0.3"
     ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
     DEBUG: bool = Field(default=True, env="DEBUG")
     
@@ -79,8 +79,19 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW: int = Field(default=60, env="RATE_LIMIT_WINDOW")  # seconds
     
     # Background Tasks
-    CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/0", env="CELERY_BROKER_URL")
-    CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/0", env="CELERY_RESULT_BACKEND")
+    # Default to REDIS_URL if CELERY_BROKER_URL is not explicitly set
+    CELERY_BROKER_URL: Optional[str] = Field(default=None, env="CELERY_BROKER_URL")
+    CELERY_RESULT_BACKEND: Optional[str] = Field(default=None, env="CELERY_RESULT_BACKEND")
+    
+    @property
+    def celery_broker_url(self) -> str:
+        """Get Celery broker URL, falling back to REDIS_URL if not set"""
+        return self.CELERY_BROKER_URL or self.REDIS_URL
+    
+    @property
+    def celery_result_backend(self) -> str:
+        """Get Celery result backend URL, falling back to REDIS_URL if not set"""
+        return self.CELERY_RESULT_BACKEND or self.REDIS_URL
     
     # AI Settings
     OPENAI_MODEL: str = Field(default="gpt-5", env="OPENAI_MODEL")

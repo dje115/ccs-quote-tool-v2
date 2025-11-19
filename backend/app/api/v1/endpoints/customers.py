@@ -522,33 +522,51 @@ async def run_ai_analysis(
     print(f"Options: update_financial_data={options.update_financial_data}, update_addresses={options.update_addresses}")
     print(f"{'='*80}\n")
     
-    # Queue the AI analysis task to Celery with options
-    task = celery_app.send_task(
-        'run_ai_analysis',
-        args=[customer_id, str(current_tenant.id)],
-        kwargs={
-            'update_financial_data': options.update_financial_data,
-            'update_addresses': options.update_addresses
+    try:
+        # Queue the AI analysis task to Celery with options
+        task = celery_app.send_task(
+            'run_ai_analysis',
+            args=[customer_id, str(current_tenant.id)],
+            kwargs={
+                'update_financial_data': options.update_financial_data,
+                'update_addresses': options.update_addresses
+            }
+        )
+        
+        print(f"✓ Task queued: {task.id}")
+        
+        # Update customer with task tracking info (like campaigns)
+        from datetime import datetime, timezone
+        customer.ai_analysis_status = 'queued'
+        customer.ai_analysis_task_id = task.id
+        customer.ai_analysis_started_at = datetime.now(timezone.utc)
+        customer.ai_analysis_completed_at = None
+        await db.commit()
+        
+        return {
+            'success': True,
+            'message': 'AI analysis queued in background. The page will refresh automatically when complete.',
+            'task_id': task.id,
+            'status': 'queued',
+            'customer_name': customer.company_name
         }
-    )
-    
-    print(f"✓ Task queued: {task.id}")
-    
-    # Update customer with task tracking info (like campaigns)
-    from datetime import datetime, timezone
-    customer.ai_analysis_status = 'queued'
-    customer.ai_analysis_task_id = task.id
-    customer.ai_analysis_started_at = datetime.now(timezone.utc)
-    customer.ai_analysis_completed_at = None
-    await db.commit()
-    
-    return {
-        'success': True,
-        'message': 'AI analysis queued in background. The page will refresh automatically when complete.',
-        'task_id': task.id,
-        'status': 'queued',
-        'customer_name': customer.company_name
-    }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error running AI analysis: {e}", exc_info=True)
+        
+        # Check if it's a Redis/Celery connection error
+        error_msg = str(e)
+        if 'Connection refused' in error_msg or 'Redis' in error_msg or 'kombu' in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI analysis service is temporarily unavailable. Please check that Redis and Celery workers are running."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error running AI analysis: {str(e)}"
+            )
 
 
 

@@ -443,27 +443,44 @@ async def get_company_profile(
     
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
-    return TenantProfileResponse(
-        company_name=current_tenant.company_name,
-        company_address=current_tenant.company_address,
-        company_phone_numbers=current_tenant.company_phone_numbers or [],
-        company_email_addresses=current_tenant.company_email_addresses or [],
-        company_contact_names=current_tenant.company_contact_names or [],
-        company_description=current_tenant.company_description,
-        company_websites=current_tenant.company_websites or [],
-        products_services=current_tenant.products_services or [],
-        unique_selling_points=current_tenant.unique_selling_points or [],
-        target_markets=current_tenant.target_markets or [],
-        sales_methodology=current_tenant.sales_methodology,
-        elevator_pitch=current_tenant.elevator_pitch,
-        partnership_opportunities=current_tenant.partnership_opportunities,
-        logo_url=current_tenant.logo_url,
-        logo_text=current_tenant.logo_text,
-        use_text_logo=current_tenant.use_text_logo or False,
-        company_analysis=current_tenant.company_analysis or {},
-        company_analysis_date=current_tenant.company_analysis_date,
-        website_keywords=current_tenant.website_keywords or {}
-    )
+    try:
+        if not current_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        
+        return TenantProfileResponse(
+            company_name=current_tenant.company_name,
+            company_address=current_tenant.company_address,
+            company_phone_numbers=current_tenant.company_phone_numbers or [],
+            company_email_addresses=current_tenant.company_email_addresses or [],
+            company_contact_names=current_tenant.company_contact_names or [],
+            company_description=current_tenant.company_description,
+            company_websites=current_tenant.company_websites or [],
+            products_services=current_tenant.products_services or [],
+            unique_selling_points=current_tenant.unique_selling_points or [],
+            target_markets=current_tenant.target_markets or [],
+            sales_methodology=current_tenant.sales_methodology,
+            elevator_pitch=current_tenant.elevator_pitch,
+            partnership_opportunities=current_tenant.partnership_opportunities,
+            logo_url=current_tenant.logo_url,
+            logo_text=current_tenant.logo_text,
+            use_text_logo=current_tenant.use_text_logo or False,
+            company_analysis=current_tenant.company_analysis or {},
+            company_analysis_date=current_tenant.company_analysis_date,
+            website_keywords=current_tenant.website_keywords or {}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting company profile: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting company profile: {str(e)}"
+        )
 
 
 @router.put("/company-profile", response_model=TenantProfileResponse)

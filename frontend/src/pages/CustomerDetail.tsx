@@ -145,7 +145,15 @@ const CustomerDetail: React.FC = () => {
 
       setCustomer(customerRes.data);
       setContacts(contactsRes.data);
-      setQuotes(quotesRes.data || []);
+      // Handle both old format (array) and new format (paginated response)
+      const quotesData = quotesRes.data;
+      if (Array.isArray(quotesData)) {
+        setQuotes(quotesData);
+      } else if (quotesData?.items) {
+        setQuotes(quotesData.items || []);
+      } else {
+        setQuotes([]);
+      }
       // Handle tickets response - it can be {tickets: [...]} or just [...]
       const ticketsData = ticketsRes.data?.tickets || ticketsRes.data || [];
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);

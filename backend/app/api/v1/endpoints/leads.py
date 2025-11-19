@@ -237,7 +237,6 @@ async def analyze_lead_with_ai(
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        from app.models.crm import Lead
         from app.services.lead_intelligence_service import LeadIntelligenceService
         from app.core.database import SessionLocal
         from sqlalchemy import select, and_
@@ -290,7 +289,6 @@ async def get_outreach_plan(
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        from app.models.crm import Lead
         from app.services.lead_intelligence_service import LeadIntelligenceService
         from app.core.database import SessionLocal
         from sqlalchemy import select, and_
@@ -343,7 +341,6 @@ async def get_similar_converted_leads(
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        from app.models.crm import Lead
         from app.services.lead_intelligence_service import LeadIntelligenceService
         from app.core.database import SessionLocal
         from sqlalchemy import select, and_

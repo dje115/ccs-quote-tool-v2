@@ -53,6 +53,10 @@ async def lifespan(app: FastAPI):
     init_celery()
     logger.info("Celery initialized")
     
+    # Run database seed scripts (idempotent - safe to run multiple times)
+    from app.startup.seed_data import run_seed_scripts
+    await run_seed_scripts()
+    
     # Cleanup any stuck AI analysis tasks from previous runs
     from app.startup_cleanup import cleanup_stuck_ai_tasks
     cleanup_stuck_ai_tasks()
