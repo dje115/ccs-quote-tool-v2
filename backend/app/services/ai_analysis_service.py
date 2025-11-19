@@ -1204,29 +1204,77 @@ class AIAnalysisService:
             print(f"[ERROR] Error calculating lead score: {e}")
             return 50
     
-    async def get_dashboard_insight(self, context: str) -> str:
+    async def get_dashboard_insight(self, context: str, query: str = "", tenant_context: str = "", user_context: str = "") -> str:
         """
         Get AI-powered dashboard insights based on CRM data
         
-        IMPORTANT: Uses GPT-5-mini model for AI responses.
+        IMPORTANT: Uses database prompt from dashboard_analytics category.
         Returns empty string if OpenAI client is not initialized or API call fails.
+        
+        Args:
+            context: CRM data snapshot (customers, leads, trends, metrics)
+            query: User's question (optional, can be extracted from context if needed)
+            tenant_context: Tenant business profile (company description, products/services, USPs)
+            user_context: User profile information (name, email) for personalization
         """
         if not self.provider_service:
             error_msg = "AI service is currently unavailable. Please check your API configuration."
             print(f"[ERROR] {error_msg}")
             return error_msg
         
+        if not self.db or not self.tenant_id:
+            error_msg = "Database connection or tenant ID not available."
+            print(f"[ERROR] {error_msg}")
+            return error_msg
+        
         try:
-            system_prompt = """You are a CRM analytics assistant. Analyze the provided data and answer user questions 
-            clearly and concisely. Provide actionable insights and recommendations based on the data."""
+            # Get prompt from database - REQUIRED, no fallback
+            from app.services.ai_prompt_service import AIPromptService
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
             
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.DASHBOARD_ANALYTICS.value,
+                tenant_id=self.tenant_id
+            )
+            
+            if not prompt_obj:
+                error_msg = "Dashboard analytics prompt not configured. Please configure prompts in the admin section."
+                print(f"[ERROR] {error_msg}")
+                return error_msg
+            
+            # Extract query from context if not provided
+            # The context contains the full prompt including the query at the end
+            if not query:
+                # Try to extract query from context (it's usually at the end after "=== USER QUESTION ===")
+                if "=== USER QUESTION ===" in context:
+                    parts = context.split("=== USER QUESTION ===")
+                    if len(parts) > 1:
+                        query = parts[-1].strip()
+                else:
+                    # Fallback: use a generic query
+                    query = "Analyze the CRM data and provide insights"
+            
+            # Render prompt with variables (including tenant_context and user_context)
+            rendered = prompt_service.render_prompt(prompt_obj, {
+                "context": context,
+                "query": query,
+                "tenant_context": tenant_context or "No company profile information available.",
+                "user_context": user_context or ""
+            })
+            
+            system_prompt = rendered['system_prompt']
+            user_prompt = rendered['user_prompt']
+            max_tokens = rendered['max_tokens']
+            
+            print(f"[DEBUG] Using database prompt '{prompt_obj.name}' with max_tokens={max_tokens}")
             print(f"[DEBUG] Calling AI provider with context length: {len(context)} characters")
             
+            # Use database prompt
             provider_response = await self.provider_service.generate_with_rendered_prompts(
-                prompt=None,
+                prompt=prompt_obj,
                 system_prompt=system_prompt,
-                user_prompt=context,
-                max_tokens=10000  # High token limit for comprehensive responses
+                user_prompt=user_prompt,
+                max_tokens=max_tokens
             )
             
             print(f"[DEBUG] AI provider response received")

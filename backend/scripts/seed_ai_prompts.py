@@ -1093,6 +1093,974 @@ pain_points_solved, sales_approach, cross_sell_opportunities, objection_handling
     else:
         print("⏭️  company_profile_analysis prompt already exists")
     
+    # 12. Dashboard Analytics Prompt
+    dashboard_analytics_prompt_template = """You are a CRM analytics assistant for this specific company. Use the company's business information below to provide relevant, tailored insights.
+
+=== YOUR COMPANY ===
+{tenant_context}
+
+This includes:
+- Company name and description
+- Products and services offered
+- Unique selling points (USPs)
+- Target markets
+
+CRITICAL: Always reference the company's actual products/services when making recommendations. Never suggest generic actions - tailor everything to what THIS company actually offers.
+
+=== USER INFORMATION ===
+{user_context}
+
+CRITICAL INSTRUCTIONS FOR USING USER NAME:
+1. Extract the user's name from the user_context above
+2. The format is: "User Name: [First Name] [Last Name]" or "User Name: [Full Name]"
+3. When drafting emails, writing content, or generating ANY text:
+   - REPLACE ALL instances of [Your Name], [Name], or similar placeholders with the ACTUAL name from user_context
+   - Do NOT leave placeholders - always use the real name
+   - Example: If user_context says "User Name: John Smith", use "John Smith" everywhere, not "[Your Name]"
+4. In email signatures, use the actual name: "Best regards,\n[ACTUAL NAME FROM USER_CONTEXT]"
+5. If user_context is empty or missing, you may use a generic placeholder, but ONLY if no name is available
+
+=== CRM DATA ===
+{context}
+
+=== QUESTION ===
+{query}
+
+=== YOUR RESPONSE ===
+- Answer directly and concisely
+- Reference the company's products/services when relevant
+- Use specific numbers from the data
+- Suggest actions that match what the company actually offers
+- When drafting emails or generating content, use the ACTUAL user name from user_context (not placeholders)
+- Address the user by their actual name when appropriate
+- If data is insufficient, say what's available"""
+    
+    dashboard_analytics_system = "You are a CRM analytics assistant for a specific company. You have access to the company's business profile (name, description, products/services, unique selling points, target markets) and the user's profile (name, email). Always tailor your insights and recommendations to match what THIS specific company offers - never use generic suggestions. When generating emails, content, or any text, use the ACTUAL user name provided - never use placeholders like [Your Name] or [Name]. Always use the real name from user_context. Address the user by their actual name for a personalized experience. Be concise, data-driven, and business-relevant."
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.DASHBOARD_ANALYTICS.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Dashboard Analytics - CRM Insights",
+            category=PromptCategory.DASHBOARD_ANALYTICS.value,
+            system_prompt=dashboard_analytics_system,
+            user_prompt_template=dashboard_analytics_prompt_template,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=20000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "tenant_context": "Company business profile: company name, description, products/services (array), unique selling points (array), target markets (array). Format: 'Company: [name]\\nAbout: [description]\\nProducts/Services: [list]\\nUnique Selling Points: [list]'",
+                "user_context": "User profile information: user name (first name + last name), email address. Format: 'User Name: [full name]\\nUser Email: [email]'",
+                "context": "CRM data snapshot: customer counts by status, monthly trends, top leads, contact statistics",
+                "query": "User's question about CRM data"
+            },
+            description="AI prompt for dashboard analytics and CRM insights - answers user questions about CRM data"
+        )
+        print("✅ Created dashboard_analytics prompt")
+    else:
+        # Update existing prompt with new template and variables
+        existing.user_prompt_template = dashboard_analytics_prompt_template
+        existing.system_prompt = dashboard_analytics_system
+        existing.variables = {
+            "tenant_context": "Company business profile: company name, description, products/services (array), unique selling points (array), target markets (array). Format: 'Company: [name]\\nAbout: [description]\\nProducts/Services: [list]\\nUnique Selling Points: [list]'",
+            "user_context": "User profile information: user name (first name + last name), email address. Format: 'User Name: [full name]\\nUser Email: [email]'",
+            "context": "CRM data snapshot: customer counts by status, monthly trends, top leads, contact statistics",
+            "query": "User's question about CRM data"
+        }
+        existing.max_tokens = 20000  # Ensure max_tokens is set correctly
+        db.commit()
+        print("✅ Updated dashboard_analytics prompt with tenant context")
+    
+    # ============================================
+    # Smart Quoting Module Prompts
+    # ============================================
+    
+    # 13. Quote Scope Analysis Prompt
+    quote_scope_analysis_system = """You are an expert quote analyst specializing in {quote_type} projects. Your role is to analyze project requirements and provide comprehensive scope analysis, risk assessment, and recommendations for creating accurate quotes.
+
+You have deep knowledge of:
+- Industry best practices for {quote_type} projects
+- Common requirements and specifications
+- Typical project complexities and challenges
+- Material and labor requirements
+- Risk factors and mitigation strategies
+
+Always provide detailed, actionable analysis that helps create accurate and competitive quotes."""
+    
+    quote_scope_analysis_prompt = """Analyze the following {quote_type} project requirements and provide comprehensive scope analysis:
+
+**Project Details:**
+Title: {quote_title}
+Description: {quote_description}
+Project Type: {quote_type}
+
+**Customer Information:**
+Company: {customer_company_name}
+Industry: {customer_industry}
+Business Size: {customer_size}
+
+**Project Requirements:**
+{project_requirements}
+
+**Building/Site Details:**
+Building Type: {building_type}
+Building Size: {building_size} sqm
+Number of Floors: {number_of_floors}
+Number of Rooms: {number_of_rooms}
+Site Address: {site_address}
+
+**Specific Requirements:**
+{special_requirements}
+
+**Historical Context:**
+{similar_projects_context}
+
+---
+
+Provide your analysis in the following JSON format:
+
+{{
+    "scope_summary": "Comprehensive summary of the project scope (2-3 paragraphs)",
+    "key_requirements": [
+        "Requirement 1",
+        "Requirement 2",
+        "Requirement 3"
+    ],
+    "complexity_assessment": "low|medium|high|very_high",
+    "complexity_reasoning": "Explanation of complexity level",
+    "estimated_duration_days": number,
+    "estimated_duration_reasoning": "Explanation of duration estimate",
+    "risk_factors": [
+        {{
+            "risk": "Risk description",
+            "severity": "low|medium|high",
+            "mitigation": "Mitigation strategy"
+        }}
+    ],
+    "required_materials": [
+        {{
+            "category": "Material category (e.g., 'Cables', 'Connectors')",
+            "items": [
+                {{
+                    "name": "Specific material name",
+                    "quantity_estimate": "Estimated quantity with unit",
+                    "specifications": "Key specifications",
+                    "notes": "Additional notes"
+                }}
+            ]
+        }}
+    ],
+    "required_labor": [
+        {{
+            "role": "Role name (e.g., 'Engineer', 'Technician')",
+            "skill_level": "junior|senior|specialist",
+            "estimated_days": number,
+            "estimated_hours": number,
+            "reasoning": "Explanation of labor requirement"
+        }}
+    ],
+    "recommended_products": [
+        {{
+            "product_name": "Product name",
+            "category": "Product category",
+            "reason": "Why this product is recommended",
+            "priority": "required|recommended|optional"
+        }}
+    ],
+    "clarifying_questions": [
+        "Question 1 to gather more information",
+        "Question 2 to clarify requirements"
+    ],
+    "best_practices": [
+        "Best practice recommendation 1",
+        "Best practice recommendation 2"
+    ],
+    "industry_standards": [
+        "Relevant industry standard 1",
+        "Relevant industry standard 2"
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.QUOTE_SCOPE_ANALYSIS.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Quote Scope Analysis",
+            category=PromptCategory.QUOTE_SCOPE_ANALYSIS.value,
+            system_prompt=quote_scope_analysis_system,
+            user_prompt_template=quote_scope_analysis_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_title": "Project title",
+                "quote_description": "Project description",
+                "quote_type": "Quote type (cabling, network_build, etc.)",
+                "customer_company_name": "Customer company name",
+                "customer_industry": "Customer industry sector",
+                "customer_size": "Customer business size",
+                "project_requirements": "Detailed project requirements",
+                "building_type": "Type of building",
+                "building_size": "Building size in square meters",
+                "number_of_floors": "Number of floors",
+                "number_of_rooms": "Number of rooms",
+                "site_address": "Site address",
+                "special_requirements": "Special requirements or constraints",
+                "similar_projects_context": "Context from similar historical projects (optional)"
+            },
+            description="Analyze quote project requirements and provide comprehensive scope analysis"
+        )
+        print("✅ Created quote_scope_analysis prompt")
+    else:
+        print("⏭️  quote_scope_analysis prompt already exists")
+    
+    # 14. Product Recommendation Prompt
+    product_recommendation_system = """You are a product recommendation expert with deep knowledge of IT infrastructure, cabling, networking equipment, and related products. Your role is to recommend specific products based on project requirements, ensuring compatibility, quality, and value.
+
+You understand:
+- Product specifications and compatibility
+- Industry standards and certifications
+- Price-performance trade-offs
+- Supplier availability and lead times
+- Installation requirements
+
+Always recommend products that are:
+- Compatible with project requirements
+- From reputable suppliers
+- Within reasonable price ranges
+- Available with acceptable lead times"""
+    
+    product_recommendation_prompt = """Recommend products for the following {quote_type} project:
+
+**Project Requirements:**
+{project_requirements}
+
+**Required Product Categories:**
+{required_categories}
+
+**Budget Constraints:**
+Budget Range: {budget_range}
+Budget Priority: {budget_priority}  # "low_cost", "balanced", "premium"
+
+**Existing Products in Quote:**
+{existing_products}
+
+**Customer Preferences:**
+{customer_preferences}
+
+**Available Products (from catalog):**
+{available_products}
+
+---
+
+Provide product recommendations in JSON format:
+
+{{
+    "recommendations": [
+        {{
+            "product_id": "product_id_from_catalog",
+            "product_name": "Product name",
+            "category": "Product category",
+            "recommendation_reason": "Why this product is recommended",
+            "priority": "required|highly_recommended|recommended|optional",
+            "estimated_quantity": number,
+            "estimated_unit_price": number,
+            "compatibility_notes": "Compatibility with other products",
+            "alternatives": [
+                {{
+                    "product_id": "alternative_product_id",
+                    "reason": "Why this is an alternative"
+                }}
+            ]
+        }}
+    ],
+    "missing_products": [
+        {{
+            "product_name": "Product name that should be in catalog",
+            "category": "Category",
+            "reason": "Why this product is needed"
+        }}
+    ],
+    "compatibility_warnings": [
+        "Warning about product compatibility issue 1",
+        "Warning about product compatibility issue 2"
+    ],
+    "cost_optimization_suggestions": [
+        "Suggestion for cost optimization 1",
+        "Suggestion for cost optimization 2"
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.PRODUCT_RECOMMENDATION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Product Recommendation",
+            category=PromptCategory.PRODUCT_RECOMMENDATION.value,
+            system_prompt=product_recommendation_system,
+            user_prompt_template=product_recommendation_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_type": "Quote type (cabling, network_build, etc.)",
+                "project_requirements": "Detailed project requirements",
+                "required_categories": "Comma-separated list of required product categories",
+                "budget_range": "Budget range (e.g., '£5000-£10000')",
+                "budget_priority": "Budget priority: low_cost, balanced, or premium",
+                "existing_products": "JSON array of existing products in quote",
+                "customer_preferences": "Customer preferences and requirements",
+                "available_products": "JSON array of available products from catalog"
+            },
+            description="Recommend products based on project requirements and catalog availability"
+        )
+        print("✅ Created product_recommendation prompt")
+    else:
+        print("⏭️  product_recommendation prompt already exists")
+    
+    # 15. Component Selection Prompt
+    component_selection_system = """You are an expert in selecting components for {quote_type} projects. Your role is to identify all required and optional components based on project specifications, ensuring nothing is missed and optimal selections are made.
+
+You understand:
+- Component dependencies and requirements
+- Industry-standard component combinations
+- Compatibility matrices
+- Installation sequences
+- Testing requirements"""
+    
+    component_selection_prompt = """Select components for this {quote_type} project:
+
+**Project Scope:**
+{project_scope}
+
+**Selected Products:**
+{selected_products}
+
+**Component Requirements:**
+{component_requirements}
+
+---
+
+Provide component selection in JSON format:
+
+{{
+    "required_components": [
+        {{
+            "component_name": "Component name",
+            "category": "Component category",
+            "quantity": number,
+            "specifications": "Required specifications",
+            "reason": "Why this component is required",
+            "linked_to_product": "product_id"  # If linked to a selected product
+        }}
+    ],
+    "optional_components": [
+        {{
+            "component_name": "Component name",
+            "category": "Component category",
+            "quantity": number,
+            "specifications": "Required specifications",
+            "reason": "Why this component is optional but recommended",
+            "benefit": "Benefit of including this component"
+        }}
+    ],
+    "component_dependencies": [
+        {{
+            "component": "Component name",
+            "depends_on": ["Component 1", "Component 2"],
+            "reason": "Why this dependency exists"
+        }}
+    ],
+    "installation_sequence": [
+        "Step 1: Install component X",
+        "Step 2: Install component Y",
+        "Step 3: Test components"
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.COMPONENT_SELECTION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Component Selection",
+            category=PromptCategory.COMPONENT_SELECTION.value,
+            system_prompt=component_selection_system,
+            user_prompt_template=component_selection_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_type": "Quote type (cabling, network_build, etc.)",
+                "project_scope": "Project scope description",
+                "selected_products": "JSON array of selected products",
+                "component_requirements": "Component requirements and specifications"
+            },
+            description="Select required and optional components for quote projects"
+        )
+        print("✅ Created component_selection prompt")
+    else:
+        print("⏭️  component_selection prompt already exists")
+    
+    # 16. Pricing Recommendation Prompt
+    pricing_recommendation_system = """You are a pricing expert specializing in {quote_type} projects. Your role is to recommend appropriate pricing, markups, and discounts based on project complexity, customer relationship, market conditions, and business objectives.
+
+You understand:
+- Industry-standard pricing practices
+- Markup strategies by product category
+- Volume discount structures
+- Competitive pricing analysis
+- Profit margin requirements"""
+    
+    pricing_recommendation_prompt = """Recommend pricing for this {quote_type} quote:
+
+**Quote Details:**
+Total Material Cost: £{material_cost}
+Total Labor Cost: £{labor_cost}
+Total Travel Cost: £{travel_cost}
+Project Complexity: {complexity}  # low, medium, high, very_high
+
+**Customer Information:**
+Customer Type: {customer_type}  # new, existing, strategic
+Customer History: {customer_history}
+Previous Quote Value: £{previous_quote_value}
+
+**Market Context:**
+Competitive Situation: {competitive_situation}
+Market Conditions: {market_conditions}
+
+**Tenant Pricing Rules:**
+{tenant_pricing_rules}
+
+---
+
+Provide pricing recommendations in JSON format:
+
+{{
+    "material_markup_percentage": number,
+    "material_markup_reasoning": "Explanation of material markup",
+    "labor_markup_percentage": number,
+    "labor_markup_reasoning": "Explanation of labor markup",
+    "travel_markup_percentage": number,
+    "travel_markup_reasoning": "Explanation of travel markup",
+    "recommended_discount_percentage": number,
+    "discount_reasoning": "Explanation of discount recommendation",
+    "volume_discounts": [
+        {{
+            "threshold": number,
+            "discount_percentage": number,
+            "reason": "Why this volume discount applies"
+        }}
+    ],
+    "pricing_strategy": "competitive|standard|premium",
+    "pricing_strategy_reasoning": "Explanation of pricing strategy",
+    "profit_margin_estimate": number,
+    "competitive_analysis": "Analysis of competitive positioning",
+    "pricing_risks": [
+        "Risk factor 1",
+        "Risk factor 2"
+    ],
+    "pricing_recommendations": [
+        "Recommendation 1",
+        "Recommendation 2"
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.PRICING_RECOMMENDATION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Pricing Recommendation",
+            category=PromptCategory.PRICING_RECOMMENDATION.value,
+            system_prompt=pricing_recommendation_system,
+            user_prompt_template=pricing_recommendation_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=4000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_type": "Quote type (cabling, network_build, etc.)",
+                "material_cost": "Total material cost",
+                "labor_cost": "Total labor cost",
+                "travel_cost": "Total travel cost",
+                "complexity": "Project complexity: low, medium, high, very_high",
+                "customer_type": "Customer type: new, existing, strategic",
+                "customer_history": "Customer history and relationship context",
+                "previous_quote_value": "Previous quote value if applicable",
+                "competitive_situation": "Competitive situation description",
+                "market_conditions": "Market conditions description",
+                "tenant_pricing_rules": "Tenant-specific pricing rules and policies"
+            },
+            description="Recommend pricing, markups, and discounts for quotes"
+        )
+        print("✅ Created pricing_recommendation prompt")
+    else:
+        print("⏭️  pricing_recommendation prompt already exists")
+    
+    # 17. Labor Estimation Prompt
+    labor_estimation_system = """You are a labor estimation expert for {quote_type} projects. Your role is to accurately estimate labor hours and days required for projects, considering complexity, site conditions, team composition, and industry standards.
+
+You understand:
+- Standard labor hours for common tasks
+- Complexity multipliers
+- Site condition impacts
+- Team efficiency factors
+- Industry benchmarks"""
+    
+    labor_estimation_prompt = """Estimate labor requirements for this {quote_type} project:
+
+**Project Scope:**
+{project_scope}
+
+**Site Conditions:**
+Site Type: {site_type}
+Access Difficulty: {access_difficulty}  # easy, medium, difficult
+Working Hours: {working_hours}  # "standard", "off_hours", "24/7"
+
+**Team Composition:**
+Available Roles: {available_roles}
+
+**Historical Data:**
+Similar Projects: {similar_projects_data}
+
+---
+
+Provide labor estimation in JSON format:
+
+{{
+    "labor_breakdown": [
+        {{
+            "role": "Role name",
+            "skill_level": "junior|senior|specialist",
+            "tasks": [
+                "Task description 1",
+                "Task description 2"
+            ],
+            "estimated_hours": number,
+            "estimated_days": number,
+            "complexity_multiplier": number,
+            "reasoning": "Explanation of labor estimate"
+        }}
+    ],
+    "total_labor_hours": number,
+    "total_labor_days": number,
+    "team_composition_recommendation": [
+        {{
+            "role": "Role name",
+            "skill_level": "junior|senior|specialist",
+            "count": number,
+            "reason": "Why this team composition"
+        }}
+    ],
+    "efficiency_factors": [
+        {{
+            "factor": "Factor name",
+            "impact": "positive|negative",
+            "adjustment_percentage": number,
+            "reason": "Explanation"
+        }}
+    ],
+    "risk_adjustments": [
+        {{
+            "risk": "Risk description",
+            "additional_hours": number,
+            "reason": "Why additional hours needed"
+        }}
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.LABOR_ESTIMATION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Labor Estimation",
+            category=PromptCategory.LABOR_ESTIMATION.value,
+            system_prompt=labor_estimation_system,
+            user_prompt_template=labor_estimation_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_type": "Quote type (cabling, network_build, etc.)",
+                "project_scope": "Project scope description",
+                "site_type": "Site type description",
+                "access_difficulty": "Access difficulty: easy, medium, difficult",
+                "working_hours": "Working hours: standard, off_hours, 24/7",
+                "available_roles": "JSON array of available roles",
+                "similar_projects_data": "JSON data from similar historical projects"
+            },
+            description="Estimate labor hours and days for quote projects"
+        )
+        print("✅ Created labor_estimation prompt")
+    else:
+        print("⏭️  labor_estimation prompt already exists")
+    
+    # 18. Upsell/Cross-sell Prompt
+    upsell_crosssell_system = """You are a sales expert specializing in identifying upsell and cross-sell opportunities for {quote_type} projects. Your role is to suggest additional products or services that would add value to the customer while increasing quote value.
+
+You understand:
+- Product complementarity
+- Customer needs and pain points
+- Value-add opportunities
+- Service bundling strategies
+- Customer buying patterns"""
+    
+    upsell_crosssell_prompt = """Identify upsell and cross-sell opportunities for this quote:
+
+**Current Quote:**
+Quote Type: {quote_type}
+Selected Products: {selected_products}
+Quote Value: £{quote_value}
+
+**Customer Information:**
+Customer Type: {customer_type}
+Customer Industry: {customer_industry}
+Customer Size: {customer_size}
+
+**Project Context:**
+Project Requirements: {project_requirements}
+Budget Indication: {budget_indication}
+
+**Available Products/Services:**
+{available_products_services}
+
+---
+
+Provide upsell/cross-sell recommendations in JSON format:
+
+{{
+    "upsell_opportunities": [
+        {{
+            "product_id": "product_id",
+            "product_name": "Product name",
+            "category": "Product category",
+            "upsell_type": "upgrade|addon|premium",
+            "current_product": "Product being upgraded/replaced",
+            "value_proposition": "Why customer should consider this",
+            "estimated_additional_value": number,
+            "customer_benefit": "Benefit to customer",
+            "sales_talking_points": [
+                "Talking point 1",
+                "Talking point 2"
+            ],
+            "priority": "high|medium|low"
+        }}
+    ],
+    "cross_sell_opportunities": [
+        {{
+            "product_id": "product_id",
+            "product_name": "Product name",
+            "category": "Product category",
+            "complementary_to": "Product/service this complements",
+            "value_proposition": "Why this complements the quote",
+            "estimated_additional_value": number,
+            "customer_benefit": "Benefit to customer",
+            "sales_talking_points": [
+                "Talking point 1",
+                "Talking point 2"
+            ],
+            "priority": "high|medium|low"
+        }}
+    ],
+    "service_addons": [
+        {{
+            "service_name": "Service name",
+            "service_description": "Service description",
+            "value_proposition": "Why this service adds value",
+            "estimated_additional_value": number,
+            "customer_benefit": "Benefit to customer"
+        }}
+    ],
+    "bundling_opportunities": [
+        {{
+            "bundle_name": "Bundle name",
+            "products_included": ["product_1", "product_2"],
+            "discount_percentage": number,
+            "value_proposition": "Why this bundle is attractive",
+            "estimated_total_value": number
+        }}
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.UPSELL_CROSSSELL.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Upsell/Cross-sell Opportunities",
+            category=PromptCategory.UPSELL_CROSSSELL.value,
+            system_prompt=upsell_crosssell_system,
+            user_prompt_template=upsell_crosssell_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_type": "Quote type (cabling, network_build, etc.)",
+                "selected_products": "JSON array of selected products",
+                "quote_value": "Current quote value",
+                "customer_type": "Customer type",
+                "customer_industry": "Customer industry",
+                "customer_size": "Customer size",
+                "project_requirements": "Project requirements",
+                "budget_indication": "Budget indication",
+                "available_products_services": "JSON array of available products and services"
+            },
+            description="Identify upsell and cross-sell opportunities for quotes"
+        )
+        print("✅ Created upsell_crosssell prompt")
+    else:
+        print("⏭️  upsell_crosssell prompt already exists")
+    
+    # 19. Quote Email Copy Prompt
+    quote_email_copy_system = """You are a professional business communication expert specializing in quote presentation emails. Your role is to create compelling, professional email copy that presents quotes effectively, builds trust, and encourages customer action.
+
+You understand:
+- Professional business communication
+- Sales psychology and persuasion
+- Customer relationship building
+- Quote presentation best practices
+- Follow-up strategies"""
+    
+    quote_email_copy_prompt = """Generate email copy for presenting this quote:
+
+**Quote Details:**
+Quote Number: {quote_number}
+Quote Title: {quote_title}
+Quote Value: £{quote_value}
+Valid Until: {valid_until}
+
+**Your Information (Sender):**
+{user_context}
+
+**Customer Information:**
+Customer Name: {customer_name}
+Contact Name: {contact_name}
+Relationship: {relationship}  # new, existing, strategic
+
+**Quote Highlights:**
+{quote_highlights}
+
+**Key Value Propositions:**
+{value_propositions}
+
+**Email Type:**
+{email_type}  # "initial", "follow_up", "negotiation", "reminder"
+
+**Tone:**
+{tone}  # "professional", "friendly", "formal", "consultative"
+
+---
+
+Provide email copy in JSON format:
+
+{{
+    "subject_line": "Email subject line",
+    "greeting": "Personalized greeting",
+    "opening_paragraph": "Opening paragraph that engages the customer",
+    "quote_summary": "Brief summary of the quote",
+    "key_benefits": [
+        "Benefit 1",
+        "Benefit 2",
+        "Benefit 3"
+    ],
+    "value_proposition": "Clear value proposition",
+    "call_to_action": "Clear call to action",
+    "closing_paragraph": "Professional closing paragraph",
+    "signature": "Professional signature using the sender's name from user_context (format: 'Best regards,\\n[Your Name]\\n[Your Title]\\n[Company Name]')",
+    "next_steps": [
+        "Next step 1",
+        "Next step 2"
+    ],
+    "alternative_subject_lines": [
+        "Alternative subject line 1",
+        "Alternative subject line 2"
+    ],
+    "personalization_notes": "Notes on how to personalize this email"
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.QUOTE_EMAIL_COPY.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Quote Email Copy Generation",
+            category=PromptCategory.QUOTE_EMAIL_COPY.value,
+            system_prompt=quote_email_copy_system,
+            user_prompt_template=quote_email_copy_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=4000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_number": "Quote number",
+                "quote_title": "Quote title",
+                "quote_value": "Quote value",
+                "valid_until": "Quote valid until date",
+                "user_context": "User profile information: user name (first name + last name), email address. Format: 'User Name: [full name]\\nUser Email: [email]'",
+                "customer_name": "Customer company name",
+                "contact_name": "Contact person name",
+                "relationship": "Relationship type: new, existing, strategic",
+                "quote_highlights": "Key quote highlights",
+                "value_propositions": "Key value propositions",
+                "email_type": "Email type: initial, follow_up, negotiation, reminder",
+                "tone": "Tone: professional, friendly, formal, consultative"
+            },
+            description="Generate professional email copy for presenting quotes to customers"
+        )
+        print("✅ Created quote_email_copy prompt")
+    else:
+        # Update existing prompt with user_context
+        existing.user_prompt_template = quote_email_copy_prompt
+        existing.variables = {
+            "quote_number": "Quote number",
+            "quote_title": "Quote title",
+            "quote_value": "Quote value",
+            "valid_until": "Quote valid until date",
+            "user_context": "User profile information: user name (first name + last name), email address. Format: 'User Name: [full name]\\nUser Email: [email]'",
+            "customer_name": "Customer company name",
+            "contact_name": "Contact person name",
+            "relationship": "Relationship type: new, existing, strategic",
+            "quote_highlights": "Key quote highlights",
+            "value_propositions": "Key value propositions",
+            "email_type": "Email type: initial, follow_up, negotiation, reminder",
+            "tone": "Tone: professional, friendly, formal, consultative"
+        }
+        db.commit()
+        print("✅ Updated quote_email_copy prompt with user context")
+    
+    # 20. Quote Summary Prompt
+    quote_summary_system = """You are an expert at creating comprehensive quote summaries for different audiences. Your role is to distill complex quote information into clear, actionable summaries suitable for executives, technical teams, or customers.
+
+You understand:
+- Executive communication
+- Technical documentation
+- Customer-facing communication
+- Information hierarchy
+- Key message prioritization"""
+    
+    quote_summary_prompt = """Create a {summary_type} summary for this quote:
+
+**Quote Details:**
+{quote_details}
+
+**Summary Type:**
+{summary_type}  # "executive", "technical", "customer_facing"
+
+**Audience:**
+{audience}  # "c_level", "technical_team", "end_customer"
+
+**Key Points to Highlight:**
+{key_points}
+
+---
+
+Provide summary in JSON format:
+
+{{
+    "summary": "Main summary text (2-3 paragraphs)",
+    "key_highlights": [
+        "Highlight 1",
+        "Highlight 2",
+        "Highlight 3"
+    ],
+    "scope_overview": "Overview of project scope",
+    "pricing_breakdown": {{
+        "materials": number,
+        "labor": number,
+        "travel": number,
+        "subtotal": number,
+        "tax": number,
+        "total": number
+    }},
+    "timeline": "Project timeline summary",
+    "deliverables": [
+        "Deliverable 1",
+        "Deliverable 2"
+    ],
+    "risks_and_mitigations": [
+        {{
+            "risk": "Risk description",
+            "mitigation": "Mitigation strategy"
+        }}
+    ],
+    "recommendations": [
+        "Recommendation 1",
+        "Recommendation 2"
+    ]
+}}"""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.QUOTE_SUMMARY.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Quote Summary",
+            category=PromptCategory.QUOTE_SUMMARY.value,
+            system_prompt=quote_summary_system,
+            user_prompt_template=quote_summary_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "summary_type": "Summary type: executive, technical, customer_facing",
+                "quote_details": "JSON object with quote details",
+                "audience": "Target audience: c_level, technical_team, end_customer",
+                "key_points": "Key points to highlight in summary"
+            },
+            description="Create comprehensive quote summaries for different audiences"
+        )
+        print("✅ Created quote_summary prompt")
+    else:
+        print("⏭️  quote_summary prompt already exists")
+    
     print("✅ AI prompts seeding complete!")
 
 

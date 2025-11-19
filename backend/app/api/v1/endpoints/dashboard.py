@@ -619,12 +619,66 @@ async def ai_dashboard_query(
             for lead in top_leads
         ]
         
+        # ===== PREPARE USER PROFILE CONTEXT =====
+        # Extract user information for personalization
+        user_profile = {
+            "first_name": current_user.first_name or "",
+            "last_name": current_user.last_name or "",
+            "email": current_user.email or "",
+            "full_name": f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email or "User"
+        }
+        
+        # Build user context string
+        user_context_parts = []
+        if user_profile["full_name"] and user_profile["full_name"] != "User":
+            user_context_parts.append(f"User Name: {user_profile['full_name']}")
+        if user_profile["email"]:
+            user_context_parts.append(f"User Email: {user_profile['email']}")
+        
+        user_context_str = "\n".join(user_context_parts) if user_context_parts else ""
+        
+        # Debug logging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"User context being passed to AI: {user_context_str}")
+        logger.debug(f"User profile: {user_profile}")
+        
+        # ===== PREPARE TENANT BUSINESS PROFILE CONTEXT =====
+        # Extract tenant business information for AI context
+        tenant_profile = {
+            "company_name": current_tenant.company_name or current_tenant.name,
+            "company_description": current_tenant.company_description or "",
+            "products_services": current_tenant.products_services or [],
+            "unique_selling_points": current_tenant.unique_selling_points or [],
+            "target_markets": current_tenant.target_markets or []
+        }
+        
+        # Build tenant context string - format matches prompt expectations
+        tenant_context_parts = []
+        
+        # Always include company name
+        tenant_context_parts.append(f"Company: {tenant_profile['company_name']}")
+        
+        if tenant_profile["company_description"]:
+            tenant_context_parts.append(f"About: {tenant_profile['company_description']}")
+        
+        if tenant_profile["products_services"]:
+            services_list = ", ".join(tenant_profile["products_services"][:15])  # Increased limit
+            tenant_context_parts.append(f"Products/Services: {services_list}")
+        
+        if tenant_profile["unique_selling_points"]:
+            usps_list = ", ".join(tenant_profile["unique_selling_points"][:10])  # Increased limit
+            tenant_context_parts.append(f"Unique Selling Points: {usps_list}")
+        
+        if tenant_profile["target_markets"]:
+            markets_list = ", ".join(tenant_profile["target_markets"][:10])
+            tenant_context_parts.append(f"Target Markets: {markets_list}")
+        
+        tenant_context_str = "\n".join(tenant_context_parts) if tenant_context_parts else f"Company: {tenant_profile['company_name']}\nNo additional company profile information available."
+        
         # ===== PREPARE COMPREHENSIVE CONTEXT FOR AI =====
+        # Build CRM data snapshot (without the query - query is passed separately)
         context = f"""
-You are an AI assistant for a world-class CRM system. Answer the user's question based on the current data.
-
-=== CRM DATA SNAPSHOT ===
-
 CUSTOMERS & LEADS:
 - Total Customers/Leads in System: {total_customers}
 - Active Leads: {customers_by_status.get('LEAD', 0)}
@@ -643,20 +697,15 @@ MONTHLY TRENDS (Last 6 Months):
 
 TOP PERFORMING LEADS:
 {chr(10).join([f"- {lead}" for lead in top_leads_info]) if top_leads_info else "- No leads with scores yet"}
-
-=== USER QUESTION ===
-{request.query}
-
-=== INSTRUCTIONS ===
-- Provide a clear, actionable answer based on the data above
-- If suggesting actions, be specific (e.g., "Contact the top 3 leads this week")
-- If the data doesn't support the question, explain what information is available
-- Use natural, conversational language
-- Include relevant numbers and trends to support your answer
 """
         
-        # Get AI response
-        answer = await ai_service.get_dashboard_insight(context)
+        # Get AI response using database prompt with tenant context and user context
+        answer = await ai_service.get_dashboard_insight(
+            context, 
+            query=request.query, 
+            tenant_context=tenant_context_str,
+            user_context=user_context_str
+        )
         
         # ===== DETERMINE VISUALIZATION TYPE AND GENERATE CHART DATA =====
         query_lower = request.query.lower()
