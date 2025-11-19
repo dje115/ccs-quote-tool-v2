@@ -32,7 +32,8 @@ import {
   LocalShipping as LocalShippingIcon,
   Psychology as PsychologyIcon,
   Support as SupportIcon,
-  Timeline as TimelineIcon
+  Timeline as TimelineIcon,
+  Assessment as AssessmentIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -125,6 +126,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
     { text: 'Helpdesk', icon: <SupportIcon />, path: '/helpdesk' },
     { text: 'Trends', icon: <TimelineIcon />, path: '/trends' },
+    { text: 'Metrics', icon: <AssessmentIcon />, path: '/metrics' },
         { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },
         { text: t('navigation.competitors'), icon: <CompetitorsIcon />, path: '/competitors' },
         { text: 'AI Prompts', icon: <PsychologyIcon />, path: '/prompts', adminOnly: true },

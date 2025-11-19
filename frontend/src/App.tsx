@@ -40,6 +40,7 @@ const PromptManagement = lazy(() => import('./pages/PromptManagement'));
 const Helpdesk = lazy(() => import('./pages/Helpdesk'));
 const TicketDetail = lazy(() => import('./pages/TicketDetail'));
 const TrendsDashboard = lazy(() => import('./pages/TrendsDashboard'));
+const MetricsDashboard = lazy(() => import('./pages/MetricsDashboard'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -313,6 +314,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TrendsDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/metrics"
+            element={
+              <ProtectedRoute>
+                <MetricsDashboard />
               </ProtectedRoute>
             }
           />
