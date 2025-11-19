@@ -327,35 +327,104 @@ const MetricsDashboard: React.FC = () => {
               <Grid item xs={12} sm={6} md={3}>
                 <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h3" fontWeight="bold">{dashboardData.sla_adherence_rate_percent?.toFixed(1) || 0}%</Typography>
+                    <Typography variant="h3" fontWeight="bold">
+                      {dashboardData.sla?.adherence_rate_percent?.toFixed(1) || 0}%
+                    </Typography>
                     <Typography variant="body2" sx={{ opacity: 0.9 }}>SLA Compliance</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.8, mt: 1, display: 'block' }}>
+                      {dashboardData.sla?.total_tickets || 0} tickets
+                    </Typography>
                   </CardContent>
                 </Card>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Card sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h3" fontWeight="bold">{formatNumber(dashboardData.ticket_ai_usage_rate_percent?.toFixed(1) || 0)}%</Typography>
+                    <Typography variant="h3" fontWeight="bold">
+                      {dashboardData.ai_usage?.ticket_ai_usage_rate_percent?.toFixed(1) || 0}%
+                    </Typography>
                     <Typography variant="body2" sx={{ opacity: 0.9 }}>AI Usage Rate</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.8, mt: 1, display: 'block' }}>
+                      {dashboardData.ai_usage?.tickets_with_ai || 0} tickets with AI
+                    </Typography>
                   </CardContent>
                 </Card>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Card sx={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h3" fontWeight="bold">{dashboardData.conversion_rate_percent?.toFixed(1) || 0}%</Typography>
+                    <Typography variant="h3" fontWeight="bold">
+                      {dashboardData.lead_velocity?.conversion_rate_percent?.toFixed(1) || 0}%
+                    </Typography>
                     <Typography variant="body2" sx={{ opacity: 0.9 }}>Lead Conversion</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.8, mt: 1, display: 'block' }}>
+                      {dashboardData.lead_velocity?.converted_leads || 0} of {dashboardData.lead_velocity?.total_leads || 0} leads
+                    </Typography>
                   </CardContent>
                 </Card>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Card sx={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h3" fontWeight="bold">{dashboardData.avg_csat_score?.toFixed(1) || 0}/5</Typography>
+                    <Typography variant="h3" fontWeight="bold">
+                      {dashboardData.csat?.average_rating?.toFixed(1) || 0}/5
+                    </Typography>
                     <Typography variant="body2" sx={{ opacity: 0.9 }}>CSAT Score</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.8, mt: 1, display: 'block' }}>
+                      {dashboardData.csat?.total_ratings || 0} responses
+                    </Typography>
                   </CardContent>
                 </Card>
               </Grid>
+              
+              {/* Additional Metrics */}
+              {dashboardData.quote_cycle_time && (
+                <Grid item xs={12} md={6}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>Quote Cycle Times</Typography>
+                      <Stack spacing={2} sx={{ mt: 2 }}>
+                        {dashboardData.quote_cycle_time.average_draft_to_sent_days && (
+                          <Box>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Typography variant="body2">Draft to Sent</Typography>
+                              <Typography variant="body2" fontWeight="bold">
+                                {dashboardData.quote_cycle_time.average_draft_to_sent_days.toFixed(1)} days
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
+                        {dashboardData.quote_cycle_time.average_sent_to_accepted_days && (
+                          <Box>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Typography variant="body2">Sent to Accepted</Typography>
+                              <Typography variant="body2" fontWeight="bold">
+                                {dashboardData.quote_cycle_time.average_sent_to_accepted_days.toFixed(1)} days
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+              
+              {dashboardData.lead_velocity?.average_conversion_time_days && (
+                <Grid item xs={12} md={6}>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>Lead Velocity</Typography>
+                      <Typography variant="h4" color="primary" sx={{ mt: 2 }}>
+                        {dashboardData.lead_velocity.average_conversion_time_days.toFixed(1)} days
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Average time to convert
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
             </Grid>
           )}
 
@@ -566,9 +635,9 @@ const MetricsDashboard: React.FC = () => {
                 <Card sx={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', color: 'white' }}>
                   <CardContent>
                     <Typography variant="h6" gutterBottom sx={{ opacity: 0.9 }}>Average CSAT Score</Typography>
-                    <Typography variant="h3" fontWeight="bold">{csatMetrics.avg_csat_score?.toFixed(1) || 0}/5</Typography>
+                    <Typography variant="h3" fontWeight="bold">{csatMetrics.average_rating?.toFixed(1) || 0}/5</Typography>
                     <Typography variant="body2" sx={{ mt: 1, opacity: 0.9 }}>
-                      Based on {formatNumber(csatMetrics.response_count)} responses
+                      Based on {formatNumber(csatMetrics.total_ratings)} responses
                     </Typography>
                   </CardContent>
                 </Card>
@@ -577,17 +646,17 @@ const MetricsDashboard: React.FC = () => {
                 <Card>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>CSAT Distribution</Typography>
-                    {csatMetrics.scores_by_category && Object.keys(csatMetrics.scores_by_category).length > 0 ? (
+                    {csatMetrics.distribution && Object.keys(csatMetrics.distribution).length > 0 ? (
                       <Box sx={{ mt: 2 }}>
-                        {Object.entries(csatMetrics.scores_by_category).map(([category, count]: [string, any]) => (
-                          <Box key={category} sx={{ mb: 2 }}>
+                        {Object.entries(csatMetrics.distribution).map(([rating, count]: [string, any]) => (
+                          <Box key={rating} sx={{ mb: 2 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                              <Typography variant="body2">{category}</Typography>
+                              <Typography variant="body2">{rating} Star{count !== 1 ? 's' : ''}</Typography>
                               <Typography variant="body2" fontWeight="bold">{count}</Typography>
                             </Box>
                             <LinearProgress
                               variant="determinate"
-                              value={(count / (csatMetrics.response_count || 1)) * 100}
+                              value={(count / (csatMetrics.total_ratings || 1)) * 100}
                               color="success"
                               sx={{ height: 6, borderRadius: 3 }}
                             />
