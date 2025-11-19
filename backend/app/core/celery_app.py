@@ -23,7 +23,8 @@ celery_app = Celery(
         "app.tasks.planning_tasks",
         "app.tasks.contract_renewal_tasks",
         "app.tasks.sla_tasks",
-        "app.tasks.quote_tasks"
+        "app.tasks.quote_tasks",
+        "app.tasks.lead_analysis_tasks"
     ]  # Import task modules
 )
 

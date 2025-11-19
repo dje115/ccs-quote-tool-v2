@@ -168,6 +168,33 @@ class EventPublisher:
             "error": error
         })
     
+    # Lead Analysis Events
+    async def publish_lead_analysis_started(self, tenant_id: str, lead_id: str, task_id: str, lead_name: str):
+        """Publish lead_analysis.started event"""
+        await self._publish(tenant_id, "lead_analysis.started", {
+            "lead_id": lead_id,
+            "task_id": task_id,
+            "lead_name": lead_name
+        })
+    
+    async def publish_lead_analysis_completed(self, tenant_id: str, lead_id: str, task_id: str, lead_name: str, result: Dict[str, Any]):
+        """Publish lead_analysis.completed event"""
+        await self._publish(tenant_id, "lead_analysis.completed", {
+            "lead_id": lead_id,
+            "task_id": task_id,
+            "lead_name": lead_name,
+            "result": result
+        })
+    
+    async def publish_lead_analysis_failed(self, tenant_id: str, lead_id: str, task_id: str, lead_name: str, error: str):
+        """Publish lead_analysis.failed event"""
+        await self._publish(tenant_id, "lead_analysis.failed", {
+            "lead_id": lead_id,
+            "task_id": task_id,
+            "lead_name": lead_name,
+            "error": error
+        })
+    
     # Campaign Events
     async def publish_campaign_started(self, tenant_id: str, campaign_id: str, campaign_name: str, task_id: str):
         """Publish campaign.started event"""
@@ -275,6 +302,33 @@ class EventPublisher:
             "customer_id": customer_id,
             "task_id": task_id,
             "customer_name": customer_name,
+            "error": error
+        })
+    
+    # Lead Analysis sync wrappers for Celery tasks
+    def publish_lead_analysis_started_sync(self, tenant_id: str, lead_id: str, task_id: str, lead_name: str):
+        """Synchronous wrapper for Celery tasks"""
+        self._publish_sync(tenant_id, "lead_analysis.started", {
+            "lead_id": lead_id,
+            "task_id": task_id,
+            "lead_name": lead_name
+        })
+    
+    def publish_lead_analysis_completed_sync(self, tenant_id: str, lead_id: str, task_id: str, lead_name: str, result: Dict[str, Any]):
+        """Synchronous wrapper for Celery tasks"""
+        self._publish_sync(tenant_id, "lead_analysis.completed", {
+            "lead_id": lead_id,
+            "task_id": task_id,
+            "lead_name": lead_name,
+            "result": result
+        })
+    
+    def publish_lead_analysis_failed_sync(self, tenant_id: str, lead_id: str, task_id: str, lead_name: str, error: str):
+        """Synchronous wrapper for Celery tasks"""
+        self._publish_sync(tenant_id, "lead_analysis.failed", {
+            "lead_id": lead_id,
+            "task_id": task_id,
+            "lead_name": lead_name,
             "error": error
         })
     

@@ -13,8 +13,9 @@ import logging
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, desc
+from datetime import datetime
 
-from app.models.leads import Lead, LeadStatus
+from app.models.leads import Lead, LeadStatus, LeadSource
 from app.models.crm import Customer
 from app.models.quotes import Quote, QuoteStatus
 from app.services.ai_orchestration_service import AIOrchestrationService
@@ -59,8 +60,8 @@ class LeadIntelligenceService:
                 variables={
                     "lead_name": lead.company_name or lead.contact_name or "Unknown",
                     "lead_status": lead.status.value if lead.status else "new",
-                    "lead_source": lead.source or "unknown",
-                    "lead_description": lead.description or "",
+                    "lead_source": lead.source.value if lead.source else "unknown",
+                    "lead_description": lead.qualification_reason or "",
                     "company_info": context.get("company_info", ""),
                     "similar_leads": context.get("similar_leads", ""),
                 },
@@ -70,16 +71,30 @@ class LeadIntelligenceService:
             # Parse analysis
             analysis = self._parse_lead_analysis(response["content"])
             
-            # Calculate conversion probability
+            # Calculate conversion probability (as percentage 0-100)
             conversion_probability = self._calculate_conversion_probability(lead, context)
+            conversion_probability_percent = int(conversion_probability * 100)
             
-            return {
-                "success": True,
+            # Build analysis result
+            analysis_result = {
                 "opportunity_summary": analysis.get("opportunity_summary", ""),
                 "risk_assessment": analysis.get("risks", []),
                 "recommendations": analysis.get("recommendations", []),
-                "conversion_probability": conversion_probability,
-                "next_steps": analysis.get("next_steps", [])
+                "conversion_probability": conversion_probability_percent,
+                "next_steps": analysis.get("next_steps", []),
+                "analyzed_at": datetime.now().isoformat()
+            }
+            
+            # Save analysis to lead record
+            import json
+            lead.ai_analysis = json.loads(json.dumps(analysis_result))  # Ensure JSON serializable
+            lead.ai_confidence_score = conversion_probability
+            self.db.commit()
+            self.db.refresh(lead)
+            
+            return {
+                "success": True,
+                **analysis_result
             }
         
         except Exception as e:
@@ -179,12 +194,12 @@ class LeadIntelligenceService:
             company_info.append(f"Company: {lead.company_name}")
         if lead.contact_name:
             company_info.append(f"Contact: {lead.contact_name}")
-        if lead.email:
-            company_info.append(f"Email: {lead.email}")
-        if lead.phone:
-            company_info.append(f"Phone: {lead.phone}")
-        if lead.description:
-            company_info.append(f"Description: {lead.description}")
+        if lead.contact_email:
+            company_info.append(f"Email: {lead.contact_email}")
+        if lead.contact_phone:
+            company_info.append(f"Phone: {lead.contact_phone}")
+        if lead.qualification_reason:
+            company_info.append(f"Description: {lead.qualification_reason}")
         
         context["company_info"] = "\n".join(company_info)
         
@@ -223,12 +238,13 @@ class LeadIntelligenceService:
             probability += 0.2
         
         # Source quality (simplified)
-        high_quality_sources = ["referral", "website", "event"]
+        # High quality sources: REFERRAL and CAMPAIGN (well-targeted campaigns)
+        high_quality_sources = [LeadSource.REFERRAL, LeadSource.CAMPAIGN]
         if lead.source in high_quality_sources:
             probability += 0.1
         
         # Contact completeness
-        if lead.email and lead.phone:
+        if lead.contact_email and lead.contact_phone:
             probability += 0.1
         
         # Similar leads conversion rate
@@ -240,12 +256,24 @@ class LeadIntelligenceService:
     
     def _parse_lead_analysis(self, content: str) -> Dict[str, Any]:
         """Parse lead analysis from AI response"""
-        return {
-            "opportunity_summary": content[:500],
-            "risks": [],
-            "recommendations": [],
-            "next_steps": []
-        }
+        import json
+        try:
+            # Try to parse as JSON first
+            parsed = json.loads(content)
+            return {
+                "opportunity_summary": parsed.get("opportunity_summary", content[:500] if content else "No analysis available"),
+                "risks": parsed.get("risks", []),
+                "recommendations": parsed.get("recommendations", []),
+                "next_steps": parsed.get("next_steps", [])
+            }
+        except (json.JSONDecodeError, TypeError):
+            # If not JSON, return basic structure
+            return {
+                "opportunity_summary": content[:500] if content else "No analysis available",
+                "risks": [],
+                "recommendations": [],
+                "next_steps": []
+            }
     
     def _parse_outreach_plan(self, content: str) -> Dict[str, Any]:
         """Parse outreach plan from AI response"""

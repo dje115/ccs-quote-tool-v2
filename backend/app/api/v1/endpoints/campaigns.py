@@ -750,52 +750,68 @@ async def analyze_lead_with_ai(
     current_tenant: Tenant = Depends(get_current_tenant)
 ):
     """
-    Analyze a discovery lead with AI
+    Queue AI analysis for lead to run in background
     
-    This endpoint queues an AI analysis task for the lead, similar to customer AI analysis.
-    The analysis will update the lead's AI analysis data and generate intelligence.
+    Analysis runs asynchronously using Celery and includes:
+    - Opportunity summary and risk assessment
+    - Conversion probability calculation
+    - Recommendations and next steps
     
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
-    try:
-        from app.services.lead_intelligence_service import LeadIntelligenceService
-        from app.core.database import SessionLocal
-        from sqlalchemy import select, and_
-        
-        # Get lead
-        lead_stmt = select(Lead).where(
-            and_(
-                Lead.id == lead_id,
-                Lead.tenant_id == current_user.tenant_id,
-                Lead.is_deleted == False
-            )
+    from sqlalchemy import select, and_
+    from app.core.celery_app import celery_app
+    
+    # Get lead
+    lead_stmt = select(Lead).where(
+        and_(
+            Lead.id == lead_id,
+            Lead.tenant_id == current_user.tenant_id,
+            Lead.is_deleted == False
         )
-        result = await db.execute(lead_stmt)
-        lead = result.scalar_one_or_none()
+    )
+    result = await db.execute(lead_stmt)
+    lead = result.scalar_one_or_none()
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    print(f"\n{'='*80}")
+    print(f"🔄 QUEUEING LEAD ANALYSIS TO CELERY")
+    print(f"Lead: {lead.company_name} ({lead_id})")
+    print(f"Tenant: {current_tenant.name} ({current_tenant.id})")
+    print(f"{'='*80}\n")
+    
+    try:
+        # Queue the lead analysis task to Celery
+        task = celery_app.send_task(
+            'run_lead_analysis',
+            args=[lead_id, str(current_tenant.id)]
+        )
         
-        if not lead:
-            raise HTTPException(status_code=404, detail="Lead not found")
-        
-        # Use sync session for AI service
-        sync_db = SessionLocal()
-        try:
-            intelligence_service = LeadIntelligenceService(sync_db, current_user.tenant_id)
-            analysis = await intelligence_service.analyze_lead(lead)
-        finally:
-            sync_db.close()
+        print(f"✓ Task queued: {task.id}")
         
         return {
-            "success": True,
-            "analysis": analysis
+            'success': True,
+            'message': 'AI analysis queued in background. The page will refresh automatically when complete.',
+            'task_id': task.id,
+            'status': 'queued',
+            'lead_name': lead.company_name
         }
-    
-    except HTTPException:
-        raise
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f"Error analyzing lead: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze lead: {str(e)}"
-        )
+        logger.error(f"Error queuing lead analysis: {e}", exc_info=True)
+        
+        # Check if it's a Redis/Celery connection error
+        error_msg = str(e)
+        if 'Connection refused' in error_msg or 'Redis' in error_msg or 'kombu' in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI analysis service is temporarily unavailable. Please check that Redis and Celery workers are running."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error queuing lead analysis: {str(e)}"
+            )

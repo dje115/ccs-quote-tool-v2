@@ -733,28 +733,32 @@ const PlanningApplications: React.FC = () => {
                               </Button>
                             </Tooltip>
                             <Tooltip title="Scan in Progress">
-                              <Button
-                                variant="contained"
-                                size="small"
-                                startIcon={<CircularProgress size={16} />}
-                                disabled={true}
-                                sx={{ cursor: 'not-allowed' }}
-                              >
-                                Running...
-                              </Button>
+                              <span>
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  startIcon={<CircularProgress size={16} />}
+                                  disabled={true}
+                                  sx={{ cursor: 'not-allowed' }}
+                                >
+                                  Running...
+                                </Button>
+                              </span>
                             </Tooltip>
                           </>
                         ) : (
                           <Tooltip title="Run Now">
-                            <Button
-                              variant="contained"
-                              size="small"
-                              startIcon={<PlayArrowIcon />}
-                              onClick={() => handleRunCounty(county.code)}
-                              disabled={!county.enabled}
-                            >
-                              Run Now
-                            </Button>
+                            <span>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<PlayArrowIcon />}
+                                onClick={() => handleRunCounty(county.code)}
+                                disabled={!county.enabled}
+                              >
+                                Run Now
+                              </Button>
+                            </span>
                           </Tooltip>
                         )}
                       </Box>

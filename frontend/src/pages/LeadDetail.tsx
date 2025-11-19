@@ -11,7 +11,11 @@ import {
   CardContent,
   Divider,
   IconButton,
-  Alert
+  Alert,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -19,11 +23,16 @@ import {
   Email as EmailIcon,
   Language as WebsiteIcon,
   Business as BusinessIcon,
-  TrendingUp as ConvertIcon
+  TrendingUp as ConvertIcon,
+  TrendingUp as TrendingUpIcon,
+  Warning as WarningIcon,
+  Lightbulb as LightbulbIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { campaignAPI, customerAPI, leadAPI } from '../services/api';
 import LeadIntelligence from '../components/LeadIntelligence';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 const LeadDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -32,12 +41,54 @@ const LeadDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const { subscribe, isConnected } = useWebSocketContext();
 
   useEffect(() => {
     if (id) {
       loadLead();
     }
   }, [id]);
+
+  // Subscribe to lead analysis events via WebSocket
+  useEffect(() => {
+    if (!isConnected || !id) return;
+
+    // Subscribe to lead_analysis.started for this lead (updates status from 'queued' to 'running')
+    const unsubscribeStarted = subscribe('lead_analysis.started', (event) => {
+      if (event.data.lead_id === id) {
+        console.log(`Lead analysis started for ${event.data.lead_name}`);
+        setAnalysisStatus('running');
+        setAnalysisTaskId(event.data.task_id);
+      }
+    });
+
+    // Subscribe to lead_analysis.completed for this lead (reloads lead data)
+    const unsubscribeCompleted = subscribe('lead_analysis.completed', (event) => {
+      if (event.data.lead_id === id) {
+        console.log(`Lead analysis completed for ${event.data.lead_name}`);
+        setAnalysisStatus('completed');
+        setAnalysisTaskId(null);
+        // Reload lead to get updated analysis data
+        loadLead();
+      }
+    });
+
+    // Subscribe to lead_analysis.failed for this lead
+    const unsubscribeFailed = subscribe('lead_analysis.failed', (event) => {
+      if (event.data.lead_id === id) {
+        console.error(`Lead analysis failed: ${event.data.error}`);
+        setAnalysisStatus('failed');
+        setAnalysisTaskId(null);
+        alert(`AI analysis failed: ${event.data.error}`);
+      }
+    });
+
+    return () => {
+      unsubscribeStarted();
+      unsubscribeCompleted();
+      unsubscribeFailed();
+    };
+  }, [isConnected, id, subscribe]);
 
   const loadLead = async () => {
     try {
@@ -87,6 +138,9 @@ const LeadDetail: React.FC = () => {
     }
   };
 
+  const [analysisTaskId, setAnalysisTaskId] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<'idle' | 'queued' | 'running' | 'completed' | 'failed'>('idle');
+
   const handleRunAIAnalysis = async () => {
     if (!lead) return;
 
@@ -95,19 +149,29 @@ const LeadDetail: React.FC = () => {
     }
 
     setAnalyzing(true);
+    setAnalysisStatus('queued');
     try {
       const response = await campaignAPI.analyzeLead(lead.id);
       
       if (response.data?.success) {
-        alert('AI analysis completed successfully!');
-        // Reload lead to get updated analysis
-        loadLead();
+        if (response.data.status === 'queued') {
+          // Analysis queued - start polling
+          setAnalysisTaskId(response.data.task_id);
+          alert('AI analysis queued in background. The page will refresh automatically when complete.');
+        } else {
+          // Immediate completion (shouldn't happen with background task, but handle it)
+          alert('AI analysis completed successfully!');
+          loadLead();
+          setAnalysisStatus('completed');
+        }
       } else {
         alert(`AI analysis failed: ${response.data?.error || 'Unknown error'}`);
+        setAnalysisStatus('failed');
       }
     } catch (error: any) {
       console.error('Error running AI analysis:', error);
       alert(`Failed to run AI analysis: ${error.response?.data?.detail || error.message}`);
+      setAnalysisStatus('failed');
     } finally {
       setAnalyzing(false);
     }
@@ -255,9 +319,11 @@ const LeadDetail: React.FC = () => {
                     color="primary"
                     sx={{ mb: 1 }}
                     onClick={handleRunAIAnalysis}
-                    disabled={analyzing}
+                    disabled={analyzing || analysisStatus === 'queued' || analysisStatus === 'running'}
                   >
-                    {analyzing ? 'Analyzing...' : 'Run AI Analysis'}
+                    {analysisStatus === 'queued' ? 'Queued...' : 
+                     analysisStatus === 'running' ? 'Running...' :
+                     analyzing ? 'Queuing...' : 'Run AI Analysis'}
                   </Button>
                   <Button
                     fullWidth
@@ -275,7 +341,11 @@ const LeadDetail: React.FC = () => {
           {/* Lead Intelligence Widget */}
           {lead.id && (
             <Box sx={{ mb: 3 }}>
-              <LeadIntelligence leadId={lead.id} compact={true} />
+              <LeadIntelligence 
+                leadId={lead.id} 
+                compact={true}
+                existingAnalysis={lead.ai_analysis} // Pass existing analysis to avoid API call on load
+              />
             </Box>
           )}
         </Grid>
@@ -517,6 +587,88 @@ const LeadDetail: React.FC = () => {
               
               {typeof lead.ai_analysis === 'object' ? (
                 <Box>
+                  {/* Conversion Probability */}
+                  {lead.ai_analysis.conversion_probability !== undefined && (
+                    <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(76,175,80,0.1)', borderRadius: 2, border: '1px solid rgba(76,175,80,0.3)' }}>
+                      <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TrendingUpIcon color="success" /> Conversion Probability
+                      </Typography>
+                      <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                        {lead.ai_analysis.conversion_probability}%
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Opportunity Summary */}
+                  {lead.ai_analysis.opportunity_summary && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom sx={{ fontWeight: 'bold' }}>
+                        Opportunity Summary
+                      </Typography>
+                      <Typography variant="body2" paragraph sx={{ whiteSpace: 'pre-wrap' }}>
+                        {lead.ai_analysis.opportunity_summary}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Risk Assessment */}
+                  {lead.ai_analysis.risk_assessment && Array.isArray(lead.ai_analysis.risk_assessment) && lead.ai_analysis.risk_assessment.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="error.main" gutterBottom sx={{ fontWeight: 'bold' }}>
+                        Risk Assessment
+                      </Typography>
+                      <List dense>
+                        {lead.ai_analysis.risk_assessment.map((risk: string, index: number) => (
+                          <ListItem key={index} sx={{ pl: 0 }}>
+                            <ListItemIcon>
+                              <WarningIcon color="error" fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary={risk} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+
+                  {/* Recommendations */}
+                  {lead.ai_analysis.recommendations && Array.isArray(lead.ai_analysis.recommendations) && lead.ai_analysis.recommendations.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ fontWeight: 'bold' }}>
+                        Recommendations
+                      </Typography>
+                      <List dense>
+                        {lead.ai_analysis.recommendations.map((rec: string, index: number) => (
+                          <ListItem key={index} sx={{ pl: 0 }}>
+                            <ListItemIcon>
+                              <LightbulbIcon color="success" fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary={rec} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+
+                  {/* Next Steps */}
+                  {lead.ai_analysis.next_steps && Array.isArray(lead.ai_analysis.next_steps) && lead.ai_analysis.next_steps.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="info.main" gutterBottom sx={{ fontWeight: 'bold' }}>
+                        Next Steps
+                      </Typography>
+                      <List dense>
+                        {lead.ai_analysis.next_steps.map((step: string, index: number) => (
+                          <ListItem key={index} sx={{ pl: 0 }}>
+                            <ListItemIcon>
+                              <CheckCircleIcon color="info" fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary={step} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+
+                  {/* Legacy format support - for old analysis data */}
                   {lead.ai_analysis.company_profile && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="subtitle2" color="primary" gutterBottom>

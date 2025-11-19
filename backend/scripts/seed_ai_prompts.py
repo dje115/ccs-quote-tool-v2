@@ -167,6 +167,75 @@ Focus on UK market context and be realistic in your assessments.
     else:
         print("⏭️  customer_analysis prompt already exists")
     
+    # 1.5. Lead Scoring Prompt
+    lead_scoring_prompt = """Analyze this lead and provide comprehensive intelligence summary.
+
+{tenant_context}
+
+**Lead Information:**
+- Company Name: {lead_name}
+- Status: {lead_status}
+- Source: {lead_source}
+- Description: {lead_description}
+
+**Company Information:**
+{company_info}
+
+**Similar Converted Leads:**
+{similar_leads}
+
+Please provide a detailed analysis including:
+
+1. **Opportunity Summary**: A concise summary of why this lead is valuable and what opportunities exist
+
+2. **Risk Assessment**: List potential risks or challenges in pursuing this lead
+
+3. **Recommendations**: Provide actionable recommendations for next steps
+
+4. **Next Steps**: Suggest specific actions to take with this lead
+
+Format your response as JSON:
+{{
+    "opportunity_summary": "...",
+    "risks": ["risk1", "risk2", ...],
+    "recommendations": ["recommendation1", "recommendation2", ...],
+    "next_steps": ["step1", "step2", ...]
+}}"""
+
+    lead_scoring_system = """You are a lead intelligence analyst specializing in B2B sales. Analyze leads and provide actionable insights. Always respond with valid JSON."""
+
+    existing_lead_scoring = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.LEAD_SCORING.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_lead_scoring:
+        service.create_prompt(
+            name="Lead Scoring - Intelligence Analysis",
+            category=PromptCategory.LEAD_SCORING.value,
+            system_prompt=lead_scoring_system,
+            user_prompt_template=lead_scoring_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=4000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "tenant_context": "Tenant company information including products, services, USPs",
+                "lead_name": "Company name of the lead",
+                "lead_status": "Current status of the lead (new, contacted, qualified, etc.)",
+                "lead_source": "Source of the lead (ai_generated, referral, etc.)",
+                "lead_description": "Description or qualification reason for the lead",
+                "company_info": "Company information including address, contact details, website",
+                "similar_leads": "List of similar leads that have been converted"
+            },
+            description="Lead intelligence analysis prompt for opportunity assessment"
+        )
+        print("✅ Created lead_scoring prompt")
+    else:
+        print("⏭️  lead_scoring prompt already exists")
+    
     # 2. Activity Enhancement Prompt
     activity_enhancement_prompt = """You are a sales assistant AI helping to process activity notes for a CRM system.
 

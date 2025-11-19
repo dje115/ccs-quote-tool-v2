@@ -38,6 +38,7 @@ import { leadIntelligenceAPI } from '../services/api';
 interface LeadIntelligenceProps {
   leadId: string;
   compact?: boolean;
+  existingAnalysis?: any; // Pass existing ai_analysis data from lead
 }
 
 interface LeadAnalysis {
@@ -62,7 +63,8 @@ interface SimilarLead {
 
 const LeadIntelligence: React.FC<LeadIntelligenceProps> = ({
   leadId,
-  compact = false
+  compact = false,
+  existingAnalysis = null
 }) => {
   const [analysis, setAnalysis] = useState<LeadAnalysis | null>(null);
   const [outreachPlan, setOutreachPlan] = useState<OutreachPlan | null>(null);
@@ -71,7 +73,25 @@ const LeadIntelligence: React.FC<LeadIntelligenceProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'analysis' | 'outreach' | 'similar'>('analysis');
 
-  const loadAnalysis = async () => {
+  // Initialize with existing analysis if provided
+  useEffect(() => {
+    if (existingAnalysis && typeof existingAnalysis === 'object') {
+      // Map existing analysis to component format
+      setAnalysis({
+        conversion_probability: existingAnalysis.conversion_probability,
+        lead_score: existingAnalysis.conversion_probability, // Use conversion_probability as lead_score
+        risks: existingAnalysis.risk_assessment || [],
+        selling_points: existingAnalysis.recommendations || []
+      });
+    }
+  }, [existingAnalysis]);
+
+  const loadAnalysis = async (forceRefresh = false) => {
+    // If we have existing analysis and not forcing refresh, skip API call
+    if (existingAnalysis && !forceRefresh) {
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -114,14 +134,18 @@ const LeadIntelligence: React.FC<LeadIntelligenceProps> = ({
   };
 
   useEffect(() => {
+    // Only load if we don't have existing data or user switches tabs
     if (leadId && activeView === 'analysis') {
-      loadAnalysis();
+      // Only call API if no existing analysis
+      if (!existingAnalysis) {
+        loadAnalysis();
+      }
     } else if (leadId && activeView === 'outreach') {
       loadOutreachPlan();
     } else if (leadId && activeView === 'similar') {
       loadSimilarLeads();
     }
-  }, [leadId, activeView]);
+  }, [leadId, activeView]); // Don't include existingAnalysis in deps to avoid re-running
 
   const getScoreColor = (score?: number) => {
     if (!score) return 'default';
@@ -152,18 +176,20 @@ const LeadIntelligence: React.FC<LeadIntelligenceProps> = ({
             </Typography>
           </Box>
           <Tooltip title="Refresh">
-            <IconButton
-              size="small"
-              onClick={() => {
-                if (activeView === 'analysis') loadAnalysis();
-                else if (activeView === 'outreach') loadOutreachPlan();
-                else if (activeView === 'similar') loadSimilarLeads();
-              }}
-              disabled={loading}
-              sx={{ color: 'white' }}
-            >
-              <RefreshIcon />
-            </IconButton>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  if (activeView === 'analysis') loadAnalysis(true); // Force refresh
+                  else if (activeView === 'outreach') loadOutreachPlan();
+                  else if (activeView === 'similar') loadSimilarLeads();
+                }}
+                disabled={loading}
+                sx={{ color: 'white' }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
 

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "CCS Quote Tool v2"
-    VERSION: str = "3.0.3"
+    VERSION: str = "3.0.4"
     ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
     DEBUG: bool = Field(default=True, env="DEBUG")
     
