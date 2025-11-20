@@ -32,6 +32,7 @@ const CompanyListImportCampaign = lazy(() => import('./pages/CompanyListImportCa
 const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
 const Quotes = lazy(() => import('./pages/Quotes'));
 const QuoteNew = lazy(() => import('./pages/QuoteNew'));
+const QuoteNewEnhanced = lazy(() => import('./pages/QuoteNewEnhanced'));
 const QuoteDetail = lazy(() => import('./pages/QuoteDetail'));
 const Users = lazy(() => import('./pages/Users'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -247,6 +248,14 @@ function App() {
           />
           <Route
             path="/quotes/new"
+            element={
+              <ProtectedRoute>
+                <QuoteNewEnhanced />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quotes/new/legacy"
             element={
               <ProtectedRoute>
                 <QuoteNew />

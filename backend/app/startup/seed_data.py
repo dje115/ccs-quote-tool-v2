@@ -21,17 +21,37 @@ async def run_seed_scripts():
     """
     logger.info("🌱 Running database seed scripts...")
     
-    db = SessionLocal()
+    # Run each seed script in its own session to avoid transaction issues
     try:
-        # Run seed scripts in order
         # 1. Seed AI Providers (must be first - other scripts may depend on providers)
-        await seed_ai_providers(db)
+        db1 = SessionLocal()
+        try:
+            await seed_ai_providers(db1)
+        except Exception as e:
+            logger.warning(f"⚠️  Error seeding AI providers: {e}")
+            db1.rollback()
+        finally:
+            db1.close()
         
         # 2. Seed AI Prompts (depends on providers)
-        await seed_ai_prompts(db)
+        db2 = SessionLocal()
+        try:
+            await seed_ai_prompts(db2)
+        except Exception as e:
+            logger.warning(f"⚠️  Error seeding AI prompts: {e}")
+            db2.rollback()
+        finally:
+            db2.close()
         
         # 3. Seed Quote Type Prompts (depends on prompts)
-        await seed_quote_type_prompts(db)
+        db3 = SessionLocal()
+        try:
+            await seed_quote_type_prompts(db3)
+        except Exception as e:
+            logger.warning(f"⚠️  Error seeding quote type prompts: {e}")
+            db3.rollback()
+        finally:
+            db3.close()
         
         logger.info("✅ All seed scripts completed successfully")
         
@@ -40,8 +60,6 @@ async def run_seed_scripts():
         # Don't fail startup - log error and continue
         # This allows the application to start even if seed scripts fail
         # (they can be run manually later if needed)
-    finally:
-        db.close()
 
 
 def _get_scripts_path():
@@ -78,9 +96,9 @@ async def seed_ai_prompts(db: Session):
         if scripts_path not in sys.path:
             sys.path.insert(0, scripts_path)
         
-        from seed_ai_prompts import seed_prompts
+        from seed_ai_prompts import seed_prompts_async
         logger.info("Seeding AI prompts...")
-        seed_prompts(db)
+        await seed_prompts_async(db)
         logger.info("✅ AI prompts seeded")
     except Exception as e:
         logger.warning(f"⚠️  Error seeding AI prompts: {e}")

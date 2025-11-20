@@ -250,6 +250,19 @@ export const quoteAPI = {
   get: (id: string) => apiClient.get(`/quotes/${id}`),
   update: (id: string, data: any) => apiClient.put(`/quotes/${id}`, data),
   delete: (id: string) => apiClient.delete(`/quotes/${id}`),
+  // Enhanced Multi-Part Quote System
+  generate: (data: any) => apiClient.post('/quotes/generate', data),
+  getDocuments: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/documents`),
+  getDocument: (quoteId: string, documentType: string) => apiClient.get(`/quotes/${quoteId}/documents/${documentType}`),
+  updateDocument: (quoteId: string, documentType: string, data: any) => apiClient.put(`/quotes/${quoteId}/documents/${documentType}`, data),
+  createDocumentVersion: (quoteId: string, documentType: string, changesSummary?: string) => apiClient.post(`/quotes/${quoteId}/documents/${documentType}/version`, { changes_summary: changesSummary }),
+  getDocumentVersions: (quoteId: string, documentType: string) => apiClient.get(`/quotes/${quoteId}/documents/${documentType}/versions`),
+  rollbackDocumentVersion: (quoteId: string, documentType: string, targetVersion: number) => apiClient.post(`/quotes/${quoteId}/documents/${documentType}/rollback/${targetVersion}`),
+  
+  // Prompt Management APIs
+  getPrompt: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/prompt`),
+  regenerateWithPrompt: (quoteId: string, data: any) => apiClient.post(`/quotes/${quoteId}/prompt/regenerate`, data),
+  getPromptHistory: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/prompt/history`),
 };
 
 // User API

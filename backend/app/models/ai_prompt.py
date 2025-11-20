@@ -41,6 +41,7 @@ class PromptCategory(str, enum.Enum):
     UPSELL_CROSSSELL = "upsell_crosssell"
     QUOTE_EMAIL_COPY = "quote_email_copy"
     QUOTE_SUMMARY = "quote_summary"
+    QUOTE_GENERATION = "quote_generation"  # Universal AI quote generation (industry-agnostic)
 
 
 class AIPrompt(Base, TimestampMixin):

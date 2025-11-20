@@ -24,23 +24,40 @@ import {
   Download as DownloadIcon,
   Send as SendIcon
 } from '@mui/icons-material';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { quoteAPI } from '../services/api';
 import QuoteAICopilot from '../components/QuoteAICopilot';
+import QuoteDocumentViewer from '../components/QuoteDocumentViewer';
+import QuoteDocumentEditor from '../components/QuoteDocumentEditor';
+import QuotePromptManager from '../components/QuotePromptManager';
 
 const QuoteDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [quote, setQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState(0);
+  const [editingDocument, setEditingDocument] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
       loadQuote();
+      
+      // Check URL params for tab and edit document
+      const tabParam = searchParams.get('tab');
+      const editParam = searchParams.get('edit');
+      
+      if (tabParam === 'documents') {
+        setCurrentTab(2); // Documents tab is index 2
+      }
+      
+      if (editParam) {
+        setEditingDocument(editParam);
+      }
     }
-  }, [id]);
+  }, [id, searchParams]);
 
   const loadQuote = async () => {
     try {
@@ -95,8 +112,10 @@ const QuoteDetail: React.FC = () => {
         <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)} sx={{ mb: 3 }}>
           <Tab label="Overview" />
           <Tab label="Project Details" />
+          <Tab label="Documents" />
           <Tab label="AI Analysis" />
           <Tab label="Pricing" />
+          <Tab label="AI Prompt" />
         </Tabs>
 
         {currentTab === 0 && (
@@ -207,6 +226,27 @@ const QuoteDetail: React.FC = () => {
         )}
 
         {currentTab === 2 && (
+          <Box>
+            {editingDocument ? (
+              <QuoteDocumentEditor
+                quoteId={quote.id}
+                documentType={editingDocument}
+                onSave={() => {
+                  setEditingDocument(null);
+                  loadQuote();
+                }}
+                onCancel={() => setEditingDocument(null)}
+              />
+            ) : (
+              <QuoteDocumentViewer
+                quoteId={quote.id}
+                onEdit={(documentType) => setEditingDocument(documentType)}
+              />
+            )}
+          </Box>
+        )}
+
+        {currentTab === 3 && (
           <Grid container spacing={3}>
             <Grid item xs={12} md={8}>
               <Box>
@@ -232,7 +272,7 @@ const QuoteDetail: React.FC = () => {
           </Grid>
         )}
 
-        {currentTab === 3 && (
+        {currentTab === 4 && (
           <Box>
             <Typography variant="h6" gutterBottom>
               Pricing Breakdown
@@ -252,6 +292,12 @@ const QuoteDetail: React.FC = () => {
                 <Typography variant="h4" color="primary">£{quote.total_amount ? parseFloat(quote.total_amount).toFixed(2) : '0.00'}</Typography>
               </Grid>
             </Grid>
+          </Box>
+        )}
+
+        {currentTab === 5 && (
+          <Box>
+            <QuotePromptManager quoteId={quote.id} />
           </Box>
         )}
       </Paper>

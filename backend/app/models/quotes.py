@@ -97,6 +97,11 @@ class Quote(BaseModel):
     # Customer Portal
     show_in_customer_portal = Column(Boolean, default=False, nullable=False)  # Show quote in customer portal
     
+    # Multi-part quote system fields
+    tier_type = Column(String(20), default="single", nullable=False)  # 'single' or 'three_tier'
+    ai_generation_data = Column(JSON, nullable=True)  # AI generation metadata: industry detected, prompt used, etc.
+    last_prompt_text = Column(Text, nullable=True)  # The last prompt text used to generate this quote
+    
     # Created by
     created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
     
@@ -104,6 +109,7 @@ class Quote(BaseModel):
     template = relationship("QuoteTemplate")
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     created_by_user = relationship("User", foreign_keys=[created_by])
+    documents = relationship("QuoteDocument", back_populates="quote", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Quote {self.quote_number} - {self.title}>"

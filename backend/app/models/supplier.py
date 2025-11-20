@@ -36,7 +36,7 @@ class Supplier(Base, TimestampMixin):
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
-    category_id = Column(String(36), ForeignKey("supplier_categories.id"), nullable=False, index=True)
+    category_id = Column(String(36), ForeignKey("supplier_categories.id"), nullable=True, index=True)  # Nullable for Own Products
     
     name = Column(String(100), nullable=False)
     website = Column(String(200), nullable=True)
@@ -48,6 +48,9 @@ class Supplier(Base, TimestampMixin):
     scraping_config = Column(JSON, nullable=True)  # Selectors, URLs, authentication, etc.
     scraping_enabled = Column(Boolean, default=True, nullable=False)
     scraping_method = Column(String(50), default="generic", nullable=False)  # 'generic', 'api', 'custom'
+    
+    # Own Products support
+    is_own_products = Column(Boolean, default=False, nullable=False, index=True)  # True for tenant's own products/services
     
     is_preferred = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

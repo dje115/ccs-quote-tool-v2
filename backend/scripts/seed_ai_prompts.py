@@ -2130,6 +2130,225 @@ Provide summary in JSON format:
     else:
         print("⏭️  quote_summary prompt already exists")
     
+    # 21. Quote Generation Prompt (Universal - Industry-Agnostic)
+    quote_generation_system = """You are a quotation engine for a multi-tenant CRM platform.
+
+Your job is to generate **industry-accurate, fully costed quotes** for ANY business type, using the tenant's pricing, services, and suppliers.
+
+RULES:
+- Auto-detect the tenant's industry by analysing service_catalogue and suppliers.
+- Adapt terminology, deliverables, and quoting style to that industry.
+- Use ONLY the day rates, hour rates, and supplier pricing provided.
+- If the request is simple or single-scope, produce 1 professional quote.
+- If applicable, produce a 3-tier quote (Basic / Standard / Premium).
+- Be precise, practical, and commercially realistic.
+- Your tone must match the company's brand_voice.
+- Include assumptions, exclusions, and next steps.
+- Output must be suitable for direct sending to a customer.
+
+OUTPUT FORMAT:
+1. Industry detected
+2. Executive Summary
+3. Quotation (1-tier OR 3-tier)
+4. Pricing breakdown (labour, materials, totals)
+5. Assumptions
+6. Exclusions
+7. Next Steps
+
+Never mention the internal logic or that you are inferring anything.
+You are a senior commercial estimator."""
+    
+    quote_generation_prompt = """Generate a comprehensive quote for this customer request.
+
+**Business Profile:**
+{tenant_context}
+
+**Service Catalogue:**
+{service_catalogue}
+
+**Supplier Catalogue:**
+{supplier_catalogue}
+
+**Customer Request:**
+{customer_request}
+
+**Required Deadline:**
+{required_deadline}
+
+**Location:**
+{location}
+
+**Quantity:**
+{quantity}
+
+---
+
+YOUR TASKS:
+
+1. **Understand the Industry Context**
+   - Auto-detect industry from service_catalogue and supplier_catalogue
+   - Adapt language, technical detail, structure and terminology to that industry
+   - IT/MSP = technical detail, hardware/software bundles
+   - Cabling = materials, labour, installation, testing
+   - Crane hire = lifting plans, onsite costs, safety requirements
+   - Software = specification, modules, licensing, SLAs
+   - Professional services = day rates, scope, deliverables
+
+2. **Parse the Request**
+   - Extract what the client wants from the customer_request
+   - Identify: scope, deliverables, risks, assumptions
+   - Identify labour components
+   - Identify materials/components from supplier catalogues
+
+3. **Build a Full Quote**
+
+   Each quote MUST include:
+
+   **A. Executive Summary**
+   - Clear explanation of what is being quoted
+
+   **B. Statement of Work (SOW)**
+   - Break into: Deliverables, Tasks, Timescales, Responsibilities
+   - Use industry-specific terminology
+
+   **C. Pricing Section**
+   - Use ONLY the provided service_catalogue and supplier_catalogue data
+   - Calculate labour (hours × rate from service_catalogue)
+   - Calculate materials (cost × markup from supplier_catalogue)
+   - Provide a clear table:
+     | Item | Qty | Unit Price | Total |
+
+   **D. Optional: 3-Tier Proposal** (if suitable)
+   - Use the following format:
+     **TIER 1 – Basic / Budget (£X–£Y)**
+     - Best for: minimal requirements, essential functionality
+     - Include: reduced scope, lower-cost materials, fewer features, simplified labour
+     
+     **TIER 2 – Standard / Recommended (£X–£Y)**
+     - Best for: balanced performance + cost
+     - Include: full scope, standard equipment, recommended labour, better guarantees
+     
+     **TIER 3 – Premium / High-End (£X–£Y)**
+     - Best for: high performance, maximum reliability, or extended capability
+     - Include: premium hardware/services, enhanced warranties, extended labour, additional value adds
+   
+   - If the job has no tiers (e.g. crane emergency hire), produce a single quote only
+
+   **E. Assumptions**
+   - Site access requirements
+   - Working hours
+   - Client responsibilities
+   - Environmental or regulatory considerations
+
+   **F. Exclusions**
+   - Clarify what is NOT included
+
+   **G. Next Steps**
+   - How to accept
+   - Timeline to schedule
+   - Deposit requirements (if industry relevant)
+
+**STYLE GUIDELINES:**
+- Clear, structured, readable
+- Avoid jargon unless industry-relevant
+- Professional but friendly
+- Always accurate to the JSON input
+- Use the tenant's brand_voice if provided
+- Format sections with proper headings
+
+**IMPORTANT PRICING RULES:**
+- Never reduce prices below the supplier sell_price or service_catalogue rates
+- Never discount labour unless explicitly provided
+- Never create custom prices not found in service_catalogue or supplier_catalogue
+- If the request requires something not in the catalogue, recommend an option but do not price it
+- Always compute totals safely and conservatively
+- If costs exceed typical ranges, warn: "This requires management approval"
+
+**OUTPUT FORMAT:**
+Return a JSON object with the following structure:
+
+{{
+    "industry_detected": "Industry name",
+    "executive_summary": "Clear explanation of what is being quoted",
+    "quote_type": "single" or "three_tier",
+    "tiers": {{
+        "tier_1": {{
+            "name": "Basic / Budget",
+            "price_range": "£X–£Y",
+            "best_for": "Description",
+            "scope": "Reduced scope description",
+            "pricing_breakdown": {{
+                "labour": {{
+                    "items": [
+                        {{"description": "...", "hours": X, "rate": Y, "total": Z}}
+                    ],
+                    "subtotal": X
+                }},
+                "materials": {{
+                    "items": [
+                        {{"description": "...", "quantity": X, "unit_price": Y, "total": Z}}
+                    ],
+                    "subtotal": X
+                }},
+                "total": X
+            }}
+        }},
+        "tier_2": {{...}},
+        "tier_3": {{...}}
+    }},
+    "single_quote": {{
+        "pricing_breakdown": {{...}},
+        "total": X
+    }},
+    "statement_of_work": {{
+        "deliverables": ["..."],
+        "tasks": ["..."],
+        "timescales": "...",
+        "responsibilities": {{"client": ["..."], "supplier": ["..."]}}
+    }},
+    "assumptions": ["..."],
+    "exclusions": ["..."],
+    "next_steps": ["..."]
+}}"""
+    
+    existing_quote_generation = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.QUOTE_GENERATION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing_quote_generation:
+        service.create_prompt(
+            name="Universal Quote Generation",
+            category=PromptCategory.QUOTE_GENERATION.value,
+            system_prompt=quote_generation_system,
+            user_prompt_template=quote_generation_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=16000,  # Increased from 8000 to handle comprehensive quotes with multiple tiers
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "tenant_context": "Tenant company information: name, description, products/services, USPs, target markets, brand_voice",
+                "service_catalogue": "JSON array of services: [{service, internal_code, day_rate, hour_rate}]",
+                "supplier_catalogue": "JSON array of supplier items: [{supplier, item, cost_price, sell_price}]",
+                "customer_request": "Plain English description of what the client wants",
+                "required_deadline": "Required deadline",
+                "location": "Project location",
+                "quantity": "Quantity if applicable"
+            },
+            description="Universal AI quote generation for any industry type, auto-detects industry from tenant context"
+        )
+        print("✅ Created quote_generation prompt")
+    else:
+        # Update max_tokens if it's too low
+        if existing.max_tokens < 16000:
+            existing.max_tokens = 16000
+            db.commit()
+            print("✅ Updated quote_generation prompt max_tokens to 16000")
+        else:
+            print("⏭️  quote_generation prompt already exists")
+    
     print("✅ AI prompts seeding complete!")
 
 

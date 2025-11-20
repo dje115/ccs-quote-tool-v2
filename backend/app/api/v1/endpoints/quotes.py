@@ -16,10 +16,14 @@ from datetime import datetime
 from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
 from app.models.quotes import Quote, QuoteStatus
+from app.models.quote_documents import QuoteDocument, QuoteDocumentVersion, DocumentType
+from app.models.quote_prompt_history import QuotePromptHistory
 from app.models.tenant import User, Tenant
 from app.services.quote_analysis_service import QuoteAnalysisService
 from app.services.quote_pricing_service import QuotePricingService
 from app.services.quote_consistency_service import QuoteConsistencyService
+from app.services.quote_builder_service import QuoteBuilderService
+from app.services.quote_versioning_service import QuoteVersioningService
 from app.core.api_keys import get_api_keys
 
 router = APIRouter()
@@ -1561,4 +1565,492 @@ async def generate_email_copy(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating email copy: {str(e)}"
+        )
+
+
+# ============================================================================
+# Enhanced Multi-Part Quote System Endpoints
+# ============================================================================
+
+class QuoteGenerateRequest(BaseModel):
+    """Request model for AI quote generation"""
+    customer_id: str = Field(..., description="Customer ID (required - quotes are only for customers, not leads)")
+    customer_request: str = Field(..., description="Plain English description of what the client wants")
+    quote_title: str = Field(..., description="Title for the quote")
+    required_deadline: Optional[str] = None
+    location: Optional[str] = None
+    quantity: Optional[int] = None
+
+
+class DocumentUpdateRequest(BaseModel):
+    """Request model for updating a document"""
+    content: Dict[str, Any] = Field(..., description="Document content structure")
+    changes_summary: Optional[str] = None
+
+
+@router.post("/generate", status_code=status.HTTP_201_CREATED)
+async def generate_quote(
+    request: QuoteGenerateRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Generate a complete quote with AI and all document types
+    
+    Creates:
+    - Quote record
+    - Quote items (pricing)
+    - 4 document types (parts list, technical, overview, build)
+    """
+    try:
+        # Use sync session for services (they use sync sessions)
+        sync_db = SessionLocal()
+        builder_service = QuoteBuilderService(sync_db, str(current_tenant.id))
+        
+        try:
+            # Await async method directly (we're in an async endpoint)
+            result = await builder_service.build_quote(
+                customer_request=request.customer_request,
+                quote_title=request.quote_title,
+                customer_id=request.customer_id,
+                quote_type=None,  # AI will auto-detect from customer_request
+                required_deadline=request.required_deadline,
+                location=request.location,
+                quantity=request.quantity,
+                user_id=str(current_user.id)
+            )
+            
+            if not result.get("success"):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=result.get("error", "Failed to generate quote")
+                )
+            
+            quote = result["quote"]
+            documents = result["documents"]
+            
+            return {
+                "success": True,
+                "quote_id": quote.id,
+                "quote_number": quote.quote_number,
+                "tier_type": quote.tier_type,
+                "documents": [
+                    {
+                        "id": doc.id,
+                        "document_type": doc.document_type,
+                        "version": doc.version
+                    }
+                    for doc in documents
+                ]
+            }
+        
+        finally:
+            sync_db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error generating quote: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating quote: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/documents")
+async def get_quote_documents(
+    quote_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Get all documents for a quote"""
+    try:
+        # Verify quote exists and belongs to tenant
+        quote_stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == str(current_tenant.id),
+                Quote.is_deleted == False
+            )
+        )
+        result = await db.execute(quote_stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Get documents
+        docs_stmt = select(QuoteDocument).where(
+            and_(
+                QuoteDocument.quote_id == quote_id,
+                QuoteDocument.tenant_id == str(current_tenant.id)
+            )
+        )
+        docs_result = await db.execute(docs_stmt)
+        documents = docs_result.scalars().all()
+        
+        return {
+            "quote_id": quote_id,
+            "documents": [
+                {
+                    "id": doc.id,
+                    "document_type": doc.document_type,
+                    "version": doc.version,
+                    "created_at": doc.created_at.isoformat(),
+                    "updated_at": doc.updated_at.isoformat()
+                }
+                for doc in documents
+            ]
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting quote documents: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting quote documents: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/documents/{document_type}")
+async def get_quote_document(
+    quote_id: str,
+    document_type: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Get a specific document for a quote"""
+    try:
+        # Verify quote exists
+        quote_stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == str(current_tenant.id),
+                Quote.is_deleted == False
+            )
+        )
+        result = await db.execute(quote_stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Get document (latest version)
+        doc_stmt = select(QuoteDocument).where(
+            and_(
+                QuoteDocument.quote_id == quote_id,
+                QuoteDocument.document_type == document_type,
+                QuoteDocument.tenant_id == str(current_tenant.id)
+            )
+        ).order_by(QuoteDocument.version.desc())
+        
+        doc_result = await db.execute(doc_stmt)
+        document = doc_result.scalar_one_or_none()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail=f"Document type '{document_type}' not found")
+        
+        return {
+            "id": document.id,
+            "quote_id": quote_id,
+            "document_type": document.document_type,
+            "version": document.version,
+            "content": document.content,
+            "created_at": document.created_at.isoformat(),
+            "updated_at": document.updated_at.isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting quote document: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting quote document: {str(e)}"
+        )
+
+
+@router.put("/{quote_id}/documents/{document_type}")
+async def update_quote_document(
+    quote_id: str,
+    document_type: str,
+    request: DocumentUpdateRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Update a quote document (creates new version automatically)"""
+    try:
+        # Verify quote exists
+        quote_stmt = select(Quote).where(
+            and_(
+                Quote.id == quote_id,
+                Quote.tenant_id == str(current_tenant.id),
+                Quote.is_deleted == False
+            )
+        )
+        result = await db.execute(quote_stmt)
+        quote = result.scalar_one_or_none()
+        
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Get document
+        doc_stmt = select(QuoteDocument).where(
+            and_(
+                QuoteDocument.quote_id == quote_id,
+                QuoteDocument.document_type == document_type,
+                QuoteDocument.tenant_id == str(current_tenant.id)
+            )
+        )
+        doc_result = await db.execute(doc_stmt)
+        document = doc_result.scalar_one_or_none()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail=f"Document type '{document_type}' not found")
+        
+        # Use sync session for versioning service
+        sync_db = SessionLocal()
+        versioning_service = QuoteVersioningService(sync_db, str(current_tenant.id))
+        
+        try:
+            # Get document in sync session
+            sync_doc = sync_db.query(QuoteDocument).filter(
+                QuoteDocument.id == document.id
+            ).first()
+            
+            if not sync_doc:
+                raise HTTPException(status_code=404, detail="Document not found")
+            
+            # Create new version before updating
+            versioning_service.create_version(
+                document=sync_doc,
+                changes_summary=request.changes_summary,
+                user_id=str(current_user.id)
+            )
+            
+            # Update document content
+            sync_doc.content = request.content
+            sync_db.commit()
+            sync_db.refresh(sync_doc)
+            
+            # Refresh async document
+            await db.refresh(document)
+            document.content = request.content
+            
+            return {
+                "success": True,
+                "document_id": document.id,
+                "version": sync_doc.version,
+                "message": "Document updated and new version created"
+            }
+        
+        finally:
+            sync_db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating quote document: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating quote document: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/documents/{document_type}/version")
+async def create_document_version(
+    quote_id: str,
+    document_type: str,
+    changes_summary: Optional[str] = None,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Manually create a new version of a document"""
+    try:
+        sync_db = SessionLocal()
+        versioning_service = QuoteVersioningService(sync_db, str(current_tenant.id))
+        
+        try:
+            # Get document
+            doc_stmt = select(QuoteDocument).where(
+                and_(
+                    QuoteDocument.quote_id == quote_id,
+                    QuoteDocument.document_type == document_type,
+                    QuoteDocument.tenant_id == str(current_tenant.id)
+                )
+            )
+            doc_result = await db.execute(doc_stmt)
+            document = doc_result.scalar_one_or_none()
+            
+            if not document:
+                raise HTTPException(status_code=404, detail=f"Document type '{document_type}' not found")
+            
+            # Create version
+            version = versioning_service.create_version(
+                document=document,
+                changes_summary=changes_summary,
+                user_id=str(current_user.id)
+            )
+            
+            return {
+                "success": True,
+                "version_id": version.id,
+                "version": version.version,
+                "created_at": version.created_at.isoformat()
+            }
+        
+        finally:
+            sync_db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating document version: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating document version: {str(e)}"
+        )
+
+
+@router.get("/{quote_id}/documents/{document_type}/versions")
+async def get_document_versions(
+    quote_id: str,
+    document_type: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Get version history for a document"""
+    try:
+        sync_db = SessionLocal()
+        versioning_service = QuoteVersioningService(sync_db, str(current_tenant.id))
+        
+        try:
+            # Get document
+            doc_stmt = select(QuoteDocument).where(
+                and_(
+                    QuoteDocument.quote_id == quote_id,
+                    QuoteDocument.document_type == document_type,
+                    QuoteDocument.tenant_id == str(current_tenant.id)
+                )
+            )
+            doc_result = await db.execute(doc_stmt)
+            document = doc_result.scalar_one_or_none()
+            
+            if not document:
+                raise HTTPException(status_code=404, detail=f"Document type '{document_type}' not found")
+            
+            # Get version history
+            versions = versioning_service.get_version_history(document.id)
+            
+            return {
+                "document_id": document.id,
+                "document_type": document_type,
+                "current_version": document.version,
+                "versions": [
+                    {
+                        "id": v.id,
+                        "version": v.version,
+                        "changes_summary": v.changes_summary,
+                        "created_at": v.created_at.isoformat(),
+                        "created_by": v.created_by
+                    }
+                    for v in versions
+                ]
+            }
+        
+        finally:
+            sync_db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting document versions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting document versions: {str(e)}"
+        )
+
+
+@router.post("/{quote_id}/documents/{document_type}/rollback/{target_version}")
+async def rollback_document_version(
+    quote_id: str,
+    document_type: str,
+    target_version: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Rollback a document to a specific version"""
+    try:
+        sync_db = SessionLocal()
+        versioning_service = QuoteVersioningService(sync_db, str(current_tenant.id))
+        
+        try:
+            # Get document
+            doc_stmt = select(QuoteDocument).where(
+                and_(
+                    QuoteDocument.quote_id == quote_id,
+                    QuoteDocument.document_type == document_type,
+                    QuoteDocument.tenant_id == str(current_tenant.id)
+                )
+            )
+            doc_result = await db.execute(doc_stmt)
+            document = doc_result.scalar_one_or_none()
+            
+            if not document:
+                raise HTTPException(status_code=404, detail=f"Document type '{document_type}' not found")
+            
+            # Rollback
+            success = versioning_service.rollback_to_version(
+                document=document,
+                target_version=target_version,
+                user_id=str(current_user.id)
+            )
+            
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Version {target_version} not found")
+            
+            await db.commit()
+            await db.refresh(document)
+            
+            return {
+                "success": True,
+                "document_id": document.id,
+                "current_version": document.version,
+                "message": f"Document rolled back to version {target_version}"
+            }
+        
+        finally:
+            sync_db.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error rolling back document version: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error rolling back document version: {str(e)}"
         )

@@ -322,12 +322,28 @@ class OpenAIProvider(AIProvider):
                         **filtered_completion_kwargs
                     }
                 
+                # Log OpenAI API call start
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[OpenAI] Starting API call to OpenAI - Model: {model}, Provider: OpenAI")
+                logger.info(f"[OpenAI] Request details - Messages: {len(create_kwargs.get('messages', []))} messages, Max tokens: {create_kwargs.get('max_tokens', 'default')}")
+                
                 # Wrap synchronous call in executor to avoid blocking event loop
                 loop = asyncio.get_event_loop()
                 response = await loop.run_in_executor(
                     None,
                     lambda: self.client.chat.completions.create(**create_kwargs)
                 )
+                
+                # Log OpenAI API call success
+                usage_info = {}
+                if hasattr(response, 'usage') and response.usage:
+                    usage_info = {
+                        "prompt_tokens": getattr(response.usage, 'prompt_tokens', 0),
+                        "completion_tokens": getattr(response.usage, 'completion_tokens', 0),
+                        "total_tokens": getattr(response.usage, 'total_tokens', 0)
+                    }
+                logger.info(f"[OpenAI] API call successful - Model: {model}, Tokens: {usage_info.get('total_tokens', 0)} (prompt: {usage_info.get('prompt_tokens', 0)}, completion: {usage_info.get('completion_tokens', 0)})")
                 
                 content = response.choices[0].message.content
                 usage = {
