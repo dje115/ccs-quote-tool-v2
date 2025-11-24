@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Never use hardcoded defaults in production
     SUPER_ADMIN_EMAIL: str = Field(..., env="SUPER_ADMIN_EMAIL")
     SUPER_ADMIN_PASSWORD: str = Field(..., env="SUPER_ADMIN_PASSWORD")
+    SYSTEM_TENANT_NAME: str = Field(default="System Tenant", env="SYSTEM_TENANT_NAME")
+    SYSTEM_TENANT_SLUG: str = Field(default="system", env="SYSTEM_TENANT_SLUG")
+    SYSTEM_TENANT_ADMIN_EMAIL: str = Field(default="system-admin@ccs.local", env="SYSTEM_TENANT_ADMIN_EMAIL")
+    SYSTEM_TENANT_ADMIN_PASSWORD: Optional[str] = Field(default=None, env="SYSTEM_TENANT_ADMIN_PASSWORD")
     
     # API Keys (System-wide defaults)
     OPENAI_API_KEY: Optional[str] = Field(default=None, env="OPENAI_API_KEY")

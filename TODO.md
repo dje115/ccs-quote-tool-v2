@@ -1,6 +1,6 @@
 # CCS Quote Tool v2 - Comprehensive TODO & Next Steps
 **Version:** 3.0.4  
-**Last Updated:** 2025-11-19  
+**Last Updated:** 2025-11-24  
 **Status:** Active Development  
 **For:** All Agents - Single Source of Truth
 
@@ -33,6 +33,47 @@
 3. Helpdesk enhancements completion
 4. Performance optimizations
 5. Testing infrastructure expansion
+
+---
+
+## 🔄 Latest Session Update (2025-11-24)
+
+### ✅ Completed
+- **System Tenant Auto-Seeding**
+  - Added configurable `SYSTEM_TENANT_*` env settings (`backend/app/core/config.py`).
+  - `init_db()` now calls new `create_system_tenant()` helper to provision a “system” tenant + admin + API keys automatically (`backend/app/core/database.py`).
+  - Shared `SUPER_ADMIN_PERMISSIONS` constant ensures default + system admins stay in sync.
+- **Action Suggestions Prompt Refresh**
+  - Prompt `f63f0d4f-4608-4fd4-8af5-b4ac6f6d6e28` now references quote & ticket summaries and allows up to 60k tokens (seeded via `seed_ai_prompts.py`).
+  - Redis cache flushed; Celery worker logs `[ACTION PROMPT - SYSTEM]` entries for traceability.
+- **Stack Reset & Health Checks**
+  - Full `docker compose down -v && docker compose up --build` performed; verified API 500 on `/timeline` fixed via backend rebuild/import corrections.
+  - Confirmed Celery worker online and websocket reconnect loops benign (already-connected guard in `useWebSocket`).
+
+### ⚠️ Outstanding / To-Do
+1. **AI Action Suggestions Still Ignore Quote/Ticket Context**
+   - Inspect Celery worker output to confirm new prompt is being sent (look for `[ACTION PROMPT - SYSTEM]` logs).
+   - Ensure backend is assembling `quote_summary` / `ticket_summary` payloads correctly (`ActivityService.generate_action_suggestions`).
+   - Verify OpenAI responses now cite quotes/tickets; compare stored history (`customers.ai_suggestions`) with UI.
+2. **Customer Timeline Rendering Errors**
+   - Fix nested `<p>` tags and deprecated MUI Grid props in `frontend/src/components/CustomerTimeline.tsx` and `frontend/src/pages/CustomerDetail.tsx`.
+   - Make activity timeline full-width at bottom and widen AI suggestion cards (per screenshots 2025-11-24 14:00+).
+3. **Manual Quote Builder Layout Tweaks**
+   - Resize description/part number/supplier/qty/price inputs (no scrollbars, support 8–12 char part numbers & 7-char unit costs).
+   - Consider two-row layout if single row cannot fit requested widths.
+4. **AI Workflow & Prompt Management**
+   - Confirm “System Tenant” record contains default API keys after rebuild (seed script now handles creation but needs verification).
+   - Wire admin portal prompt management so action prompt edits persist post-refresh; double-check tenant overrides.
+5. **Testing + Monitoring**
+   - Ensure Celery worker and backend containers restart cleanly after code changes (user reported “Generating…” spinner with no output).
+   - Add regression tests (unit + Cypress) for new action-suggestion payloads once UI changes ready.
+
+### 🧪 Test Checklist
+- `docker compose restart backend celery-worker` → watch for `Created system tenant` log (only on first run) and `[ACTION PROMPT - SYSTEM]` entries when refreshing suggestions.
+- `psql` (or `TablePlus`/`Prisma Studio`) → `SELECT slug, plan FROM tenants WHERE plan='system';` and ensure `system-admin@ccs.local` exists in `users`.
+- Frontend dev server (`npm run dev` in `frontend`) → load Customer detail page, open console to confirm DOM nesting + Grid warnings resolved after refactor.
+- Refresh “AI Powered Action Suggestions” in Activity Center → verify UI renders 3 cards referencing recent quotes/tickets; compare with Celery logs + OpenAI dashboard.
+- Optional: trigger manual quote build flow end-to-end to confirm resized inputs and new layout behave as expected.
 
 ---
 

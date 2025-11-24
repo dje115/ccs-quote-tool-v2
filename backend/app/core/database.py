@@ -26,6 +26,31 @@ import uuid
 # Password hashing - using Argon2 (most secure and modern algorithm)
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
+# Shared permission set for any seeded super admin accounts
+SUPER_ADMIN_PERMISSIONS = [
+    "tenant:create",
+    "tenant:read",
+    "tenant:update",
+    "tenant:delete",
+    "user:create",
+    "user:read",
+    "user:update",
+    "user:delete",
+    "customer:create",
+    "customer:read",
+    "customer:update",
+    "customer:delete",
+    "lead:create",
+    "lead:read",
+    "lead:update",
+    "lead:delete",
+    "quote:create",
+    "quote:read",
+    "quote:update",
+    "quote:delete",
+    "system:admin"
+]
+
 # Context variable for storing current tenant ID (for RLS)
 # This is set by get_current_tenant() and used by get_db() to set PostgreSQL session variable
 current_tenant_id_context: ContextVar[str] = ContextVar('current_tenant_id', default=None)
@@ -76,6 +101,7 @@ async def init_db():
     
     # Create default tenant and super admin
     await create_default_tenant()
+    await create_system_tenant()
     
     print("✅ Database initialized successfully")
 
@@ -134,29 +160,7 @@ async def create_default_tenant():
             is_active=True,
             is_verified=True,
             role=UserRole.SUPER_ADMIN,
-            permissions=[
-                "tenant:create",
-                "tenant:read",
-                "tenant:update",
-                "tenant:delete",
-                "user:create",
-                "user:read",
-                "user:update",
-                "user:delete",
-                "customer:create",
-                "customer:read",
-                "customer:update",
-                "customer:delete",
-                "lead:create",
-                "lead:read",
-                "lead:update",
-                "lead:delete",
-                "quote:create",
-                "quote:read",
-                "quote:update",
-                "quote:delete",
-                "system:admin"
-            ],
+            permissions=list(SUPER_ADMIN_PERMISSIONS),
             preferences={
                 "theme": "light",
                 "language": "en",
@@ -177,6 +181,86 @@ async def create_default_tenant():
             print(f"   ⚠️  Admin Password: Set via SUPER_ADMIN_PASSWORD environment variable")
         else:
             print(f"   Admin Password: [REDACTED - Set via environment variable]")
+
+
+async def create_system_tenant():
+    """Ensure dedicated system tenant exists for storing global API keys and defaults"""
+    async with AsyncSessionLocal() as session:
+        existing_tenant = await session.execute(
+            text("SELECT id FROM tenants WHERE slug = :slug OR plan = :plan"),
+            {"slug": settings.SYSTEM_TENANT_SLUG, "plan": "system"}
+        )
+        
+        if existing_tenant.fetchone():
+            print(f"✅ System tenant '{settings.SYSTEM_TENANT_SLUG}' already exists")
+            return
+        
+        tenant_id = str(uuid.uuid4())
+        tenant = Tenant(
+            id=tenant_id,
+            name=settings.SYSTEM_TENANT_NAME,
+            company_name=settings.SYSTEM_TENANT_NAME,
+            slug=settings.SYSTEM_TENANT_SLUG,
+            domain=f"{settings.SYSTEM_TENANT_SLUG}.localhost",
+            status=TenantStatus.ACTIVE,
+            plan="system",
+            settings={
+                "timezone": "UTC",
+                "currency": "GBP",
+                "features": {
+                    "ai_analysis": True,
+                    "lead_generation": True,
+                    "quoting": True,
+                    "companies_house": True,
+                    "google_maps": True,
+                    "multilingual": True
+                }
+            },
+            openai_api_key=settings.OPENAI_API_KEY,
+            companies_house_api_key=settings.COMPANIES_HOUSE_API_KEY,
+            google_maps_api_key=settings.GOOGLE_MAPS_API_KEY,
+            api_limit_monthly=100000
+        )
+        
+        session.add(tenant)
+        await session.flush()
+        
+        admin_email = settings.SYSTEM_TENANT_ADMIN_EMAIL
+        existing_admin = await session.execute(
+            text("SELECT id FROM users WHERE email = :email"),
+            {"email": admin_email}
+        )
+        
+        if existing_admin.fetchone():
+            print(f"⚠️  System admin user '{admin_email}' already exists; skipping creation")
+        else:
+            password_source = settings.SYSTEM_TENANT_ADMIN_PASSWORD or settings.SUPER_ADMIN_PASSWORD
+            hashed_password = pwd_context.hash(password_source)
+            
+            system_admin = User(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                email=admin_email,
+                username=f"{settings.SYSTEM_TENANT_SLUG}_admin",
+                first_name="System",
+                last_name="Admin",
+                hashed_password=hashed_password,
+                is_active=True,
+                is_verified=True,
+                role=UserRole.SUPER_ADMIN,
+                permissions=list(SUPER_ADMIN_PERMISSIONS),
+                preferences={
+                    "theme": "light",
+                    "language": "en",
+                    "notifications": True,
+                    "email_notifications": True
+                }
+            )
+            session.add(system_admin)
+            print(f"✅ Created system admin user '{admin_email}'")
+        
+        await session.commit()
+        print(f"✅ Created system tenant '{settings.SYSTEM_TENANT_SLUG}' for global configuration")
 
 
 def get_db():
@@ -200,14 +284,7 @@ def get_db():
     # This enables database-level row-level security policies
     tenant_id = current_tenant_id_context.get(None)
     if tenant_id:
-        # Set PostgreSQL session variable for RLS (transaction-local)
-        # This makes RLS policies work correctly
-        # Note: SET LOCAL doesn't support parameterized queries, so we use string formatting
-        # The tenant_id is already validated and comes from JWT token, so it's safe
-        # We use quote_identifier to ensure it's properly escaped
-        from sqlalchemy.sql import quote_identifier
-        safe_tenant_id = str(tenant_id).replace("'", "''")  # Escape single quotes
-        db.execute(text(f"SET LOCAL app.current_tenant_id = '{safe_tenant_id}'"))
+        _apply_rls_tenant_sync(db, tenant_id)
     
     try:
         yield db
@@ -228,18 +305,9 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     - Setting PostgreSQL session variable before queries
     """
     async with AsyncSessionLocal() as session:
-        # Set tenant ID for RLS if available in context
-        # This enables database-level row-level security policies
         tenant_id = current_tenant_id_context.get(None)
         if tenant_id:
-            # Set PostgreSQL session variable for RLS (transaction-local)
-            # This makes RLS policies work correctly
-            # Note: SET LOCAL doesn't support parameterized queries, so we use string formatting
-            # The tenant_id is already validated and comes from JWT token, so it's safe
-            # We escape single quotes to prevent SQL injection
-            safe_tenant_id = str(tenant_id).replace("'", "''")  # Escape single quotes
-            await session.execute(text(f"SET LOCAL app.current_tenant_id = '{safe_tenant_id}'"))
-        
+            await _apply_rls_tenant_async(session, tenant_id)
         yield session
 
 
@@ -278,3 +346,17 @@ async def setup_row_level_security():
                     print(f"Warning: Could not create RLS policy for {table}: {e}")
         
         print("✅ Row-level security configured for multi-tenancy")
+
+
+def _escape_tenant_id(value: str) -> str:
+    return str(value).replace("'", "''")
+
+
+def _apply_rls_tenant_sync(db_session, tenant_id: str):
+    safe_tenant_id = _escape_tenant_id(tenant_id)
+    db_session.execute(text(f"SET LOCAL app.current_tenant_id = '{safe_tenant_id}'"))
+
+
+async def _apply_rls_tenant_async(async_session, tenant_id: str):
+    safe_tenant_id = _escape_tenant_id(tenant_id)
+    await async_session.execute(text(f"SET LOCAL app.current_tenant_id = '{safe_tenant_id}'"))

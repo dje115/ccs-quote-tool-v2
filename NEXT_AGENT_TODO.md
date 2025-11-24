@@ -1,7 +1,35 @@
 # CCS Quote Tool v2 - Next Agent TODO List
-**Version**: 3.0.0  
-**Last Updated**: 2025-01-XX  
+**Version**: 3.1.0  
+**Last Updated**: 2025-11-24  
 **Status**: Ready for continuation
+
+---
+
+## ⚡ Session Hand-off (2025-11-24)
+
+### ✅ Completed
+- Automated **System Tenant** creation on startup (configurable env vars + admin seeding) so rebuilds always include required API keys.
+- Reloaded **Action Suggestions** prompt (60k tokens, references quote/ticket summaries) and flushed Redis to ensure backend picks it up.
+- Rebuilt entire Docker stack from scratch and confirmed backend timeline API imports fixed (no more HTTP 500).
+
+### 🎯 Immediate Follow-ups
+1. **Action Suggestions Missing Quote/Ticket Context**
+   - [ ] Inspect Celery worker logs for `[ACTION PROMPT - SYSTEM]` to confirm updated prompt text is used.
+   - [ ] Verify `ActivityService.generate_action_suggestions()` attaches `quote_summary` & `ticket_summary` to payload.
+   - [ ] Refresh suggestions in UI and confirm OpenAI response references relevant quotes/tickets.
+   - [ ] If responses still stale, ensure Redis cache is cleared again and prompt text matches DB record `f63f0d4f-4608-4fd4-8af5-b4ac6f6d6e28`.
+2. **Customer Timeline & AI Suggestion Layout**
+   - [ ] Refactor `CustomerTimeline.tsx` to remove nested `<p>` warnings (use `Typography component="span/div"` or `Box` wrappers).
+   - [ ] Update layout so timeline spans full width at bottom and AI suggestion cards show 3 wider columns per user request.
+   - [ ] Resize manual quote builder inputs (description, part number, supplier, qty, unit cost) to avoid scrollbars and support requested character lengths.
+3. **System Tenant Verification & Tests**
+   - [ ] After next rebuild, run `SELECT slug, plan FROM tenants WHERE plan='system';` to confirm auto-seeding works.
+   - [ ] Ensure `system-admin@ccs.local` user exists and has SUPER_ADMIN role + permissions.
+   - [ ] Document steps for rotating system API keys via admin portal once tenant is present.
+4. **Testing Checklist**
+   - [ ] `docker compose restart backend celery-worker` → tail logs for prompt payload + OpenAI responses.
+   - [ ] `npm run dev` (frontend) → confirm console free of Grid + DOM nesting warnings.
+   - [ ] Trigger manual quote build & AI suggestion refresh flows end-to-end to validate UX + data quality.
 
 ---
 
