@@ -27,6 +27,7 @@ export const useApi = (): UseApiReturn => {
     headers: {
       'Content-Type': 'application/json',
     },
+    withCredentials: true,  // IMPORTANT: Required for HttpOnly cookies and RLS
   });
 
   // Add request interceptor to include auth token
