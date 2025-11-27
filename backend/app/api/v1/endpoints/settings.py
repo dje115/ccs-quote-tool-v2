@@ -499,12 +499,8 @@ async def update_company_profile(
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        import logging
-        logger = logging.getLogger(__name__)
         from sqlalchemy import select
         from sqlalchemy.orm.attributes import flag_modified
-        
-        logger.info(f"[update_company_profile] Received partnership_opportunities: {profile.partnership_opportunities is not None}, length: {len(profile.partnership_opportunities) if profile.partnership_opportunities else 0}")
         
         # Re-query tenant in async session to avoid "not persistent" error
         # current_tenant comes from sync session, but we need it in async session
@@ -552,7 +548,6 @@ async def update_company_profile(
             tenant.elevator_pitch = profile.elevator_pitch
         if profile.partnership_opportunities is not None:
             tenant.partnership_opportunities = profile.partnership_opportunities
-            logger.info(f"[update_company_profile] Set partnership_opportunities on tenant, length: {len(tenant.partnership_opportunities) if tenant.partnership_opportunities else 0}")
         if profile.logo_url is not None:
             tenant.logo_url = profile.logo_url
         if profile.logo_text is not None:

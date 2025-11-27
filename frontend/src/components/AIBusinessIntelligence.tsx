@@ -58,13 +58,11 @@ const AIBusinessIntelligence: React.FC = () => {
   };
 
   const handleRunAnalysis = async () => {
-    console.log('[AIBusinessIntelligence] Running AI analysis...');
     try {
       setAnalyzing(true);
       setError('');
 
       const response = await settingsAPI.post('/company-profile/analyze');
-      console.log('[AIBusinessIntelligence] Analysis response:', response.data);
 
       if (response.data.success) {
         // Store the NEW analysis as suggestions (don't overwrite current data)
