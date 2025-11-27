@@ -649,6 +649,9 @@ class AIAnalysisService:
                         if tenant.elevator_pitch:
                             tenant_context += f"\n\nYour Value Proposition:\n{tenant.elevator_pitch}"
                         
+                        if tenant.sales_methodology:
+                            tenant_context += f"\n\nYour Sales Methodology (How you help customers):\n{tenant.sales_methodology}"
+                        
                         if tenant.partnership_opportunities:
                             tenant_context += f"\n\nB2B Partnership Opportunities (How to work WITH similar businesses):\n{tenant.partnership_opportunities}"
                         
