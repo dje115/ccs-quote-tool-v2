@@ -122,7 +122,7 @@ const CompanyProfile: React.FC = () => {
         target_markets: Array.isArray(data.target_markets) ? data.target_markets : [],
         sales_methodology: data.sales_methodology || '',
         elevator_pitch: data.elevator_pitch || '',
-        partnership_opportunities: data.partnership_opportunities || '',
+        partnership_opportunities: (typeof data.partnership_opportunities === 'string' ? data.partnership_opportunities : '') || '',
         logo_url: data.logo_url || '',
         logo_text: data.logo_text || '',
         use_text_logo: data.use_text_logo || false,
@@ -258,9 +258,13 @@ const CompanyProfile: React.FC = () => {
     setProfile(prev => {
       if (action === 'replace') {
         // Replace with AI data
+        const aiValue = aiData[field as keyof typeof aiData];
+        // Ensure strings are properly handled (not objects)
+        const valueToSet = typeof aiValue === 'string' ? aiValue : (typeof aiValue === 'object' && aiValue !== null ? '' : aiValue || '');
+        console.log(`[applySectionSuggestion] Replacing ${field}:`, { aiValue, valueToSet, type: typeof aiValue });
         return {
           ...prev,
-          [field]: aiData[field as keyof typeof aiData]
+          [field]: valueToSet
         };
       } else if (action === 'merge') {
         // Merge arrays or replace strings
@@ -273,7 +277,7 @@ const CompanyProfile: React.FC = () => {
             ...prev,
             [field]: [...new Set([...currentValue, ...aiValue])]
           };
-        } else if (typeof currentValue === 'object' && typeof aiValue === 'object') {
+        } else if (typeof currentValue === 'object' && typeof aiValue === 'object' && !Array.isArray(currentValue) && !Array.isArray(aiValue)) {
           // Merge objects (like website_keywords)
           return {
             ...prev,
@@ -281,9 +285,10 @@ const CompanyProfile: React.FC = () => {
           };
         } else {
           // For strings, replace (merge doesn't make sense)
+          const valueToSet = typeof aiValue === 'string' ? aiValue : (typeof aiValue === 'object' && aiValue !== null ? '' : aiValue || currentValue || '');
           return {
             ...prev,
-            [field]: aiValue || currentValue
+            [field]: valueToSet
           };
         }
       }
@@ -356,12 +361,25 @@ const CompanyProfile: React.FC = () => {
     try {
       setSaving(true);
       setError('');
+      
+      // Ensure partnership_opportunities is a string, not an object
+      const profileToSave = {
+        ...profile,
+        partnership_opportunities: typeof profile.partnership_opportunities === 'string' 
+          ? profile.partnership_opportunities 
+          : (typeof profile.partnership_opportunities === 'object' && profile.partnership_opportunities !== null
+            ? '' 
+            : profile.partnership_opportunities || '')
+      };
+      
       console.log('[handleSaveProfile] Saving profile:', {
-        partnership_opportunities: profile.partnership_opportunities,
-        has_partnership: !!profile.partnership_opportunities,
-        length: profile.partnership_opportunities?.length || 0
+        partnership_opportunities: profileToSave.partnership_opportunities,
+        has_partnership: !!profileToSave.partnership_opportunities,
+        length: profileToSave.partnership_opportunities?.length || 0,
+        type: typeof profileToSave.partnership_opportunities
       });
-      await settingsAPI.put('/company-profile', profile);
+      
+      await settingsAPI.put('/company-profile', profileToSave);
       setSuccess('Profile saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
       // Reload profile to ensure UI is in sync

@@ -463,7 +463,7 @@ async def get_company_profile(
             target_markets=current_tenant.target_markets or [],
             sales_methodology=current_tenant.sales_methodology,
             elevator_pitch=current_tenant.elevator_pitch,
-            partnership_opportunities=current_tenant.partnership_opportunities,
+            partnership_opportunities=current_tenant.partnership_opportunities if current_tenant.partnership_opportunities else None,
             logo_url=current_tenant.logo_url,
             logo_text=current_tenant.logo_text,
             use_text_logo=current_tenant.use_text_logo or False,
