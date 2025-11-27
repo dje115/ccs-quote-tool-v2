@@ -356,9 +356,16 @@ const CompanyProfile: React.FC = () => {
     try {
       setSaving(true);
       setError('');
+      console.log('[handleSaveProfile] Saving profile:', {
+        partnership_opportunities: profile.partnership_opportunities,
+        has_partnership: !!profile.partnership_opportunities,
+        length: profile.partnership_opportunities?.length || 0
+      });
       await settingsAPI.put('/company-profile', profile);
       setSuccess('Profile saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
+      // Reload profile to ensure UI is in sync
+      await loadProfile();
     } catch (err: any) {
       console.error('Failed to save profile:', err);
       setError('Failed to save profile');
