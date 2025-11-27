@@ -1019,20 +1019,33 @@ If information is missing or unclear, make reasonable inferences based on the co
         finally:
             sync_db2.close()
         
+        # Re-query tenant in async session to avoid "not persistent" error
+        # current_tenant comes from sync session, but we need it in async session
+        from sqlalchemy import select
+        from sqlalchemy.orm.attributes import flag_modified
+        stmt = select(Tenant).where(Tenant.id == current_tenant.id)
+        tenant_result = await db.execute(stmt)
+        tenant = tenant_result.scalar_one_or_none()
+        
+        if not tenant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        
         # Save the keywords to the database immediately (they'll be used in future marketing modules)
         # Store keywords mapped to the primary website
-        from sqlalchemy.orm.attributes import flag_modified
         keywords = result.get("keywords", [])
         if keywords and websites:
             primary_website = websites[0]
             # Initialize website_keywords dict if needed
-            if not current_tenant.website_keywords:
-                current_tenant.website_keywords = {}
+            if not tenant.website_keywords:
+                tenant.website_keywords = {}
             # Store keywords for this website
-            current_tenant.website_keywords[primary_website] = keywords
-            flag_modified(current_tenant, "website_keywords")
+            tenant.website_keywords[primary_website] = keywords
+            flag_modified(tenant, "website_keywords")
             await db.commit()
-            await db.refresh(current_tenant)
+            await db.refresh(tenant)
         
         # Build sources array
         sources_list = []
@@ -1070,7 +1083,7 @@ If information is missing or unclear, make reasonable inferences based on the co
                 "company_address": result.get("company_address"),
                 "keywords": result.get("keywords", []),
                 "linkedin_url": result.get("linkedin_url"),
-                "website_keywords": current_tenant.website_keywords,
+                "website_keywords": tenant.website_keywords if tenant.website_keywords else {},
                 "social_media_links": social_media_links
             },
             "confidence_score": result.get("confidence_score", 0),
