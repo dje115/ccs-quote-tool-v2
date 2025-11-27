@@ -700,17 +700,29 @@ async def analyze_company_profile(
             sync_db2.close()
         
         # Store analysis in tenant record (use async session)
-        current_tenant.company_analysis = analysis
-        current_tenant.company_analysis_date = datetime.utcnow()
+        # Re-query tenant in async session to avoid "not persistent" error
+        from sqlalchemy import select
+        stmt = select(Tenant).where(Tenant.id == current_tenant.id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
+        
+        if not tenant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
+        
+        tenant.company_analysis = analysis
+        tenant.company_analysis_date = datetime.utcnow()
         
         await db.commit()
-        await db.refresh(current_tenant)
+        await db.refresh(tenant)
         
         return {
             "success": True,
             "message": "Company analysis completed successfully",
             "analysis": analysis,
-            "analysis_date": current_tenant.company_analysis_date
+            "analysis_date": tenant.company_analysis_date
         }
         
     except Exception as e:
