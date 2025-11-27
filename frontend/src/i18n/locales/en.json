@@ -192,7 +192,11 @@
     "maxResultsHelp": "Number of leads to generate (5-100)",
     "postcodeHelp": "UK postcode for location-based search",
     "distanceHelp": "Search radius in miles (5-200)",
-    "descriptionHelp": "Optional description for this campaign"
+    "descriptionHelp": "Optional description for this campaign",
+    "selectedSector": "Selected Sector",
+    "sectorInfo": "Sector Information",
+    "exampleKeywords": "Example Keywords:",
+    "exampleCompanies": "Example Companies:"
   },
   "quotes": {
     "title": "Quotes",
