@@ -8,6 +8,7 @@ import httpx
 import googlemaps
 import asyncio
 import re
+import traceback
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -34,51 +35,33 @@ class LeadGenerationService:
         self.gmaps = googlemaps.Client(key=api_keys['google_maps_api_key'])
     
     def _get_api_keys(self) -> Dict[str, str]:
-        """Get API keys from tenant or system-wide fallback"""
+        """Get API keys from tenant or system-wide fallback using centralized resolution"""
         try:
-            # Try tenant-specific keys first
+            from app.core.api_keys import get_api_keys
+            from app.models.tenant import Tenant
+            
+            # Get tenant object
             tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
-            if tenant and tenant.openai_api_key and tenant.google_maps_api_key and tenant.companies_house_api_key:
+            if not tenant:
+                raise Exception(f"Tenant {self.tenant_id} not found")
+            
+            # Use centralized API key resolution (checks ProviderAPIKey table first, then legacy fields)
+            api_keys = get_api_keys(self.db, tenant)
+            
+            if api_keys.openai and api_keys.google_maps and api_keys.companies_house:
+                print(f"✅ API keys resolved from: {api_keys.source}")
                 return {
-                    'openai_api_key': tenant.openai_api_key,
-                    'google_maps_api_key': tenant.google_maps_api_key,
-                    'companies_house_api_key': tenant.companies_house_api_key
+                    'openai_api_key': api_keys.openai,
+                    'google_maps_api_key': api_keys.google_maps,
+                    'companies_house_api_key': api_keys.companies_house
                 }
-        except Exception as e:
-            print(f"⚠️ Error getting tenant API keys: {e}")
-        
-        # Fallback to system-wide keys
-        try:
-            print("🔍 Looking for system tenant...")
-            system_tenant = self.db.query(Tenant).filter(
-                (Tenant.name == "System") | (Tenant.plan == "system")
-            ).first()
-            print(f"🔍 System tenant found: {system_tenant is not None}")
-            if system_tenant:
-                print(f"🔑 OpenAI key exists: {bool(system_tenant.openai_api_key)} (length: {len(system_tenant.openai_api_key) if system_tenant.openai_api_key else 0})")
-                print(f"🔑 Google Maps key exists: {bool(system_tenant.google_maps_api_key)} (length: {len(system_tenant.google_maps_api_key) if system_tenant.google_maps_api_key else 0})")
-                print(f"🔑 Companies House key exists: {bool(system_tenant.companies_house_api_key)} (length: {len(system_tenant.companies_house_api_key) if system_tenant.companies_house_api_key else 0})")
-                
-                if system_tenant.openai_api_key and system_tenant.google_maps_api_key and system_tenant.companies_house_api_key:
-                    print("✅ All system API keys found, returning them")
-                    return {
-                        'openai_api_key': system_tenant.openai_api_key,
-                        'google_maps_api_key': system_tenant.google_maps_api_key,
-                        'companies_house_api_key': system_tenant.companies_house_api_key
-                    }
-                else:
-                    print("❌ Some system API keys are missing or empty")
-                    print(f"❌ OpenAI: '{system_tenant.openai_api_key}'")
-                    print(f"❌ Google Maps: '{system_tenant.google_maps_api_key}'")
-                    print(f"❌ Companies House: '{system_tenant.companies_house_api_key}'")
             else:
-                print("❌ System tenant not found")
+                print(f"⚠️ Missing API keys - OpenAI: {bool(api_keys.openai)}, Google Maps: {bool(api_keys.google_maps)}, Companies House: {bool(api_keys.companies_house)}")
+                raise Exception(f"Missing required API keys. Source: {api_keys.source}")
         except Exception as e:
-            print(f"⚠️ Error getting system API keys: {e}")
-            import traceback
+            print(f"❌ Error getting API keys: {e}")
             traceback.print_exc()
-        
-        raise Exception("No API keys found for tenant or system")
+            raise Exception(f"No API keys found for tenant or system: {str(e)}")
     
     async def generate_leads(self, campaign_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """

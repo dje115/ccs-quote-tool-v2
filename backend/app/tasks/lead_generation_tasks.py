@@ -96,7 +96,6 @@ def run_lead_generation_campaign(self, campaign_data: Dict[str, Any], tenant_id:
                 loop.close()
         except Exception as async_error:
             print(f"❌ Error in async execution: {async_error}")
-            import traceback
             traceback.print_exc()
             sys.stdout.flush()
             raise
