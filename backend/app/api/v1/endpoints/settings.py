@@ -499,72 +499,85 @@ async def update_company_profile(
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
+        from sqlalchemy import select
         from sqlalchemy.orm.attributes import flag_modified
+        
+        # Re-query tenant in async session to avoid "not persistent" error
+        # current_tenant comes from sync session, but we need it in async session
+        stmt = select(Tenant).where(Tenant.id == current_tenant.id)
+        result = await db.execute(stmt)
+        tenant = result.scalar_one_or_none()
+        
+        if not tenant:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tenant not found"
+            )
         
         # Update fields if provided
         if profile.company_name is not None:
-            current_tenant.company_name = profile.company_name
+            tenant.company_name = profile.company_name
         if profile.company_address is not None:
-            current_tenant.company_address = profile.company_address
+            tenant.company_address = profile.company_address
         if profile.company_phone_numbers is not None:
-            current_tenant.company_phone_numbers = profile.company_phone_numbers
-            flag_modified(current_tenant, "company_phone_numbers")
+            tenant.company_phone_numbers = profile.company_phone_numbers
+            flag_modified(tenant, "company_phone_numbers")
         if profile.company_email_addresses is not None:
-            current_tenant.company_email_addresses = profile.company_email_addresses
-            flag_modified(current_tenant, "company_email_addresses")
+            tenant.company_email_addresses = profile.company_email_addresses
+            flag_modified(tenant, "company_email_addresses")
         if profile.company_contact_names is not None:
-            current_tenant.company_contact_names = profile.company_contact_names
-            flag_modified(current_tenant, "company_contact_names")
+            tenant.company_contact_names = profile.company_contact_names
+            flag_modified(tenant, "company_contact_names")
         if profile.company_description is not None:
-            current_tenant.company_description = profile.company_description
+            tenant.company_description = profile.company_description
         if profile.company_websites is not None:
-            current_tenant.company_websites = profile.company_websites
-            flag_modified(current_tenant, "company_websites")
+            tenant.company_websites = profile.company_websites
+            flag_modified(tenant, "company_websites")
         if profile.products_services is not None:
-            current_tenant.products_services = profile.products_services
-            flag_modified(current_tenant, "products_services")
+            tenant.products_services = profile.products_services
+            flag_modified(tenant, "products_services")
         if profile.unique_selling_points is not None:
-            current_tenant.unique_selling_points = profile.unique_selling_points
-            flag_modified(current_tenant, "unique_selling_points")
+            tenant.unique_selling_points = profile.unique_selling_points
+            flag_modified(tenant, "unique_selling_points")
         if profile.target_markets is not None:
-            current_tenant.target_markets = profile.target_markets
-            flag_modified(current_tenant, "target_markets")
+            tenant.target_markets = profile.target_markets
+            flag_modified(tenant, "target_markets")
         if profile.sales_methodology is not None:
-            current_tenant.sales_methodology = profile.sales_methodology
+            tenant.sales_methodology = profile.sales_methodology
         if profile.elevator_pitch is not None:
-            current_tenant.elevator_pitch = profile.elevator_pitch
+            tenant.elevator_pitch = profile.elevator_pitch
         if profile.partnership_opportunities is not None:
-            current_tenant.partnership_opportunities = profile.partnership_opportunities
+            tenant.partnership_opportunities = profile.partnership_opportunities
         if profile.logo_url is not None:
-            current_tenant.logo_url = profile.logo_url
+            tenant.logo_url = profile.logo_url
         if profile.logo_text is not None:
-            current_tenant.logo_text = profile.logo_text
+            tenant.logo_text = profile.logo_text
         if profile.use_text_logo is not None:
-            current_tenant.use_text_logo = profile.use_text_logo
+            tenant.use_text_logo = profile.use_text_logo
         
         await db.commit()
-        await db.refresh(current_tenant)
+        await db.refresh(tenant)
         
         return TenantProfileResponse(
-            company_name=current_tenant.company_name,
-            company_address=current_tenant.company_address,
-            company_phone_numbers=current_tenant.company_phone_numbers or [],
-            company_email_addresses=current_tenant.company_email_addresses or [],
-            company_contact_names=current_tenant.company_contact_names or [],
-            company_description=current_tenant.company_description,
-            company_websites=current_tenant.company_websites or [],
-            products_services=current_tenant.products_services or [],
-            unique_selling_points=current_tenant.unique_selling_points or [],
-            target_markets=current_tenant.target_markets or [],
-            sales_methodology=current_tenant.sales_methodology,
-            elevator_pitch=current_tenant.elevator_pitch,
-            partnership_opportunities=current_tenant.partnership_opportunities,
-            logo_url=current_tenant.logo_url,
-            logo_text=current_tenant.logo_text,
-            use_text_logo=current_tenant.use_text_logo or False,
-            company_analysis=current_tenant.company_analysis or {},
-            company_analysis_date=current_tenant.company_analysis_date,
-            website_keywords=current_tenant.website_keywords or {}
+            company_name=tenant.company_name,
+            company_address=tenant.company_address,
+            company_phone_numbers=tenant.company_phone_numbers or [],
+            company_email_addresses=tenant.company_email_addresses or [],
+            company_contact_names=tenant.company_contact_names or [],
+            company_description=tenant.company_description,
+            company_websites=tenant.company_websites or [],
+            products_services=tenant.products_services or [],
+            unique_selling_points=tenant.unique_selling_points or [],
+            target_markets=tenant.target_markets or [],
+            sales_methodology=tenant.sales_methodology,
+            elevator_pitch=tenant.elevator_pitch,
+            partnership_opportunities=tenant.partnership_opportunities,
+            logo_url=tenant.logo_url,
+            logo_text=tenant.logo_text,
+            use_text_logo=tenant.use_text_logo or False,
+            company_analysis=tenant.company_analysis or {},
+            company_analysis_date=tenant.company_analysis_date,
+            website_keywords=tenant.website_keywords or {}
         )
         
     except Exception as e:
@@ -962,6 +975,13 @@ If information is missing or unclear, make reasonable inferences based on the co
         try:
             provider_service = AIProviderService(sync_db2, tenant_id=current_tenant.id)
             
+            # Verify API key is available before making the call
+            if not api_keys.openai:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OpenAI API key not found. Please configure your API key in the admin portal (Global API Keys) or tenant settings."
+                )
+            
             response = await provider_service.generate_with_rendered_prompts(
                 prompt=None,
                 system_prompt="You are a business intelligence analyst specializing in company research and data extraction. Provide detailed, accurate information in JSON format.",
@@ -972,9 +992,30 @@ If information is missing or unclear, make reasonable inferences based on the co
                 response_format={"type": "json_object"}
             )
             
+            if not response or not response.content:
+                raise HTTPException(
+                    status_code=500,
+                    detail="AI service returned empty response. Please check your API key configuration."
+                )
+            
             result_text = response.content
             import json
             result = json.loads(result_text)
+        except HTTPException:
+            raise
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to parse AI response as JSON: {str(e)}"
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[ERROR] AI generation failed: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"AI service error: {str(e)}. Please ensure your OpenAI API key is configured correctly in the admin portal."
+            )
         finally:
             sync_db2.close()
         

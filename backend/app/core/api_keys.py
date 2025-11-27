@@ -55,27 +55,72 @@ class APIKeys(NamedTuple):
 def _get_api_keys_from_db(db: Session, tenant_id: str) -> APIKeys:
     """
     Internal function to resolve API keys from database (uncached)
+    
+    Resolution order for each key (consistent for all API keys):
+    1. Tenant-specific key (ProviderAPIKey table with tenant_id OR legacy tenant field)
+    2. System-level key (ProviderAPIKey table with tenant_id=None OR System tenant legacy field)
+    
+    IMPORTANT: System tenant keys act as fallbacks for all tenants when tenant-specific keys are not configured.
+    This allows centralized API key management in the admin portal.
     """
     # Get tenant
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
         return APIKeys(openai=None, companies_house=None, google_maps=None, source="none")
     
-    # Get system tenant for fallback (system-wide keys only)
+    # Get system tenant for fallback (system-wide keys stored here by admin portal)
     system_tenant = db.query(Tenant).filter(
         (Tenant.name == "System") | (Tenant.plan == "system")
     ).first()
     
-    # Resolve each key individually with fallback logic
-    # IMPORTANT: Each key is resolved independently - tenant key first, then system fallback
-    openai_key = tenant.openai_api_key or (system_tenant.openai_api_key if system_tenant else None)
+    # Resolve OpenAI key: Check ProviderAPIKey table first, then legacy fields
+    # get_provider_api_key already handles tenant → system fallback internally
+    openai_key = get_provider_api_key(db, tenant, "openai", tenant_id)
+    # Fallback to legacy tenant field
+    if not openai_key:
+        openai_key = tenant.openai_api_key
+    # Fallback to legacy system tenant field (where admin portal stores system-wide keys)
+    if not openai_key and system_tenant:
+        openai_key = system_tenant.openai_api_key
+    
+    # Resolve Companies House key: Check ProviderAPIKey table first, then legacy fields
+    companies_house_key = None
+    # TODO: Add ProviderAPIKey support for Companies House when provider is added
+    # For now, use legacy fields with system tenant fallback
     companies_house_key = tenant.companies_house_api_key or (system_tenant.companies_house_api_key if system_tenant else None)
+    
+    # Resolve Google Maps key: Check ProviderAPIKey table first, then legacy fields
+    google_maps_key = None
+    # TODO: Add ProviderAPIKey support for Google Maps when provider is added
+    # For now, use legacy fields with system tenant fallback
     google_maps_key = tenant.google_maps_api_key or (system_tenant.google_maps_api_key if system_tenant else None)
     
     # Determine source for logging/debugging
-    if tenant.openai_api_key or tenant.companies_house_api_key or tenant.google_maps_api_key:
+    # Check where we got the keys from (tenant-specific vs system fallback)
+    # Priority: tenant-specific > system fallback
+    has_tenant_key = (
+        (openai_key and tenant.openai_api_key == openai_key) or
+        (companies_house_key and tenant.companies_house_api_key == companies_house_key) or
+        (google_maps_key and tenant.google_maps_api_key == google_maps_key)
+    )
+    
+    # Also check ProviderAPIKey table for tenant-specific keys
+    if not has_tenant_key and openai_key:
+        from app.models.ai_provider import ProviderAPIKey, AIProvider
+        provider = db.query(AIProvider).filter(AIProvider.slug == "openai", AIProvider.is_active == True).first()
+        if provider:
+            tenant_provider_key = db.query(ProviderAPIKey).filter(
+                ProviderAPIKey.provider_id == provider.id,
+                ProviderAPIKey.tenant_id == tenant_id,
+                ProviderAPIKey.is_valid == True
+            ).first()
+            if tenant_provider_key and tenant_provider_key.api_key == openai_key:
+                has_tenant_key = True
+    
+    if has_tenant_key:
         source = "tenant"
-    elif system_tenant and (system_tenant.openai_api_key or system_tenant.companies_house_api_key or system_tenant.google_maps_api_key):
+    elif openai_key or companies_house_key or google_maps_key:
+        # If we have any key and it's not tenant-specific, it must be from system
         source = "system"
     else:
         source = "none"
@@ -233,11 +278,12 @@ def get_provider_api_key(
     """
     Get API key for a specific AI provider with fallback logic
     
-    Resolution order:
-    1. Check tenant-specific key (from provider_api_keys table)
-    2. If not found, fall back to system-level key (tenant_id=None)
-    3. If still not found, try legacy tenant.openai_api_key for OpenAI
-    4. Return None if not found
+    Resolution order (consistent for all API keys):
+    1. Tenant-specific key (ProviderAPIKey table with tenant_id OR legacy tenant field)
+    2. System-level key (ProviderAPIKey table with tenant_id=None OR System tenant legacy field)
+    
+    IMPORTANT: System tenant keys act as fallbacks for all tenants when tenant-specific keys are not configured.
+    This allows centralized API key management in the admin portal.
     
     Args:
         db: Database session
@@ -256,6 +302,11 @@ def get_provider_api_key(
     try:
         tenant_id = tenant_id or current_tenant.id
         
+        # Get system tenant for fallback (where admin portal stores system-wide keys)
+        system_tenant = db.query(Tenant).filter(
+            (Tenant.name == "System") | (Tenant.plan == "system")
+        ).first()
+        
         # Get provider by slug
         provider = db.query(AIProvider).filter(
             AIProvider.slug == provider_slug,
@@ -263,17 +314,15 @@ def get_provider_api_key(
         ).first()
         
         if not provider:
-            # Fallback to legacy OpenAI key for "openai" slug
+            # Fallback to legacy fields for OpenAI (when provider not in ProviderAPIKey table)
             if provider_slug == "openai":
-                system_tenant = db.query(Tenant).filter(
-                    (Tenant.name == "System") | (Tenant.plan == "system")
-                ).first()
+                # Check tenant-specific first, then system tenant
                 return current_tenant.openai_api_key or (
                     system_tenant.openai_api_key if system_tenant else None
                 )
             return None
         
-        # Try tenant-specific key first
+        # Try tenant-specific key from ProviderAPIKey table first
         tenant_key = db.query(ProviderAPIKey).filter(
             ProviderAPIKey.provider_id == provider.id,
             ProviderAPIKey.tenant_id == tenant_id,
@@ -283,7 +332,7 @@ def get_provider_api_key(
         if tenant_key:
             return tenant_key.api_key
         
-        # Fallback to system-level key
+        # Fallback to system-level key from ProviderAPIKey table
         system_key = db.query(ProviderAPIKey).filter(
             ProviderAPIKey.provider_id == provider.id,
             ProviderAPIKey.tenant_id.is_(None),
@@ -293,11 +342,13 @@ def get_provider_api_key(
         if system_key:
             return system_key.api_key
         
-        # Final fallback: legacy OpenAI key for OpenAI provider
+        # Final fallback: legacy fields (tenant-specific first, then system tenant)
+        # This ensures system tenant is the fallback as expected
         if provider_slug == "openai":
-            system_tenant = db.query(Tenant).filter(
-                (Tenant.name == "System") | (Tenant.plan == "system")
-            ).first()
+            # Check tenant-specific legacy field
+            if current_tenant.openai_api_key:
+                return current_tenant.openai_api_key
+            # Then check system tenant (where admin portal stores system-wide keys)
             if system_tenant and system_tenant.openai_api_key:
                 return system_tenant.openai_api_key
         

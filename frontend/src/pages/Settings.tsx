@@ -36,7 +36,7 @@ import {
 } from '@mui/icons-material';
 import CompanyProfile from '../components/CompanyProfile';
 import AIBusinessIntelligence from '../components/AIBusinessIntelligence';
-import { providerKeysAPI, promptsAPI } from '../services/api';
+import { providerKeysAPI, promptsAPI, settingsAPI } from '../services/api';
 
 const Settings: React.FC = () => {
   const [currentTab, setCurrentTab] = useState(0);
@@ -158,19 +158,8 @@ const Settings: React.FC = () => {
 
   const loadApiStatus = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      // Use direct API call like the admin portal instead of proxy
-      const response = await fetch('http://localhost:8000/api/v1/settings/api-status', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const status = await response.json();
-        setApiStatus(status);
-      }
+      const response = await settingsAPI.get('/api-status');
+      setApiStatus(response.data || response);
     } catch (error) {
       console.error('Error loading API status:', error);
     }
@@ -182,19 +171,9 @@ const Settings: React.FC = () => {
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       
       // Get company name from company profile
-      const token = localStorage.getItem('access_token');
-      const companyResponse = await fetch('http://localhost:8000/api/v1/settings/company-profile', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      let companyName = '';
-      if (companyResponse.ok) {
-        const companyData = await companyResponse.json();
-        companyName = companyData.company_name || '';
-      }
+      const response = await settingsAPI.get('/company-profile');
+      const companyData = response.data || response; // Handle both axios response and direct data
+      const companyName = companyData.company_name || '';
       
       // Set profile data from user data
       setProfileData({
@@ -215,25 +194,17 @@ const Settings: React.FC = () => {
     setSuccess('');
     
     try {
-      const token = localStorage.getItem('access_token');
-      
       // Update company name via company profile API
-      await fetch('http://localhost:8000/api/v1/settings/company-profile', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          company_name: profileData.company_name
-        })
+      await settingsAPI.put('/company-profile', {
+        company_name: profileData.company_name
       });
       
       setSuccess('Profile updated successfully!');
       // Reload to ensure we have latest data
       loadProfileData();
-    } catch (err) {
-      setError('Failed to update profile');
+    } catch (err: any) {
+      console.error('Failed to save profile:', err);
+      setError(err.response?.data?.detail || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -245,31 +216,18 @@ const Settings: React.FC = () => {
     setSuccess('');
     
     try {
-      const token = localStorage.getItem('access_token');
-      // Use direct API call like the admin portal instead of proxy
-      const response = await fetch('http://localhost:8000/api/v1/settings/api-keys', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          openai_api_key: apiKeys.openai,
-          companies_house_api_key: apiKeys.companiesHouse,
-          google_maps_api_key: apiKeys.googleMaps
-        })
+      await settingsAPI.post('/api-keys', {
+        openai_api_key: apiKeys.openai,
+        companies_house_api_key: apiKeys.companiesHouse,
+        google_maps_api_key: apiKeys.googleMaps
       });
       
-      if (response.ok) {
-        setSuccess('API settings updated successfully!');
-        // Reload API status after saving
-        loadApiStatus();
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Failed to update API settings');
-      }
-    } catch (err) {
-      setError('Failed to update API settings');
+      setSuccess('API settings updated successfully!');
+      // Reload API status after saving
+      loadApiStatus();
+    } catch (err: any) {
+      console.error('Failed to save API settings:', err);
+      setError(err.response?.data?.detail || 'Failed to update API settings');
     } finally {
       setSaving(false);
     }

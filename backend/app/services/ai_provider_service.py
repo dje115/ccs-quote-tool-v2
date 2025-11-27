@@ -173,11 +173,18 @@ class AIProviderService:
     def _get_provider_api_key(self, provider_id: str, tenant_id: Optional[str] = None) -> Optional[str]:
         """
         Get API key for a provider with fallback logic:
-        1. Check tenant-specific key
-        2. Check system-level key (tenant_id=None)
-        3. Return None if not found
+        1. Check ProviderAPIKey table (tenant-specific)
+        2. Check ProviderAPIKey table (system-level, tenant_id=None)
+        3. For OpenAI provider, fall back to legacy tenant.openai_api_key
+        4. For OpenAI provider, fall back to legacy system tenant.openai_api_key
+        5. Return None if not found
         """
         try:
+            # Get provider to check slug
+            provider = self.db.query(AIProviderModel).filter(AIProviderModel.id == provider_id).first()
+            if not provider:
+                return None
+            
             # Try tenant-specific key first
             if tenant_id:
                 tenant_key = self.db.query(ProviderAPIKey).filter(
@@ -199,10 +206,26 @@ class AIProviderService:
             if system_key:
                 return system_key.api_key
             
+            # For OpenAI provider, fall back to legacy tenant fields
+            if provider.slug == "openai" and tenant_id:
+                from app.models.tenant import Tenant
+                tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+                if tenant and tenant.openai_api_key:
+                    return tenant.openai_api_key
+                
+                # Fall back to system tenant
+                system_tenant = self.db.query(Tenant).filter(
+                    (Tenant.name == "System") | (Tenant.plan == "system")
+                ).first()
+                if system_tenant and system_tenant.openai_api_key:
+                    return system_tenant.openai_api_key
+            
             return None
         
         except Exception as e:
             print(f"[AIProviderService] Error getting API key: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _get_system_default_provider(self) -> Optional[AIProviderModel]:
@@ -332,7 +355,10 @@ class AIProviderService:
             
             # Normalize parameters based on model requirements
             # Filter out max_tokens and temperature from kwargs to avoid duplicate arguments
-            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['max_tokens', 'temperature', 'max_completion_tokens']}
+            filtered_kwargs = {
+                k: v for k, v in kwargs.items()
+                if k not in ['model', 'max_tokens', 'temperature', 'max_completion_tokens']
+            }
             normalized = self.normalize_model_parameters(
                 model=model,
                 provider_slug=provider_model.slug,
@@ -358,9 +384,11 @@ class AIProviderService:
             tools = kwargs.get("tools", None)
             
             # Prepare kwargs for provider (filter out handled parameters)
-            provider_kwargs = {k: v for k, v in kwargs.items() if k not in [
-                "use_responses_api", "tools", "temperature", "max_tokens", "max_completion_tokens"
-            ]}
+            provider_kwargs = {
+                k: v for k, v in kwargs.items() if k not in [
+                    "model", "use_responses_api", "tools", "temperature", "max_tokens", "max_completion_tokens"
+                ]
+            }
             
             # For OpenAI, pass max_completion_tokens; for others, use max_tokens
             if provider_model.slug == "openai" or provider_model.slug == "deepseek" or provider_model.slug == "grok" or provider_model.slug == "openai_compatible":
@@ -482,7 +510,7 @@ class AIProviderService:
                 raise Exception(f"Failed to create provider instance for {provider_model.slug}")
             
             # Get model name (from kwargs, prompt, or provider default)
-            model = kwargs.get("model")
+            model = kwargs.pop("model", None)
             if not model and prompt:
                 model = prompt.provider_model or prompt.model
             if not model:
@@ -502,18 +530,21 @@ class AIProviderService:
                 default_temperature = 0.7
                 default_max_tokens = 8000
             
-            temperature = kwargs.get("temperature", default_temperature)
+            temperature = kwargs.pop("temperature", default_temperature)
             # Handle max_completion_tokens (OpenAI) vs max_tokens (other providers)
             if "max_completion_tokens" in kwargs:
-                max_tokens = kwargs["max_completion_tokens"]
+                max_tokens = kwargs.pop("max_completion_tokens")
             elif "max_tokens" in kwargs:
-                max_tokens = kwargs["max_tokens"]
+                max_tokens = kwargs.pop("max_tokens")
             else:
                 max_tokens = default_max_tokens
             
             # Normalize parameters based on model requirements
             # Filter out max_tokens and temperature from kwargs to avoid duplicate arguments
-            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['max_tokens', 'temperature', 'max_completion_tokens']}
+            filtered_kwargs = {
+                k: v for k, v in kwargs.items()
+                if k not in ['model', 'max_tokens', 'temperature', 'max_completion_tokens']
+            }
             normalized = self.normalize_model_parameters(
                 model=model,
                 provider_slug=provider_model.slug,
@@ -529,9 +560,11 @@ class AIProviderService:
             tools = kwargs.get("tools", None)
             
             # Prepare kwargs for provider (filter out handled parameters)
-            provider_kwargs = {k: v for k, v in kwargs.items() if k not in [
-                "use_responses_api", "tools", "temperature", "max_tokens", "max_completion_tokens"
-            ]}
+            provider_kwargs = {
+                k: v for k, v in kwargs.items() if k not in [
+                    "use_responses_api", "tools", "temperature", "max_tokens", "max_completion_tokens"
+                ]
+            }
             
             # For OpenAI, pass max_completion_tokens; for others, use max_tokens
             if provider_model.slug == "openai" or provider_model.slug == "deepseek" or provider_model.slug == "grok" or provider_model.slug == "openai_compatible":
@@ -567,4 +600,3 @@ class AIProviderService:
             import traceback
             traceback.print_exc()
             raise
-
