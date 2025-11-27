@@ -53,6 +53,16 @@ async def run_seed_scripts():
         finally:
             db3.close()
         
+        # 4. Seed Sectors (for lead generation campaigns)
+        db4 = SessionLocal()
+        try:
+            await seed_sectors(db4)
+        except Exception as e:
+            logger.warning(f"⚠️  Error seeding sectors: {e}")
+            db4.rollback()
+        finally:
+            db4.close()
+        
         logger.info("✅ All seed scripts completed successfully")
         
     except Exception as e:
@@ -123,6 +133,71 @@ async def seed_quote_type_prompts(db: Session):
     except Exception as e:
         logger.warning(f"⚠️  Error seeding quote type prompts: {e}")
         # Continue even if this fails
+
+
+async def seed_sectors(db: Session):
+    """Seed business sectors from CSV file"""
+    try:
+        from app.models.sector import Sector
+        from pathlib import Path
+        import csv
+        import os
+        
+        # Check if sectors already exist
+        existing_count = db.query(Sector).count()
+        if existing_count > 0:
+            logger.info(f"✅ {existing_count} sectors already exist in database, skipping import")
+            return
+        
+        # Find sectors.csv file
+        backend_dir = Path(__file__).parent.parent.parent
+        csv_paths = [
+            backend_dir / "sectors.csv",
+            Path("/app/sectors.csv"),  # Docker container path
+            Path("sectors.csv"),  # Current directory
+        ]
+        
+        csv_file = None
+        for path in csv_paths:
+            if path.exists():
+                csv_file = path
+                break
+        
+        if not csv_file:
+            logger.warning(f"⚠️  sectors.csv file not found. Tried paths: {[str(p) for p in csv_paths]}")
+            return
+        
+        logger.info(f"📖 Reading sector data from: {csv_file}")
+        
+        imported_count = 0
+        with open(csv_file, 'r', encoding='utf-8') as file:
+            csv_reader = csv.DictReader(file)
+            
+            for row in csv_reader:
+                try:
+                    sector = Sector(
+                        sector_name=row['Sector Name'].strip(),
+                        prompt_ready_replacement_line=row['Prompt-Ready Replacement Line'].strip(),
+                        example_keywords=row['Example Keywords (for search queries)'].strip(),
+                        example_companies=row['Example Companies (UK)'].strip() if row.get('Example Companies (UK)', '').strip() else None
+                    )
+                    db.add(sector)
+                    imported_count += 1
+                except Exception as e:
+                    logger.warning(f"⚠️  Error importing sector '{row.get('Sector Name', 'Unknown')}': {e}")
+                    continue
+        
+        db.commit()
+        logger.info(f"✅ Successfully imported {imported_count} sectors to database")
+        
+        # Verify import
+        total_sectors = db.query(Sector).count()
+        logger.info(f"📊 Total sectors in database: {total_sectors}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error seeding sectors: {e}", exc_info=True)
+        db.rollback()
+        # Don't fail startup - just log the error
 
 
 if __name__ == "__main__":
