@@ -28,6 +28,7 @@ const Campaigns = lazy(() => import('./pages/Campaigns'));
 const PlanningApplications = lazy(() => import('./pages/PlanningApplications'));
 const CampaignCreate = lazy(() => import('./pages/CampaignCreate'));
 const DynamicBusinessSearch = lazy(() => import('./pages/DynamicBusinessSearch'));
+const SimilarBusinessCampaign = lazy(() => import('./pages/SimilarBusinessCampaign'));
 const CompanyListImportCampaign = lazy(() => import('./pages/CompanyListImportCampaign'));
 const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
 const Quotes = lazy(() => import('./pages/Quotes'));
@@ -211,6 +212,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DynamicBusinessSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns/new/similar-business"
+            element={
+              <ProtectedRoute>
+                <SimilarBusinessCampaign />
               </ProtectedRoute>
             }
           />

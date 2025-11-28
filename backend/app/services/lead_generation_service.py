@@ -331,8 +331,97 @@ class LeadGenerationService:
                 company_size_filter = f"5. Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({size_desc})"
                 company_size_rule = f"- Filter by company size: Prioritize {campaign_data.get('company_size_category')} companies ({size_desc})"
             
-            # Render prompt with variables
-            rendered = prompt_service.render_prompt(prompt_obj, {
+            # Check if this is a similar_business campaign
+            prompt_type = campaign_data.get('prompt_type', 'sector_search')
+            print(f"🔍 Prompt type detected: {prompt_type}")
+            if prompt_type == 'similar_business':
+                # Extract reference company name from custom_prompt
+                reference_company = ''
+                custom_prompt = campaign_data.get('custom_prompt', '')
+                print(f"🔍 Custom prompt: {custom_prompt[:100] if custom_prompt else 'None'}")
+                if custom_prompt:
+                    # Extract from "Find businesses similar to X" - improved regex to handle various formats
+                    import re
+                    # Try multiple patterns
+                    patterns = [
+                        r'similar to ([^.]+)',  # "similar to X."
+                        r'similar to ([^.,]+)',  # "similar to X," or "similar to X."
+                        r'similar to (.+?)(?:\.|,|$)',  # "similar to X" (any text until period, comma, or end)
+                    ]
+                    for pattern in patterns:
+                        match = re.search(pattern, custom_prompt, re.IGNORECASE)
+                        if match:
+                            reference_company = match.group(1).strip()
+                            print(f"✅ Extracted reference company: {reference_company}")
+                            break
+                
+                if reference_company:
+                    # Get similar business prompt from database
+                    similar_prompt_obj = await prompt_service.get_prompt(
+                        category=PromptCategory.SIMILAR_BUSINESS.value,
+                        tenant_id=str(self.tenant_id)
+                    )
+                    
+                    if similar_prompt_obj:
+                        # Get company size description
+                        company_size_desc = ""
+                        if campaign_data.get('company_size_category'):
+                            company_size_desc = self._get_company_size_description(campaign_data.get('company_size_category'))
+                        
+                        # Render similar business prompt with variables
+                        rendered = prompt_service.render_prompt(similar_prompt_obj, {
+                            "reference_company": reference_company,
+                            "company_name": tenant_context.get('company_name', ''),
+                            "company_description": tenant_context.get('company_description', ''),
+                            "services": ', '.join(tenant_context.get('services', [])[:5]),
+                            "location": tenant_context.get('location', ''),
+                            "primary_market": tenant_context.get('primary_market', ''),
+                            "is_installation_provider": str(tenant_context.get('is_installation_provider', False)),
+                            "postcode": campaign_data.get('postcode', 'UK'),
+                            "distance_miles": str(campaign_data.get('distance_miles', 50)),
+                            "max_results": str(campaign_data.get('max_results', 20)),
+                            "company_size_category": campaign_data.get('company_size_category', 'Any Size'),
+                            "company_size_description": company_size_desc,
+                            "customer_type": customer_type,
+                            "partner_type": partner_type
+                        })
+                        prompt = rendered['user_prompt']
+                        system_prompt = rendered['system_prompt']
+                        print(f"✅ Using similar business prompt from database for: {reference_company}")
+                    else:
+                        # Fallback to built-in prompt if database prompt not found
+                        print("⚠️ Similar business prompt not found in database, using built-in prompt")
+                        prompt = self._build_similar_business_prompt(campaign_data, tenant_context, sector_data, reference_company)
+                        system_prompt = f"You are a UK business research specialist. Use online sources to find REAL, VERIFIED UK businesses similar to {reference_company}."
+                        print(f"✅ Using built-in similar business prompt for: {reference_company}")
+                else:
+                    # Fallback to regular prompt if reference company not found
+                    print("⚠️ Reference company not found in custom_prompt, using standard prompt")
+                    rendered = prompt_service.render_prompt(prompt_obj, {
+                        "company_name": tenant_context.get('company_name', ''),
+                        "company_description": tenant_context.get('company_description', ''),
+                        "services": ', '.join(tenant_context.get('services', [])[:5]),
+                        "location": tenant_context.get('location', ''),
+                        "primary_market": tenant_context.get('primary_market', ''),
+                        "is_installation_provider": str(tenant_context.get('is_installation_provider', False)),
+                        "sector_name": sector_data.get('sector_name', ''),
+                        "sector_description": sector_data.get('sector_description', ''),
+                        "postcode": campaign_data.get('postcode', 'UK'),
+                        "distance_miles": str(campaign_data.get('distance_miles', 50)),
+                        "prompt_type": campaign_data.get('prompt_type', 'sector_search'),
+                        "max_results": str(campaign_data.get('max_results', 20)),
+                        "company_size_category": campaign_data.get('company_size_category', 'Any Size'),
+                        "example_keywords": sector_data.get('example_keywords', 'Industry-specific keywords'),
+                        "customer_type": customer_type,
+                        "partner_type": partner_type,
+                        "company_size_filter": company_size_filter,
+                        "company_size_rule": company_size_rule
+                    })
+                    prompt = rendered['user_prompt']
+                    system_prompt = rendered['system_prompt']
+            else:
+                # Render prompt with variables for regular campaigns
+                rendered = prompt_service.render_prompt(prompt_obj, {
                 "company_name": tenant_context.get('company_name', ''),
                 "company_description": tenant_context.get('company_description', ''),
                 "services": ', '.join(tenant_context.get('services', [])[:5]),

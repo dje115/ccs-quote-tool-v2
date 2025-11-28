@@ -20,6 +20,7 @@ class PromptCategory(str, enum.Enum):
     ACTIVITY_ENHANCEMENT = "activity_enhancement"
     ACTION_SUGGESTIONS = "action_suggestions"
     LEAD_GENERATION = "lead_generation"
+    SIMILAR_BUSINESS = "similar_business"
     COMPETITOR_ANALYSIS = "competitor_analysis"
     FINANCIAL_ANALYSIS = "financial_analysis"
     PLANNING_ANALYSIS = "planning_analysis"

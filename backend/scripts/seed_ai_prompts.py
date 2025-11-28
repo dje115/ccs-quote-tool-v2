@@ -1087,6 +1087,187 @@ Return only valid JSON in this structure:
     else:
         print("⏭️  lead_generation prompt already exists")
     
+    # 10b. Similar Business Lookup Prompt
+    similar_business_prompt_template = """You are a UK business research specialist with access to live web search. 
+Find REAL, VERIFIED UK businesses that are SIMILAR to the reference company: {reference_company}
+Return ONLY valid JSON matching the schema provided — do not include explanations or text outside the JSON.
+
+---
+
+## CONTEXT:
+Company: {company_name}
+Description: {company_description}
+Services: {services}
+Location: {location}
+Primary Market: {primary_market}
+Installation Provider: {is_installation_provider}
+
+Reference Company: {reference_company}
+Search Area: {postcode} (within {distance_miles} miles)
+Maximum Results: {max_results}
+{f"Target Company Size: {company_size_category}" if company_size_category and company_size_category != 'Any Size' else "Target Company Size: Any Size (but prioritize similar sizes)"}
+
+---
+
+## OBJECTIVE
+Find {max_results} REAL UK businesses that are SIMILAR to {reference_company}.
+Similarity should be based on:
+- Similar business activities and industry sector
+- Similar company size and market position (within 40% smaller to 40% larger range)
+- Similar business model or service offerings
+- Similar target market or customer base
+- Competitive landscape (include all competitors regardless of size)
+
+IMPORTANT: You MUST provide actual UK businesses. Do not return an empty results array.
+Focus on businesses within {distance_miles} miles of {postcode}.
+
+---
+
+## SIZE RANGE REQUIREMENTS
+When determining company size similarity:
+- Include businesses that are **up to 40% smaller** than {reference_company}
+- Include businesses that are **up to 40% larger** than {reference_company}
+- Include businesses that are **close in size** to {reference_company}
+- **ALSO include ALL competitors** regardless of size (small, medium, large, enterprise)
+- Size comparison should consider: employee count, revenue, market share, operational scale
+
+For example, if {reference_company} has 50 employees:
+- Include companies with 30-70 employees (40% range)
+- Include companies close to 50 employees
+- Include ALL competitors even if they have 10 employees or 500 employees
+
+---
+
+## SEARCH APPROACH
+1. Research {reference_company} to understand their:
+   - Business activities and industry sector
+   - Company size (employees, revenue, market position)
+   - Business model and service offerings
+   - Target market and customer base
+   - Competitive landscape
+
+2. Find UK businesses with similar characteristics:
+   - Similar industry/sector
+   - Similar company size (within 40% range OR close match)
+   - Similar business model
+   - Similar market position
+   - **ALL competitors** (regardless of size)
+
+3. Ensure each company is a real UK business with valid contact information
+4. Prioritize businesses near {postcode}
+{f"5. Filter by company size: Prioritize {company_size_category} companies ({company_size_description})" if company_size_category and company_size_category != 'Any Size' else "5. Include businesses of all sizes, but prioritize those similar in size to {reference_company}"}
+
+---
+
+## DATA TO RETURN
+For each similar business, extract:
+- `company_name` (official name)
+- `website` (URL, or null if not verifiable)
+- `description` (short summary of services and why it's similar to {reference_company}, including size comparison)
+- `contact_phone` (or null)
+- `contact_email` (or null)
+- `postcode`
+- `sector` (business sector)
+- `lead_score` (60–95, based on similarity and relevance)
+- `fit_reason` (why this business is similar to {reference_company}, including size comparison: "Similar size (X employees vs Y employees)" or "Competitor (larger/smaller)")
+- `source_url` (where you found it)
+- `quick_telesales_summary` (2-3 sentences for telesales team explaining the similarity and size relationship)
+- `ai_business_intelligence` (comprehensive analysis, 300+ words, including comparison to {reference_company} and size analysis)
+
+---
+
+## DYNAMIC INSIGHTS TO INCLUDE
+Generate these automatically based on the reference company and similar businesses:
+
+**Recommended Customer Type:**  
+{customer_type}
+
+**Recommended Partner Type:**  
+{partner_type}
+
+---
+
+## OUTPUT FORMAT
+Return only valid JSON in this structure:
+{{
+  "query_area": "{postcode} + {distance_miles} miles",
+  "reference_company": "{reference_company}",
+  "sector": "Similar businesses to {reference_company}",
+  "results": [
+    {{
+      "company_name": "string",
+      "website": "string or null",
+      "description": "string (explain similarity to {reference_company}, including size comparison)",
+      "contact_phone": "string or null",
+      "contact_email": "string or null",
+      "postcode": "string",
+      "lead_score": 60–95,
+      "fit_reason": "string (why similar to {reference_company}, including size: 'Similar size (50 employees vs 45 employees)' or 'Competitor (larger: 200 employees)')",
+      "source_url": "string",
+      "recommended_customer_type": "{customer_type}",
+      "recommended_partner_type": "{partner_type}",
+      "quick_telesales_summary": "string",
+      "ai_business_intelligence": "string"
+    }}
+  ]
+}}
+
+---
+
+## QUALITY RULES
+- Prioritise *real, verifiable businesses* similar to {reference_company}
+- Focus on businesses with similar business activities, size (within 40% range), and market position
+- **Include ALL competitors** regardless of size (small, medium, large, enterprise)
+- Skip duplicates and businesses that are not similar
+- Businesses must be **within {distance_miles} miles of {postcode}**.
+- If fewer than {max_results} similar businesses are found, return only verified ones.
+{f"- Filter by company size: Prioritize {company_size_category} companies ({company_size_description})" if company_size_category and company_size_category != 'Any Size' else "- Include businesses of all sizes, but prioritize those similar in size to {reference_company} (within 40% range)"}
+- Never include fictional examples or template data.
+- Always explain WHY each business is similar to {reference_company} in the description and fit_reason fields.
+- Always include size comparison in fit_reason (e.g., "Similar size: 45 employees vs 50 employees" or "Competitor: Larger with 200 employees")
+- When including competitors, clearly label them as such in fit_reason (e.g., "Direct competitor (larger scale)" or "Market competitor (similar size)")"""
+    
+    similar_business_system = """You are a UK business research specialist with access to live web search. You find businesses similar to a reference company based on industry, size (within 40% range), business model, and market position. You also identify ALL competitors regardless of size. Always return valid JSON matching the schema provided."""
+    
+    existing_similar_business = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.SIMILAR_BUSINESS.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing_similar_business:
+        service.create_prompt(
+            name="Similar Business Lookup - Find Companies Similar to Reference",
+            category=PromptCategory.SIMILAR_BUSINESS.value,
+            system_prompt=similar_business_system,
+            user_prompt_template=similar_business_prompt_template,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=100000,  # High token limit for comprehensive analysis
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "reference_company": "Company name to find similar businesses to",
+                "company_name": "Tenant company name",
+                "company_description": "Tenant company description",
+                "services": "Tenant services (comma-separated)",
+                "location": "Tenant location",
+                "primary_market": "Tenant primary market",
+                "is_installation_provider": "Whether tenant is installation provider (true/false)",
+                "postcode": "UK postcode for search center",
+                "distance_miles": "Search radius in miles",
+                "max_results": "Maximum number of results",
+                "company_size_category": "Target company size (Micro/Small/Medium/Large/Any Size)",
+                "company_size_description": "Description of company size category",
+                "customer_type": "Recommended customer type",
+                "partner_type": "Recommended partner type"
+            },
+            description="Find businesses similar to a reference company, including size range (40% smaller to 40% larger) and all competitors"
+        )
+        print("✅ Created similar_business prompt")
+    else:
+        print("⏭️  similar_business prompt already exists")
+    
     # 11. Company Profile Analysis Prompt (for tenant's own company)
     company_profile_prompt_template = """Analyze the following company profile and provide comprehensive business intelligence:
 
