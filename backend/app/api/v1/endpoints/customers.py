@@ -988,12 +988,14 @@ async def get_customer_health(
             raise HTTPException(status_code=404, detail="Customer not found")
         
         # Use sync session for health service
+        # Skip AI digest generation for faster response (can be requested separately if needed)
         sync_db = SessionLocal()
         try:
             health_service = CustomerHealthService(sync_db, current_user.tenant_id)
             health_data = await health_service.analyze_customer_health(
                 customer_id,
-                days_back=days_back
+                days_back=days_back,
+                include_digest=False  # Skip slow AI digest generation
             )
         finally:
             sync_db.close()

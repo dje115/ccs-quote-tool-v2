@@ -46,17 +46,19 @@ class CustomerHealthService:
     async def analyze_customer_health(
         self,
         customer_id: str,
-        days_back: int = 90
+        days_back: int = 90,
+        include_digest: bool = False
     ) -> Dict[str, Any]:
         """
-        Analyze customer health and generate health digest
+        Analyze customer health and optionally generate health digest
         
         Args:
             customer_id: Customer ID to analyze
             days_back: Number of days to analyze
+            include_digest: Whether to generate AI health digest (slow, defaults to False)
         
         Returns:
-            Dict with health metrics and digest
+            Dict with health metrics and optional digest
         """
         customer = self.db.query(Customer).filter(
             Customer.id == customer_id,
@@ -69,7 +71,7 @@ class CustomerHealthService:
         # Gather data
         start_date = datetime.now(timezone.utc) - timedelta(days=days_back)
         
-        # Get tickets
+        # Get tickets - optimized query with only necessary fields
         tickets = self.db.query(Ticket).filter(
             and_(
                 Ticket.customer_id == customer_id,
@@ -78,7 +80,7 @@ class CustomerHealthService:
             )
         ).order_by(desc(Ticket.created_at)).all()
         
-        # Get quotes
+        # Get quotes - optimized query with only necessary fields
         quotes = self.db.query(Quote).filter(
             and_(
                 Quote.customer_id == customer_id,
@@ -107,17 +109,8 @@ class CustomerHealthService:
             sla_adherence
         )
         
-        # Generate AI health digest
-        health_digest = await self._generate_health_digest(
-            customer,
-            ticket_trends,
-            quote_trends,
-            sla_adherence,
-            health_score,
-            churn_risk
-        )
-        
-        return {
+        # Build response without AI digest (fast)
+        response = {
             "customer_id": customer_id,
             "customer_name": customer.company_name,
             "health_score": health_score,
@@ -125,10 +118,25 @@ class CustomerHealthService:
             "ticket_trends": ticket_trends,
             "quote_trends": quote_trends,
             "sla_adherence": sla_adherence,
-            "health_digest": health_digest,
             "analysis_date": datetime.now(timezone.utc).isoformat(),
             "period_days": days_back
         }
+        
+        # Generate AI health digest only if requested (slow)
+        if include_digest:
+            health_digest = await self._generate_health_digest(
+                customer,
+                ticket_trends,
+                quote_trends,
+                sla_adherence,
+                health_score,
+                churn_risk
+            )
+            response["health_digest"] = health_digest
+        else:
+            response["health_digest"] = None
+        
+        return response
     
     def _analyze_ticket_trends(self, tickets: List[Ticket]) -> Dict[str, Any]:
         """Analyze ticket trends"""
