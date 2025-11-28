@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -69,30 +69,86 @@ interface Activity {
   created_at: string;
 }
 
+interface SuggestionBlock {
+  priority: string;
+  reason?: string;
+  talking_points?: string[];
+  best_time?: string;
+  subject?: string;
+  key_topics?: string[];
+  objectives?: string[];
+  timing?: string;
+}
+
 interface ActionSuggestion {
-  call_suggestion?: {
-    priority: string;
-    reason: string;
-    talking_points: string[];
-    best_time: string;
-  };
-  email_suggestion?: {
-    priority: string;
-    reason: string;
-    subject: string;
-    key_topics: string[];
-  };
-  visit_suggestion?: {
-    priority: string;
-    reason: string;
-    objectives: string[];
-    timing: string;
-  };
+  call_suggestion?: SuggestionBlock | null;
+  email_suggestion?: SuggestionBlock | null;
+  visit_suggestion?: SuggestionBlock | null;
 }
 
 interface Props {
   customerId: string;
 }
+
+const normalizeSuggestionBlock = (data: any, type: 'call' | 'email' | 'visit'): SuggestionBlock | null => {
+  if (!data || typeof data !== 'object') return null;
+  const priority = (data.priority || 'medium').toString().toLowerCase();
+  const reason =
+    data.reason ||
+    data.objective ||
+    data.why ||
+    data.context ||
+    '';
+  if (type === 'call') {
+    return {
+      priority,
+      reason,
+      talking_points: data.talking_points || data.key_topics || data.bullet_points || [],
+      best_time: data.best_time || data.timing || data.timeframe || ''
+    };
+  }
+  if (type === 'email') {
+    return {
+      priority,
+      reason,
+      subject: data.subject || data.title || '',
+      key_topics: data.key_topics || data.talking_points || [],
+      best_time: data.best_time || data.timing || ''
+    };
+  }
+  return {
+    priority,
+    reason,
+    objectives: data.objectives || data.talking_points || [],
+    timing: data.timing || data.schedule || ''
+  };
+};
+
+const normalizeSuggestionsPayload = (raw: any): ActionSuggestion | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const callData = normalizeSuggestionBlock(
+    raw.call_suggestion || raw.call || raw.Call || raw.callSuggestion,
+    'call'
+  );
+  const emailData = normalizeSuggestionBlock(
+    raw.email_suggestion || raw.email || raw.Email || raw.emailSuggestion,
+    'email'
+  );
+  const visitData = normalizeSuggestionBlock(
+    raw.visit_suggestion || raw.visit || raw.Visit || raw.meeting || raw.visitSuggestion,
+    'visit'
+  );
+
+  if (!callData && !emailData && !visitData) {
+    return null;
+  }
+
+  return {
+    call_suggestion: callData,
+    email_suggestion: emailData,
+    visit_suggestion: visitData
+  };
+};
 
 const ActivityCenter: React.FC<Props> = ({ customerId }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -113,6 +169,20 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearRefreshTimeout = () => {
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearRefreshTimeout();
+    };
+  }, []);
 
   // Define loadActivities BEFORE useEffect that uses it
   const loadActivities = useCallback(async () => {
@@ -135,10 +205,13 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
       // Load cached suggestions (fast - from database)
       const response = await activityAPI.getActionSuggestions(customerId, false);
       if (response.data.success && response.data.suggestions) {
-        setSuggestions(response.data.suggestions);
+        setSuggestions(normalizeSuggestionsPayload(response.data.suggestions));
+      } else {
+        setSuggestions(null);
       }
     } catch (error) {
       console.error('Error loading suggestions:', error);
+      setSuggestions(null);
     } finally {
       setSuggestionsLoading(false);
     }
@@ -157,6 +230,7 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
       if (event.data.customer_id === customerId) {
         console.log('Suggestions updated via WebSocket, reloading...');
         setSuggestionsRefreshing(false);
+        clearRefreshTimeout();
         loadSuggestions();
         setSuccess('Suggestions updated successfully!');
         setTimeout(() => setSuccess(null), 3000);
@@ -165,35 +239,35 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
 
     return () => {
       unsubscribe();
+      clearRefreshTimeout();
     };
   }, [isConnected, customerId, subscribe, loadSuggestions]);
 
   const refreshSuggestionsBackground = async () => {
     try {
+      clearRefreshTimeout();
       setSuggestionsRefreshing(true);
       setSuccess('AI is generating new suggestions in the background. Please wait...');
       
       // Queue the background task
       await activityAPI.refreshSuggestionsBackground(customerId);
       
-      // WebSocket will notify us when suggestions are updated
-      // Set a timeout as fallback in case WebSocket doesn't work
-      const timeoutId = setTimeout(() => {
-        if (suggestionsRefreshing) {
-          setSuggestionsRefreshing(false);
-          setError('Suggestion refresh is taking longer than expected. Please refresh the page in a moment.');
-          setTimeout(() => setError(null), 5000);
-        }
-      }, 60000);
-      
-      // Store timeout ID for cleanup
-      return () => clearTimeout(timeoutId);
+      // WebSocket will notify us when suggestions are updated.
+      // Set a timeout as fallback in case WebSocket doesn't work.
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        setSuggestionsRefreshing(false);
+        loadSuggestions();
+        setError('Suggestion refresh took longer than expected. Latest data has been reloaded.');
+        setTimeout(() => setError(null), 5000);
+        clearRefreshTimeout();
+      }, 45000);
       
     } catch (error) {
       console.error('Error refreshing suggestions:', error);
       setError('Failed to queue suggestion refresh');
       setSuggestionsRefreshing(false);
       setTimeout(() => setError(null), 5000);
+      clearRefreshTimeout();
     }
   };
 
@@ -272,6 +346,17 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
   const ActionBanner: React.FC<{ title: string; icon: React.ReactNode; color: string; data: any; type: 'call' | 'email' | 'visit' }> = ({ title, icon, color, data, type }) => {
     if (!data) return null;
 
+    const bulletList = (items?: string[]) => (
+      <List dense>
+        {items?.map((item: string, idx: number) => (
+          <ListItem key={`${title}-${idx}`}>
+            <ListItemIcon sx={{ minWidth: 30 }}>-</ListItemIcon>
+            <ListItemText primary={item} />
+          </ListItem>
+        ))}
+      </List>
+    );
+
     return (
       <Card sx={{ mb: 2, borderLeft: 4, borderColor: `${color}.main`, bgcolor: `${color}.50` }}>
         <CardContent>
@@ -282,71 +367,54 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
                 {title}
               </Typography>
             </Box>
-            <Chip 
-              label={`${data.priority.toUpperCase()} PRIORITY`} 
-              color={getPriorityColor(data.priority)} 
-              size="small" 
+            <Chip
+              label={`${data.priority?.toUpperCase() || 'MEDIUM'} PRIORITY`}
+              color={getPriorityColor(data.priority || 'medium')}
+              size="small"
             />
           </Box>
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            <strong>Why:</strong> {data.reason}
+            <strong>Why:</strong> {data.reason || 'Not provided yet.'}
           </Typography>
 
           {type === 'call' && (
             <>
               <Typography variant="subtitle2" gutterBottom>
-                📋 Talking Points:
+                Talking Points:
               </Typography>
-              <List dense>
-                {data.talking_points?.map((point: string, idx: number) => (
-                  <ListItem key={idx}>
-                    <ListItemIcon sx={{ minWidth: 30 }}>•</ListItemIcon>
-                    <ListItemText primary={point} />
-                  </ListItem>
-                ))}
-              </List>
-              <Typography variant="caption" color="text.secondary">
-                💡 Best time: {data.best_time}
-              </Typography>
+              {bulletList(data.talking_points)}
+              {data.best_time && (
+                <Typography variant="caption" color="text.secondary">
+                  Best time: {data.best_time}
+                </Typography>
+              )}
             </>
           )}
 
           {type === 'email' && (
             <>
               <Typography variant="subtitle2" gutterBottom>
-                ✉️ Suggested Subject: <em>{data.subject}</em>
+                Suggested Subject: <em>{data.subject || 'TBC'}</em>
               </Typography>
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 1 }}>
-                📋 Key Topics:
+                Key Topics:
               </Typography>
-              <List dense>
-                {data.key_topics?.map((topic: string, idx: number) => (
-                  <ListItem key={idx}>
-                    <ListItemIcon sx={{ minWidth: 30 }}>•</ListItemIcon>
-                    <ListItemText primary={topic} />
-                  </ListItem>
-                ))}
-              </List>
+              {bulletList(data.key_topics)}
             </>
           )}
 
           {type === 'visit' && (
             <>
               <Typography variant="subtitle2" gutterBottom>
-                🎯 Objectives:
+                Objectives:
               </Typography>
-              <List dense>
-                {data.objectives?.map((obj: string, idx: number) => (
-                  <ListItem key={idx}>
-                    <ListItemIcon sx={{ minWidth: 30 }}>•</ListItemIcon>
-                    <ListItemText primary={obj} />
-                  </ListItem>
-                ))}
-              </List>
-              <Typography variant="caption" color="text.secondary">
-                ⏰ Timing: {data.timing}
-              </Typography>
+              {bulletList(data.objectives)}
+              {data.timing && (
+                <Typography variant="caption" color="text.secondary">
+                  Timing: {data.timing}
+                </Typography>
+              )}
             </>
           )}
 
@@ -359,11 +427,12 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
               setNewActivity({
                 ...newActivity,
                 activity_type: type === 'visit' ? 'meeting' : type,
-                notes: type === 'call' 
-                  ? `Call planned. Talking points:\n${data.talking_points?.join('\n') || ''}`
-                  : type === 'email'
-                  ? `Email to send: ${data.subject}\n\nTopics:\n${data.key_topics?.join('\n') || ''}`
-                  : `Visit planned. Objectives:\n${data.objectives?.join('\n') || ''}`
+                notes:
+                  type === 'call'
+                    ? `Call planned. Talking points:\n${data.talking_points?.join('\n') || ''}`
+                    : type === 'email'
+                    ? `Email to send: ${data.subject}\n\nTopics:\n${data.key_topics?.join('\n') || ''}`
+                    : `Visit planned. Objectives:\n${data.objectives?.join('\n') || ''}`
               });
               setShowDialog(true);
             }}
@@ -374,6 +443,7 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
       </Card>
     );
   };
+
 
   return (
     <Box sx={{ p: 3 }}>
@@ -671,4 +741,3 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
 };
 
 export default ActivityCenter;
-

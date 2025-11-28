@@ -20,15 +20,27 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Stack,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ToggleButtonGroup,
+  ToggleButton
 } from '@mui/material';
 import {
   Add as AddIcon,
   Visibility as ViewIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  CheckCircle as CheckIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { quoteAPI } from '../services/api';
+import { quoteAPI, customerAPI } from '../services/api';
 import { Quote, PaginatedQuoteResponse } from '../types';
 
 const Quotes: React.FC = () => {
@@ -40,6 +52,23 @@ const Quotes: React.FC = () => {
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [manualCustomers, setManualCustomers] = useState<any[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    customer_id: '',
+    title: '',
+    description: ''
+  });
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualCustomerMode, setManualCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [newManualCustomer, setNewManualCustomer] = useState({
+    company_name: '',
+    main_email: '',
+    main_phone: '',
+    website: ''
+  });
 
   useEffect(() => {
     loadQuotes();
@@ -104,6 +133,77 @@ const Quotes: React.FC = () => {
     }
   };
 
+  const handleManualQuoteClick = () => {
+    setManualDialogOpen(true);
+    setManualError(null);
+    setManualCustomerMode('existing');
+    if (manualCustomers.length === 0) {
+      loadManualCustomers();
+    }
+  };
+
+  const loadManualCustomers = async () => {
+    try {
+      setManualLoading(true);
+      const response = await customerAPI.list({ limit: 100 });
+      setManualCustomers(response.data || []);
+    } catch (error) {
+      console.error('Error loading customers for manual quote', error);
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  const handleManualCreate = async () => {
+    if (!manualForm.title) {
+      setManualError('Please enter a quote title.');
+      return;
+    }
+    if (manualCustomerMode === 'existing' && !manualForm.customer_id) {
+      setManualError('Please select a customer.');
+      return;
+    }
+    if (manualCustomerMode === 'new' && !newManualCustomer.company_name) {
+      setManualError('Please enter a company name for the new customer.');
+      return;
+    }
+
+    try {
+      setManualSaving(true);
+      setManualError(null);
+      let customerId = manualForm.customer_id;
+
+      if (manualCustomerMode === 'new') {
+        const createResponse = await customerAPI.create({
+          company_name: newManualCustomer.company_name,
+          main_email: newManualCustomer.main_email || undefined,
+          main_phone: newManualCustomer.main_phone || undefined,
+          website: newManualCustomer.website || undefined
+        });
+        customerId = createResponse.data?.id;
+        if (!customerId) {
+          throw new Error('Customer creation failed.');
+        }
+      }
+
+      const response = await quoteAPI.create({
+        customer_id: customerId,
+        title: manualForm.title,
+        description: manualForm.description || undefined
+      });
+      const newQuote = response.data;
+      setManualDialogOpen(false);
+      setManualForm({ customer_id: '', title: '', description: '' });
+      setNewManualCustomer({ company_name: '', main_email: '', main_phone: '', website: '' });
+      navigate(`/quotes/${newQuote.id}?tab=line-items`);
+    } catch (error: any) {
+      console.error('Failed to create manual quote', error);
+      setManualError(error.response?.data?.detail || 'Unable to create quote. Please try again.');
+    } finally {
+      setManualSaving(false);
+    }
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: 3, width: '100%', height: '100%' }}>
       {/* Clean Centered Header */}
@@ -114,12 +214,12 @@ const Quotes: React.FC = () => {
         <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
           Professional Quote Management & Pricing
         </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="center" spacing={2}>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => navigate('/quotes/new')}
-            sx={{ 
+            sx={{
               borderRadius: 2,
               px: 3,
               py: 1.5,
@@ -127,9 +227,23 @@ const Quotes: React.FC = () => {
               textTransform: 'none'
             }}
           >
-            Create Quote
+            AI-Powered Quote
           </Button>
-        </Box>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleManualQuoteClick}
+            sx={{
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              fontWeight: 600,
+              textTransform: 'none'
+            }}
+          >
+            Manual Quote
+          </Button>
+        </Stack>
       </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>
@@ -244,13 +358,142 @@ const Quotes: React.FC = () => {
           />
         )}
       </Box>
+
+      <Dialog
+        open={manualDialogOpen}
+        onClose={() => setManualDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create Manual Quote</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Build a quote line-by-line using the spreadsheet-style editor. Perfect for complex scopes, bundles, and supplier-specific pricing.
+          </Typography>
+          <List dense>
+            {[
+              'Section-based line items with optional & alternate toggles',
+              'Live margin, tax, and total calculations',
+              'Autosave-ready editing connected directly to the CRM'
+            ].map((item, index) => (
+              <ListItem key={index}>
+                <ListItemIcon>
+                  <CheckIcon color="success" />
+                </ListItemIcon>
+                <ListItemText primary={item} />
+              </ListItem>
+            ))}
+          </List>
+          <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ToggleButtonGroup
+              value={manualCustomerMode}
+              exclusive
+              onChange={(_event, value) => {
+                if (value) {
+                  setManualCustomerMode(value);
+                  setManualError(null);
+                }
+              }}
+            >
+              <ToggleButton value="existing" sx={{ flex: 1 }}>
+                Existing Customer
+              </ToggleButton>
+              <ToggleButton value="new" sx={{ flex: 1 }}>
+                New Customer
+              </ToggleButton>
+            </ToggleButtonGroup>
+
+            {manualCustomerMode === 'existing' ? (
+              <FormControl fullWidth>
+                <InputLabel id="manual-customer-label">Customer</InputLabel>
+                <Select
+                  labelId="manual-customer-label"
+                  label="Customer"
+                  value={manualForm.customer_id}
+                  onChange={(event) =>
+                    setManualForm((prev) => ({ ...prev, customer_id: event.target.value as string }))
+                  }
+                  disabled={manualLoading}
+                >
+                  {manualCustomers.map((customer) => (
+                    <MenuItem key={customer.id} value={customer.id}>
+                      {customer.company_name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <>
+                <TextField
+                  label="Company Name"
+                  required
+                  value={newManualCustomer.company_name}
+                  onChange={(event) =>
+                    setNewManualCustomer((prev) => ({ ...prev, company_name: event.target.value }))
+                  }
+                />
+                <TextField
+                  label="Contact Email"
+                  type="email"
+                  value={newManualCustomer.main_email}
+                  onChange={(event) =>
+                    setNewManualCustomer((prev) => ({ ...prev, main_email: event.target.value }))
+                  }
+                />
+                <TextField
+                  label="Phone"
+                  value={newManualCustomer.main_phone}
+                  onChange={(event) =>
+                    setNewManualCustomer((prev) => ({ ...prev, main_phone: event.target.value }))
+                  }
+                />
+                <TextField
+                  label="Website"
+                  value={newManualCustomer.website}
+                  onChange={(event) =>
+                    setNewManualCustomer((prev) => ({ ...prev, website: event.target.value }))
+                  }
+                />
+              </>
+            )}
+            <TextField
+              label="Quote Title"
+              fullWidth
+              value={manualForm.title}
+              onChange={(event) => setManualForm((prev) => ({ ...prev, title: event.target.value }))}
+            />
+            <TextField
+              label="Overview / Notes"
+              fullWidth
+              multiline
+              minRows={3}
+              value={manualForm.description}
+              onChange={(event) =>
+                setManualForm((prev) => ({ ...prev, description: event.target.value }))
+              }
+            />
+            {manualError && (
+              <Typography variant="body2" color="error">
+                {manualError}
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setManualDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleManualCreate}
+            disabled={manualSaving || !manualForm.customer_id || !manualForm.title}
+          >
+            {manualSaving ? 'Creating...' : 'Launch Manual Builder'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
 
 export default Quotes;
-
-
-
 
 

@@ -905,41 +905,19 @@ Return only valid JSON in this structure:
     def _fix_malformed_json(self, json_text: str) -> str:
         """
         Attempt to fix malformed JSON by finding the end of the last complete object/array
+        Handles unterminated strings, incomplete objects, and other common JSON issues
         """
         try:
-            # Look for common JSON termination issues and try to fix them
             original_text = json_text
             
-            # Method 1: Find the last complete } or ] before the error
-            if '"results"' in json_text:
-                # Try to find the closing of the results array
-                results_start = json_text.find('"results": [')
-                if results_start != -1:
-                    results_start = json_text.find('[', results_start)
-                    bracket_count = 0
-                    pos = results_start
-                    
-                    while pos < len(json_text):
-                        if json_text[pos] == '[':
-                            bracket_count += 1
-                        elif json_text[pos] == ']':
-                            bracket_count -= 1
-                            if bracket_count == 0:
-                                # Found end of results array, truncate there
-                                end_pos = pos + 1
-                                # Find the end of the main object
-                                while end_pos < len(json_text) and json_text[end_pos] not in ['\n', '\r']:
-                                    if json_text[end_pos] == '}':
-                                        return json_text[:end_pos + 1] + '}'
-                                    end_pos += 1
-                                return json_text[:pos + 1] + '}'
-                        pos += 1
-            
-            # Method 2: Find the last complete object by counting braces
+            # Method 1: Try to fix unterminated strings by finding the last complete object
+            # Track string state, braces, and brackets
             brace_count = 0
+            bracket_count = 0
             last_valid_pos = -1
             in_string = False
             escape_next = False
+            string_start_pos = -1
             
             for i, char in enumerate(json_text):
                 if escape_next:
@@ -951,35 +929,290 @@ Return only valid JSON in this structure:
                     continue
                     
                 if char == '"' and not escape_next:
+                    if not in_string:
+                        string_start_pos = i
                     in_string = not in_string
+                    continue
                     
                 if not in_string:
                     if char == '{':
                         brace_count += 1
                     elif char == '}':
                         brace_count -= 1
-                        if brace_count == 0:
+                        if brace_count == 0 and bracket_count == 0:
+                            last_valid_pos = i
+                    elif char == '[':
+                        bracket_count += 1
+                    elif char == ']':
+                        bracket_count -= 1
+                        if brace_count == 0 and bracket_count == 0:
                             last_valid_pos = i
             
+            # If we found a complete object/array, use it
             if last_valid_pos > 0:
-                return json_text[:last_valid_pos + 1]
+                fixed = json_text[:last_valid_pos + 1]
+                # Try to parse to verify it's valid
+                try:
+                    json.loads(fixed)
+                    return fixed
+                except:
+                    pass
+            
+            # Method 2: If we're in an unterminated string, try to close it and truncate
+            if in_string and string_start_pos > 0:
+                # Find the last complete object before the unterminated string
+                # Go back from string start to find last complete structure
+                for i in range(string_start_pos - 1, -1, -1):
+                    if json_text[i] == '}':
+                        # Check if this is a complete object
+                        test_json = json_text[:i + 1] + '}'
+                        try:
+                            json.loads(test_json)
+                            return test_json
+                        except:
+                            pass
+            
+            # Method 3: Try to find and close the results array specifically
+            if '"results"' in json_text:
+                results_start = json_text.find('"results": [')
+                if results_start != -1:
+                    array_start = json_text.find('[', results_start)
+                    if array_start != -1:
+                        # Find the last complete object in the results array
+                        bracket_count = 1
+                        last_complete_obj_end = -1
+                        in_string = False
+                        escape_next = False
+                        
+                        for i in range(array_start + 1, len(json_text)):
+                            if escape_next:
+                                escape_next = False
+                                continue
+                                
+                            if json_text[i] == '\\' and in_string:
+                                escape_next = True
+                                continue
+                                
+                            if json_text[i] == '"' and not escape_next:
+                                in_string = not in_string
+                                continue
+                                
+                            if not in_string:
+                                if json_text[i] == '{':
+                                    # Find the end of this object
+                                    obj_brace_count = 1
+                                    obj_in_string = False
+                                    obj_escape_next = False
+                                    
+                                    for j in range(i + 1, len(json_text)):
+                                        if obj_escape_next:
+                                            obj_escape_next = False
+                                            continue
+                                            
+                                        if json_text[j] == '\\' and obj_in_string:
+                                            obj_escape_next = True
+                                            continue
+                                            
+                                        if json_text[j] == '"' and not obj_escape_next:
+                                            obj_in_string = not obj_in_string
+                                            continue
+                                            
+                                        if not obj_in_string:
+                                            if json_text[j] == '{':
+                                                obj_brace_count += 1
+                                            elif json_text[j] == '}':
+                                                obj_brace_count -= 1
+                                                if obj_brace_count == 0:
+                                                    last_complete_obj_end = j
+                                                    break
+                                elif json_text[i] == ']':
+                                    # Close the array and object
+                                    if last_complete_obj_end > 0:
+                                        # Build valid JSON: close array, then object
+                                        fixed = json_text[:last_complete_obj_end + 1]
+                                        # Close array and main object
+                                        fixed += ']'
+                                        # Find the opening brace of the main object
+                                        main_obj_start = json_text.find('{')
+                                        if main_obj_start != -1:
+                                            fixed += '}'
+                                            try:
+                                                json.loads(fixed)
+                                                return fixed
+                                            except:
+                                                pass
+                                    break
+            
+            # Method 4: Try to extract just the results array with partial objects
+            # This is a last resort - extract what we can
+            if '"results"' in json_text:
+                results_start = json_text.find('"results": [')
+                if results_start != -1:
+                    # Try to extract complete objects from the array
+                    array_start = json_text.find('[', results_start)
+                    if array_start != -1:
+                        # Find all complete objects in the array
+                        objects = []
+                        current_obj_start = -1
+                        brace_count = 0
+                        in_string = False
+                        escape_next = False
+                        
+                        for i in range(array_start + 1, len(json_text)):
+                            if escape_next:
+                                escape_next = False
+                                continue
+                                
+                            if json_text[i] == '\\' and in_string:
+                                escape_next = True
+                                continue
+                                
+                            if json_text[i] == '"' and not escape_next:
+                                in_string = not in_string
+                                continue
+                                
+                            if not in_string:
+                                if json_text[i] == '{':
+                                    if brace_count == 0:
+                                        current_obj_start = i
+                                    brace_count += 1
+                                elif json_text[i] == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0 and current_obj_start != -1:
+                                        # Found a complete object
+                                        obj_text = json_text[current_obj_start:i + 1]
+                                        try:
+                                            json.loads(obj_text)
+                                            objects.append(obj_text)
+                                        except:
+                                            pass
+                                        current_obj_start = -1
+                                elif json_text[i] == ']' and brace_count == 0:
+                                    # End of array
+                                    break
+                        
+                        # If we found any complete objects, build valid JSON
+                        if objects:
+                            results_json = '[' + ','.join(objects) + ']'
+                            # Find the main object structure
+                            main_obj_start = json_text.find('{')
+                            if main_obj_start != -1:
+                                # Build the complete JSON
+                                fixed = json_text[:main_obj_start + 1]
+                                # Add query_area and sector if they exist
+                                if '"query_area"' in json_text[:results_start]:
+                                    query_match = re.search(r'"query_area"\s*:\s*"([^"]*)"', json_text[:results_start])
+                                    if query_match:
+                                        fixed = '{' + f'"query_area": "{query_match.group(1)}", '
+                                if '"sector"' in json_text[:results_start]:
+                                    sector_match = re.search(r'"sector"\s*:\s*"([^"]*)"', json_text[:results_start])
+                                    if sector_match:
+                                        if '"query_area"' not in fixed:
+                                            fixed = '{'
+                                        else:
+                                            fixed = fixed.rstrip(', ') + ', '
+                                        fixed += f'"sector": "{sector_match.group(1)}", '
+                                fixed += f'"results": {results_json}}}'
+                                try:
+                                    json.loads(fixed)
+                                    return fixed
+                                except:
+                                    pass
                 
             return original_text
             
         except Exception as e:
             print(f"⚠️ Error in _fix_malformed_json: {e}")
+            import traceback
+            traceback.print_exc()
             return json_text
     
     def _extract_json_from_response(self, response_text: str) -> Optional[Any]:
         """
         Fallback method to extract JSON from malformed responses
+        Uses regex and pattern matching to extract valid JSON portions
         """
         try:
-            # Look for the JSON structure and try to extract it
             import re
             
-            # Try to find JSON object boundaries
-            json_match = re.search(r'\{.*"results".*\[.*\].*\}', response_text, re.DOTALL)
+            # Method 1: Try to extract complete objects from the results array
+            # Find the results array start
+            results_match = re.search(r'"results"\s*:\s*\[', response_text)
+            if results_match:
+                array_start_pos = results_match.end() - 1  # Position of '['
+                
+                # Extract all complete JSON objects from the array
+                objects = []
+                current_pos = array_start_pos + 1
+                brace_count = 0
+                in_string = False
+                escape_next = False
+                obj_start = -1
+                
+                i = current_pos
+                while i < len(response_text):
+                    if escape_next:
+                        escape_next = False
+                        i += 1
+                        continue
+                        
+                    if response_text[i] == '\\' and in_string:
+                        escape_next = True
+                        i += 1
+                        continue
+                        
+                    if response_text[i] == '"' and not escape_next:
+                        in_string = not in_string
+                        i += 1
+                        continue
+                        
+                    if not in_string:
+                        if response_text[i] == '{':
+                            if brace_count == 0:
+                                obj_start = i
+                            brace_count += 1
+                        elif response_text[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0 and obj_start != -1:
+                                # Found a complete object
+                                obj_text = response_text[obj_start:i + 1]
+                                try:
+                                    obj = json.loads(obj_text)
+                                    objects.append(obj)
+                                except:
+                                    pass
+                                obj_start = -1
+                        elif response_text[i] == ']' and brace_count == 0:
+                            # End of array
+                            break
+                    i += 1
+                
+                # If we found any complete objects, build a valid response
+                if objects:
+                    # Extract metadata from the response
+                    query_area = None
+                    sector = None
+                    
+                    query_match = re.search(r'"query_area"\s*:\s*"([^"]*)"', response_text)
+                    if query_match:
+                        query_area = query_match.group(1)
+                    
+                    sector_match = re.search(r'"sector"\s*:\s*"([^"]*)"', response_text)
+                    if sector_match:
+                        sector = sector_match.group(1)
+                    
+                    # Build valid JSON structure
+                    result = {"results": objects}
+                    if query_area:
+                        result["query_area"] = query_area
+                    if sector:
+                        result["sector"] = sector
+                    
+                    print(f"✅ Extracted {len(objects)} complete objects from malformed JSON")
+                    return result
+            
+            # Method 2: Try to find JSON object boundaries with regex (less reliable)
+            json_match = re.search(r'\{[^{}]*"results"[^{}]*\[.*?\][^{}]*\}', response_text, re.DOTALL)
             if json_match:
                 extracted = json_match.group(0)
                 try:
@@ -987,16 +1220,44 @@ Return only valid JSON in this structure:
                 except:
                     pass
             
-            # Try to find just the results array
-            results_match = re.search(r'"results"\s*:\s*\[(.*?)\]', response_text, re.DOTALL)
-            if results_match:
-                results_content = results_match.group(1)
-                # Try to parse each object in the array
-                # This is a simplified approach - would need more robust parsing for real use
-                pass
+            # Method 3: Try to extract individual company objects using pattern matching
+            # Look for company_name patterns which indicate business objects
+            company_pattern = r'\{\s*"company_name"\s*:\s*"([^"]*)"[^}]*\}'
+            company_matches = re.finditer(company_pattern, response_text, re.DOTALL)
+            
+            objects = []
+            for match in company_matches:
+                obj_text = match.group(0)
+                # Try to extend to find the complete object
+                start_pos = match.start()
+                end_pos = match.end()
+                
+                # Look for the closing brace
+                brace_count = obj_text.count('{') - obj_text.count('}')
+                while brace_count > 0 and end_pos < len(response_text):
+                    if response_text[end_pos] == '{':
+                        brace_count += 1
+                    elif response_text[end_pos] == '}':
+                        brace_count -= 1
+                    end_pos += 1
+                
+                if brace_count == 0:
+                    obj_text = response_text[start_pos:end_pos]
+                    try:
+                        obj = json.loads(obj_text)
+                        objects.append(obj)
+                    except:
+                        pass
+            
+            if objects:
+                result = {"results": objects}
+                print(f"✅ Extracted {len(objects)} objects using pattern matching")
+                return result
                 
             return None
             
         except Exception as e:
             print(f"⚠️ Error in _extract_json_from_response: {e}")
+            import traceback
+            traceback.print_exc()
             return None

@@ -31,6 +31,7 @@
             <el-option label="Action Suggestions" value="action_suggestions" />
             <el-option label="Lead Generation" value="lead_generation" />
             <el-option label="Company Profile Analysis" value="company_profile_analysis" />
+            <el-option label="Manual Quote Review" value="manual_quote_review" />
           </el-select>
         </el-form-item>
         <el-form-item>

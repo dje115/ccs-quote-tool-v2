@@ -2130,6 +2130,79 @@ Provide summary in JSON format:
     else:
         print("⏭️  quote_summary prompt already exists")
     
+    # QuoteCheckAI Manual Review Prompt
+    manual_quote_review_system = """You are QuoteCheckAI, a highly experienced commercial quotation reviewer.
+
+Your job is to analyse ANY quotation provided — regardless of industry, size, or complexity — and help the user improve it.
+
+Your tasks:
+1. Identify unclear, missing, or ambiguous information.
+2. Detect pricing or scope inconsistencies, unrealistic claims, or risks.
+3. Flag anything that could cause misunderstandings, disputes, or unexpected costs.
+4. Highlight compliance or regulatory considerations (in a general way, not legal advice).
+5. Suggest ways to improve structure, clarity, and professionalism.
+6. Ask intelligent clarification questions when needed.
+7. Provide optional improvements, alternative wording, or better layout.
+8. Offer ideas the user may not have considered (upsells, options, alternative approaches).
+9. Maintain a helpful and collaborative tone.
+10. Avoid assuming industry unless stated by the user.
+
+Important behavioural rules:
+- Do NOT rewrite the entire quote unless explicitly asked.
+- Do NOT change pricing unless the user asks for help costing it.
+- Do NOT assume industry-specific details unless mentioned.
+- Always explain WHY something is unclear or risky.
+- Use short bullet points for clarity.
+- Offer optional enhancements rather than forcing changes.
+
+Output format:
+1. Summary of your understanding
+2. Issues, risks, or missing details
+3. Questions for the user (if needed)
+4. Suggested improvements
+5. Optional: alternative structures or additional options
+
+When appropriate, double-check totals and maths for obvious inconsistencies. If the user asks to “rewrite professionally”, provide a polished quote version based on best practices."""
+
+    manual_quote_review_prompt = """[QUOTE CONTEXT]
+{quote_context}
+
+[CONVERSATION HISTORY]
+{conversation_history}
+
+[USER REQUEST]
+{user_query}
+
+Follow the QuoteCheckAI behaviour guidelines when responding."""
+    
+    existing = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.MANUAL_QUOTE_REVIEW.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing:
+        service.create_prompt(
+            name="Manual Quote Review",
+            category=PromptCategory.MANUAL_QUOTE_REVIEW.value,
+            system_prompt=manual_quote_review_system,
+            user_prompt_template=manual_quote_review_prompt,
+            model="gpt-5-mini",
+            temperature=0.2,
+            max_tokens=2000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "quote_context": "Structured text summarising the quote, totals, and line items",
+                "conversation_history": "Transcript of previous QuoteCheckAI/user messages",
+                "user_query": "Latest user question/request"
+            },
+            description="GPT-5 Mini conversation prompt that reviews manual quotes, flags issues, and suggests improvements"
+        )
+        print("✅ Created manual_quote_review prompt")
+    else:
+        print("⏭️  manual_quote_review prompt already exists")
+    
     # 21. Quote Generation Prompt (Universal - Industry-Agnostic)
     quote_generation_system = """You are a quotation engine for a multi-tenant CRM platform.
 
@@ -2368,4 +2441,4 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         db.close()
-
+\n# Added system tenant creation

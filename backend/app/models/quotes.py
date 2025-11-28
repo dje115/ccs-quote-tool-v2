@@ -22,6 +22,38 @@ class QuoteStatus(enum.Enum):
     CANCELLED = "cancelled"
 
 
+class QuoteApprovalState(enum.Enum):
+    """Approval workflow state"""
+    NOT_REQUIRED = "not_required"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class OrderStatus(enum.Enum):
+    """Customer order status"""
+    DRAFT = "draft"
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETE = "complete"
+    CANCELLED = "cancelled"
+
+
+class PurchaseOrderStatus(enum.Enum):
+    """Supplier purchase order status"""
+    DRAFT = "draft"
+    SENT = "sent"
+    ACKNOWLEDGED = "acknowledged"
+    RECEIVED = "received"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
+ENUM_KWARGS = {
+    "values_callable": lambda enum_cls: [member.value for member in enum_cls]
+}
+
+
 class Quote(BaseModel):
     """Quote model"""
     __tablename__ = "quotes"
@@ -72,7 +104,16 @@ class Quote(BaseModel):
     estimated_cost = Column(Numeric(10, 2), nullable=True)
     
     # Status and dates
-    status = Column(Enum(QuoteStatus), default=QuoteStatus.DRAFT, nullable=False)
+    status = Column(Enum(QuoteStatus, **ENUM_KWARGS), default=QuoteStatus.DRAFT, nullable=False)
+    approval_state = Column(Enum(QuoteApprovalState, **ENUM_KWARGS), default=QuoteApprovalState.NOT_REQUIRED, nullable=False)
+    manual_mode = Column(Boolean, default=False, nullable=False)
+    version_number = Column(Integer, default=1, nullable=False)
+    parent_quote_id = Column(String(36), ForeignKey("quotes.id"), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancel_reason = Column(Text, nullable=True)
     valid_until = Column(DateTime(timezone=True), nullable=True)
     
     # Pricing
@@ -110,6 +151,9 @@ class Quote(BaseModel):
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     created_by_user = relationship("User", foreign_keys=[created_by])
     documents = relationship("QuoteDocument", back_populates="quote", cascade="all, delete-orphan")
+    parent_quote = relationship("Quote", remote_side=[id], backref="child_versions")
+    workflow_logs = relationship("QuoteWorkflowLog", back_populates="quote", cascade="all, delete-orphan")
+    customer_order = relationship("CustomerOrder", back_populates="quote", uselist=False)
     
     def __repr__(self):
         return f"<Quote {self.quote_number} - {self.title}>"
@@ -131,13 +175,28 @@ class QuoteItem(BaseModel):
     # Item details
     description = Column(Text, nullable=False)
     category = Column(String(100), nullable=True)
+    item_type = Column(String(50), default="standard", nullable=False)
+    unit_type = Column(String(50), default="each", nullable=False)
+    section_name = Column(String(255), nullable=True)
     
     # Pricing
     quantity = Column(Numeric(10, 2), default=1, nullable=False)
+    unit_cost = Column(Numeric(10, 2), default=0, nullable=True)
     unit_price = Column(Numeric(10, 2), nullable=False)
     discount_rate = Column(Float, default=0, nullable=False)
     discount_amount = Column(Numeric(10, 2), default=0, nullable=False)
     total_price = Column(Numeric(10, 2), nullable=False)
+    margin_percent = Column(Float, default=0, nullable=True)
+    tax_rate = Column(Float, default=0, nullable=True)
+    
+    # Supplier / configuration details
+    supplier_id = Column(String(36), ForeignKey("suppliers.id"), nullable=True)
+    is_optional = Column(Boolean, default=False, nullable=False)
+    is_alternate = Column(Boolean, default=False, nullable=False)
+    alternate_group = Column(String(36), nullable=True)
+    bundle_parent_id = Column(String(36), nullable=True)
+    # Column name remains "metadata" in DB; attribute renamed to avoid SQLAlchemy reserved word
+    item_metadata = Column("metadata", JSON, nullable=True, default=dict)
     
     # Additional details
     notes = Column(Text, nullable=True)
@@ -209,3 +268,57 @@ class PricingItem(BaseModel):
     
     def __repr__(self):
         return f"<PricingItem {self.name}>"
+
+
+class QuoteWorkflowLog(BaseModel):
+    """Workflow transition history"""
+    __tablename__ = "quote_workflow_log"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    quote_id = Column(String(36), ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False, index=True)
+    from_status = Column(String(20), nullable=True)
+    to_status = Column(String(20), nullable=True)
+    action = Column(String(50), nullable=True)
+    comment = Column(Text, nullable=True)
+    workflow_metadata = Column("metadata", JSON, nullable=True, default=dict)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    quote = relationship("Quote", back_populates="workflow_logs")
+
+
+class CustomerOrder(BaseModel):
+    """Customer order generated from accepted quote"""
+    __tablename__ = "customer_orders"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    quote_id = Column(String(36), ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False, unique=True)
+    status = Column(Enum(OrderStatus, **ENUM_KWARGS), default=OrderStatus.DRAFT, nullable=False)
+    customer_po_number = Column(String(100), nullable=True)
+    internal_order_number = Column(String(100), nullable=True)
+    billing_address = Column(Text, nullable=True)
+    shipping_address = Column(Text, nullable=True)
+    payment_terms = Column(Text, nullable=True)
+    deposit_required = Column(Numeric(10, 2), nullable=True)
+    total_amount = Column(Numeric(12, 2), nullable=True)
+    order_metadata = Column("metadata", JSON, nullable=True, default=dict)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    quote = relationship("Quote", back_populates="customer_order")
+    purchase_orders = relationship("SupplierPurchaseOrder", back_populates="customer_order", cascade="all, delete-orphan")
+
+
+class SupplierPurchaseOrder(BaseModel):
+    """Purchase orders raised to suppliers for a customer order"""
+    __tablename__ = "supplier_purchase_orders"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_order_id = Column(String(36), ForeignKey("customer_orders.id", ondelete="CASCADE"), nullable=True, index=True)
+    supplier_id = Column(String(36), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(Enum(PurchaseOrderStatus, **ENUM_KWARGS), default=PurchaseOrderStatus.DRAFT, nullable=False)
+    po_number = Column(String(100), nullable=True)
+    expected_date = Column(DateTime(timezone=True), nullable=True)
+    total_cost = Column(Numeric(12, 2), nullable=True)
+    purchase_metadata = Column("metadata", JSON, nullable=True, default=dict)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    customer_order = relationship("CustomerOrder", back_populates="purchase_orders")

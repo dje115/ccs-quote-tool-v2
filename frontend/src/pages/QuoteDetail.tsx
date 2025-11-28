@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Container,
   Paper,
@@ -16,7 +16,16 @@ import {
   Tab,
   List,
   ListItem,
-  ListItemText
+  ListItemText,
+  Stepper,
+  Step,
+  StepLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Stack
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -30,6 +39,7 @@ import QuoteAICopilot from '../components/QuoteAICopilot';
 import QuoteDocumentViewer from '../components/QuoteDocumentViewer';
 import QuoteDocumentEditor from '../components/QuoteDocumentEditor';
 import QuotePromptManager from '../components/QuotePromptManager';
+import ManualQuoteBuilder from '../components/ManualQuoteBuilder';
 
 const QuoteDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +50,34 @@ const QuoteDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState(0);
   const [editingDocument, setEditingDocument] = useState<string | null>(null);
+  const [workflowLog, setWorkflowLog] = useState<any[]>([]);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [statusDialog, setStatusDialog] = useState<{ open: boolean; status: string | null; label: string }>({ open: false, status: null, label: '' });
+  const [statusComment, setStatusComment] = useState('');
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const TAB_INDEX = {
+    OVERVIEW: 0,
+    LINE_ITEMS: 1,
+    PROJECT_DETAILS: 2,
+    DOCUMENTS: 3,
+    AI_ANALYSIS: 4,
+    PRICING: 5,
+    ORDERS: 6,
+    WORKFLOW: 7,
+    AI_PROMPT: 8
+  } as const;
+  const workflowTabIndex = TAB_INDEX.WORKFLOW;
+  const tabLabels = [
+    'Overview',
+    'Line Items',
+    'Project Details',
+    'Documents',
+    'AI Analysis',
+    'Pricing',
+    'Orders',
+    'Workflow',
+    'AI Prompt'
+  ];
 
   useEffect(() => {
     if (id) {
@@ -49,8 +87,19 @@ const QuoteDetail: React.FC = () => {
       const tabParam = searchParams.get('tab');
       const editParam = searchParams.get('edit');
       
-      if (tabParam === 'documents') {
-        setCurrentTab(2); // Documents tab is index 2
+      if (tabParam) {
+        const normalized = tabParam.toLowerCase();
+        const tabMap: Record<string, number> = {
+          documents: TAB_INDEX.DOCUMENTS,
+          'line-items': TAB_INDEX.LINE_ITEMS,
+          workflow: TAB_INDEX.WORKFLOW,
+          pricing: TAB_INDEX.PRICING,
+          orders: TAB_INDEX.ORDERS,
+          'ai-prompt': TAB_INDEX.AI_PROMPT
+        };
+        if (tabMap[normalized] !== undefined) {
+          setCurrentTab(tabMap[normalized]);
+        }
       }
       
       if (editParam) {
@@ -70,6 +119,95 @@ const QuoteDetail: React.FC = () => {
       setError(error.response?.data?.detail || 'Failed to load quote');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadWorkflowLog = async () => {
+    if (!id) return;
+    try {
+      setWorkflowLoading(true);
+      const response = await quoteAPI.getWorkflowLog(id);
+      setWorkflowLog(response.data || []);
+    } catch (error) {
+      console.error('Error loading workflow log:', error);
+    } finally {
+      setWorkflowLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentTab === workflowTabIndex && id) {
+      loadWorkflowLog();
+    }
+  }, [currentTab, id]);
+
+  const normalizedStatus = (quote?.status || 'draft').toLowerCase();
+
+  const statusTimeline = useMemo(() => ['draft', 'sent', 'viewed', 'accepted'], []);
+  const currentStepIndex = Math.max(statusTimeline.indexOf(normalizedStatus), 0);
+
+  const statusActions = useMemo(
+    () => [
+      { label: 'Send Quote', status: 'sent', color: 'primary', description: 'Mark the quote as sent to the customer', visible: normalizedStatus === 'draft' },
+      { label: 'Mark Viewed', status: 'viewed', color: 'info', description: 'Track when the customer viewed the proposal', visible: normalizedStatus === 'sent' },
+      { label: 'Mark Accepted', status: 'accepted', color: 'success', description: 'Customer has approved the quote', visible: ['sent', 'viewed'].includes(normalizedStatus) },
+      { label: 'Mark Rejected', status: 'rejected', color: 'warning', description: 'Customer has declined the quote', visible: ['sent', 'viewed'].includes(normalizedStatus) },
+      { label: 'Cancel Quote', status: 'cancelled', color: 'error', description: 'Withdraw this quote from circulation', visible: ['draft', 'sent', 'viewed'].includes(normalizedStatus) }
+    ],
+    [normalizedStatus]
+  );
+
+  const handleTotalsUpdate = (totals: { subtotal: number; tax_rate?: number; tax_amount?: number; total_amount?: number }) => {
+    setQuote((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        subtotal: totals.subtotal ?? prev.subtotal,
+        tax_rate: totals.tax_rate ?? prev.tax_rate,
+        tax_amount: totals.tax_amount ?? prev.tax_amount,
+        total_amount: totals.total_amount ?? prev.total_amount
+      };
+    });
+  };
+
+  const openStatusDialog = (status: string, label: string) => {
+    setStatusComment('');
+    setStatusDialog({ open: true, status, label });
+  };
+
+  const closeStatusDialog = () => {
+    setStatusDialog({ open: false, status: null, label: '' });
+  };
+
+  const handleStatusSubmit = async () => {
+    if (!statusDialog.status || !id) return;
+    try {
+      setStatusUpdating(true);
+      const response = await quoteAPI.changeStatus(id, {
+        status: statusDialog.status,
+        comment: statusComment || undefined,
+        action: statusDialog.label
+      });
+      const data = response.data;
+      setQuote((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: data.status,
+          approval_state: data.approval_state,
+          sent_at: data.sent_at,
+          accepted_at: data.accepted_at,
+          rejected_at: data.rejected_at,
+          cancelled_at: data.cancelled_at
+        };
+      });
+      await loadWorkflowLog();
+      closeStatusDialog();
+    } catch (err: any) {
+      console.error('Error changing status:', err);
+      alert(err.response?.data?.detail || 'Failed to update status');
+    } finally {
+      setStatusUpdating(false);
     }
   };
 
@@ -109,16 +247,13 @@ const QuoteDetail: React.FC = () => {
       </Box>
 
       <Paper sx={{ p: 3 }}>
-        <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)} sx={{ mb: 3 }}>
-          <Tab label="Overview" />
-          <Tab label="Project Details" />
-          <Tab label="Documents" />
-          <Tab label="AI Analysis" />
-          <Tab label="Pricing" />
-          <Tab label="AI Prompt" />
+        <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)} sx={{ mb: 3 }} variant="scrollable" scrollButtons="auto">
+          {tabLabels.map((label) => (
+            <Tab key={label} label={label} />
+          ))}
         </Tabs>
 
-        {currentTab === 0 && (
+        {currentTab === TAB_INDEX.OVERVIEW && (
           <Box>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -173,7 +308,17 @@ const QuoteDetail: React.FC = () => {
           </Box>
         )}
 
-        {currentTab === 1 && (
+        {currentTab === TAB_INDEX.LINE_ITEMS && (
+          <ManualQuoteBuilder
+            quoteId={quote.id}
+            initialTaxRate={
+              quote.tax_rate !== undefined && quote.tax_rate !== null ? Number(quote.tax_rate) : undefined
+            }
+            onTotalsChange={handleTotalsUpdate}
+          />
+        )}
+
+        {currentTab === TAB_INDEX.PROJECT_DETAILS && (
           <Box>
             <Typography variant="h6" gutterBottom>
               Project Details
@@ -225,7 +370,7 @@ const QuoteDetail: React.FC = () => {
           </Box>
         )}
 
-        {currentTab === 2 && (
+        {currentTab === TAB_INDEX.DOCUMENTS && (
           <Box>
             {editingDocument ? (
               <QuoteDocumentEditor
@@ -246,7 +391,7 @@ const QuoteDetail: React.FC = () => {
           </Box>
         )}
 
-        {currentTab === 3 && (
+        {currentTab === TAB_INDEX.AI_ANALYSIS && (
           <Grid container spacing={3}>
             <Grid item xs={12} md={8}>
               <Box>
@@ -272,7 +417,7 @@ const QuoteDetail: React.FC = () => {
           </Grid>
         )}
 
-        {currentTab === 4 && (
+        {currentTab === TAB_INDEX.PRICING && (
           <Box>
             <Typography variant="h6" gutterBottom>
               Pricing Breakdown
@@ -295,12 +440,223 @@ const QuoteDetail: React.FC = () => {
           </Box>
         )}
 
-        {currentTab === 5 && (
+        {currentTab === TAB_INDEX.ORDERS && (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Customer Order & Supplier POs
+            </Typography>
+            <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h5" fontWeight="bold" gutterBottom>
+                Orders dashboard coming soon
+              </Typography>
+              <Typography variant="body1" color="text.secondary" gutterBottom>
+                Accepted quotes will soon create draft customer orders, supplier purchase orders, and track fulfilment status here.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                For now, convert accepted quotes manually and keep stakeholders synced via the Workflow tab.
+              </Typography>
+            </Paper>
+          </Box>
+        )}
+
+        {currentTab === TAB_INDEX.WORKFLOW && (
+          <Box>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={7}>
+                <Typography variant="h6" gutterBottom>
+                  Lifecycle Progress
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 3 }}>
+                  <Stepper activeStep={currentStepIndex}>
+                    {statusTimeline.map((status, idx) => (
+                      <Step key={status} completed={idx < currentStepIndex}>
+                        <StepLabel sx={{ textTransform: 'capitalize' }}>{status.replace('_', ' ')}</StepLabel>
+                      </Step>
+                    ))}
+                  </Stepper>
+
+                  <Grid container spacing={2} sx={{ mt: 2 }}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Current Status
+                      </Typography>
+                      <Chip
+                        label={normalizedStatus.toUpperCase()}
+                        color={
+                          normalizedStatus === 'accepted'
+                            ? 'success'
+                            : normalizedStatus === 'rejected'
+                              ? 'error'
+                              : 'default'
+                        }
+                        sx={{ mt: 1 }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Approval State
+                      </Typography>
+                      <Typography variant="body1" sx={{ mt: 1, textTransform: 'capitalize' }}>
+                        {quote.approval_state || 'Not set'}
+                      </Typography>
+                    </Grid>
+                    {quote.sent_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Sent At
+                        </Typography>
+                        <Typography variant="body2">{new Date(quote.sent_at).toLocaleString()}</Typography>
+                      </Grid>
+                    )}
+                    {quote.viewed_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Last Viewed
+                        </Typography>
+                        <Typography variant="body2">{new Date(quote.viewed_at).toLocaleString()}</Typography>
+                      </Grid>
+                    )}
+                    {quote.accepted_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Accepted At
+                        </Typography>
+                        <Typography variant="body2">{new Date(quote.accepted_at).toLocaleString()}</Typography>
+                      </Grid>
+                    )}
+                    {quote.rejected_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Rejected At
+                        </Typography>
+                        <Typography variant="body2">{new Date(quote.rejected_at).toLocaleString()}</Typography>
+                      </Grid>
+                    )}
+                    {quote.cancelled_at && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Cancelled At
+                        </Typography>
+                        <Typography variant="body2">{new Date(quote.cancelled_at).toLocaleString()}</Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={5}>
+                <Typography variant="h6" gutterBottom>
+                  Workflow Actions
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 3 }}>
+                  <Stack spacing={2}>
+                    {statusActions.filter((action) => action.visible).length === 0 && (
+                      <Typography variant="body2" color="text.secondary">
+                        No actions available for the current status.
+                      </Typography>
+                    )}
+                    {statusActions
+                      .filter((action) => action.visible)
+                      .map((action) => (
+                        <Box key={action.status} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+                          <Typography variant="subtitle1">{action.label}</Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            {action.description}
+                          </Typography>
+                          <Button
+                            variant="contained"
+                            color={action.color as any}
+                            fullWidth
+                            onClick={() => openStatusDialog(action.status, action.label)}
+                          >
+                            {action.label}
+                          </Button>
+                        </Box>
+                      ))}
+                  </Stack>
+                </Paper>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  Activity Log
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 3 }}>
+                  {workflowLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                      <CircularProgress size={28} />
+                    </Box>
+                  ) : workflowLog.length === 0 ? (
+                    <Alert severity="info">No workflow activity recorded yet.</Alert>
+                  ) : (
+                    <List>
+                      {workflowLog.map((entry: any) => (
+                        <ListItem key={entry.id} alignItems="flex-start" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                          <ListItemText
+                            primary={
+                              <Box display="flex" justifyContent="space-between" alignItems="center">
+                                <Typography variant="subtitle1" sx={{ textTransform: 'capitalize' }}>
+                                  {entry.to_status?.replace('_', ' ') || 'Status update'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {entry.created_at ? new Date(entry.created_at).toLocaleString() : ''}
+                                </Typography>
+                              </Box>
+                            }
+                            secondary={
+                              <>
+                                {entry.action && (
+                                  <Typography variant="body2" color="text.secondary">
+                                    Action: {entry.action}
+                                  </Typography>
+                                )}
+                                {entry.comment && (
+                                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line', mt: 0.5 }}>
+                                    {entry.comment}
+                                  </Typography>
+                                )}
+                              </>
+                            }
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  )}
+                </Paper>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+
+        {currentTab === TAB_INDEX.AI_PROMPT && (
           <Box>
             <QuotePromptManager quoteId={quote.id} />
           </Box>
         )}
       </Paper>
+
+      <Dialog open={statusDialog.open} onClose={closeStatusDialog} fullWidth maxWidth="sm">
+        <DialogTitle>{statusDialog.label}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Optionally capture context for this transition (visible in the workflow log).
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Comment"
+            value={statusComment}
+            onChange={(e) => setStatusComment(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeStatusDialog} disabled={statusUpdating}>
+            Cancel
+          </Button>
+          <Button onClick={handleStatusSubmit} variant="contained" disabled={statusUpdating}>
+            {statusUpdating ? 'Updating...' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

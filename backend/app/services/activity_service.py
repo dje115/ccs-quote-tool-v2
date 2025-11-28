@@ -15,9 +15,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, or_, desc, func
 import httpx
 import json
+import logging
 
 from app.models.crm import Customer, Contact
 from app.models.sales import SalesActivity, ActivityType, ActivityOutcome
+from app.models.quotes import Quote
+from app.models.helpdesk import Ticket, TicketStatus
 from app.models.tenant import Tenant
 from app.core.api_keys import get_api_keys
 from app.core.config import settings
@@ -114,7 +117,8 @@ class ActivityService:
             # Check if tenant exists
             tenant = self.db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             if not tenant:
-                print("[ActivityService] Tenant not found")
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Tenant {self.tenant_id} not found for activity enhancement")
                 return
             
             # Build context for AI
@@ -157,7 +161,8 @@ Your Company: {tenant.company_name}
             # Require database prompt - no fallbacks
             if not prompt_obj:
                 error_msg = f"Activity enhancement prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
-                print(f"[ERROR] {error_msg}")
+                logger = logging.getLogger(__name__)
+                logger.error(error_msg)
                 raise ValueError(error_msg)
             else:
                 # Render prompt with variables
@@ -172,6 +177,8 @@ Your Company: {tenant.company_name}
                 system_prompt = rendered['system_prompt']
                 model = rendered['model']
                 max_tokens = rendered['max_tokens']
+                if not max_tokens or max_tokens < 10000:
+                    max_tokens = 10000
             
             # Use AIProviderService to generate completion
             try:
@@ -223,17 +230,16 @@ Your Company: {tenant.company_name}
                     except:
                         pass
                 
-                print(f"✓ AI enhanced activity notes for {customer.company_name}")
+                logger = logging.getLogger(__name__)
+                logger.info(f"AI enhanced activity notes for {customer.company_name}")
                 
             except Exception as e:
-                print(f"[ERROR] Failed to enhance activity with AI: {e}")
-                import traceback
-                traceback.print_exc()
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to enhance activity with AI: {e}", exc_info=True)
         
         except Exception as e:
-            print(f"[ERROR] Failed to enhance activity with AI (outer): {e}")
-            import traceback
-            traceback.print_exc()
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to enhance activity with AI (outer): {e}", exc_info=True)
     
     async def generate_action_suggestions(self, customer_id: str, force_refresh: bool = False) -> Dict[str, Any]:
         """
@@ -267,7 +273,8 @@ Your Company: {tenant.company_name}
             
             # Check cache first (unless force_refresh is True)
             if not force_refresh and customer.ai_suggestions and customer.ai_suggestions_date:
-                print(f"[SUGGESTIONS CACHE] Using cached suggestions from {customer.ai_suggestions_date}")
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Using cached suggestions from {customer.ai_suggestions_date}")
                 return {
                     'success': True,
                     'suggestions': customer.ai_suggestions,
@@ -275,7 +282,8 @@ Your Company: {tenant.company_name}
                     'cached': True
                 }
             
-            print(f"[SUGGESTIONS] Generating new suggestions (force_refresh={force_refresh})")
+            logger = logging.getLogger(__name__)
+            logger.info(f"Generating new action suggestions for customer {customer_id} (force_refresh={force_refresh})")
             
             # Get recent activities
             activities = self.db.query(SalesActivity).filter(
@@ -290,6 +298,19 @@ Your Company: {tenant.company_name}
                 SalesActivity.follow_up_required == True,
                 SalesActivity.follow_up_date <= datetime.now(timezone.utc) + timedelta(days=7)
             ).all()
+
+            # Recent quotes
+            quotes = self.db.query(Quote).filter(
+                Quote.customer_id == customer_id,
+                Quote.tenant_id == self.tenant_id,
+                Quote.is_deleted == False
+            ).order_by(desc(Quote.created_at)).limit(5).all()
+
+            # Recent tickets
+            tickets = self.db.query(Ticket).filter(
+                Ticket.customer_id == customer_id,
+                Ticket.tenant_id == self.tenant_id
+            ).order_by(desc(Ticket.created_at)).limit(5).all()
             
             # Get tenant for API keys and context
             from app.models.tenant import Tenant
@@ -305,19 +326,63 @@ Your Company: {tenant.company_name}
                 return {'success': False, 'error': 'No OpenAI API key configured', 'suggestions': None, 'generated_at': None}
             
             # Build comprehensive context
+            summary_sections = []
             activity_summary = ""
             if activities:
-                activity_summary = "Recent Activity:\n"
-                for act in activities[:5]:
-                    activity_summary += f"- {act.activity_date.strftime('%Y-%m-%d')}: {act.activity_type.value.upper()}"
-                    if act.notes_cleaned:
-                        activity_summary += f" - {act.notes_cleaned[:100]}...\n"
-                    else:
-                        activity_summary += f" - {act.notes[:100]}...\n"
+                # Group activities by type for better context
+                activity_by_type = {}
+                for act in activities:
+                    act_type = act.activity_type.value.upper()
+                    if act_type not in activity_by_type:
+                        activity_by_type[act_type] = []
+                    activity_by_type[act_type].append(act)
+                
+                recent = "Recent Activity History:\n"
+                # Show all activity types with details
+                for act_type, acts in activity_by_type.items():
+                    recent += f"\n{act_type} Activities ({len(acts)}):\n"
+                    for act in acts[:3]:  # Show up to 3 of each type
+                        recent += f"  - {act.activity_date.strftime('%Y-%m-%d')}: "
+                        if act.notes_cleaned:
+                            recent += f"{act.notes_cleaned[:150]}\n"
+                        elif act.notes:
+                            recent += f"{act.notes[:150]}\n"
+                        else:
+                            recent += "No notes\n"
+                summary_sections.append(recent)
             
             days_since_contact = None
             if activities:
                 days_since_contact = (datetime.now(timezone.utc) - activities[0].activity_date).days
+
+            quote_summary = ""
+            if quotes:
+                quote_summary = "Quote Pipeline:\n"
+                for q in quotes:
+                    status_value = q.status.value if hasattr(q.status, "value") else str(q.status)
+                    total_value = float(q.total_amount or 0)
+                    quote_summary += (
+                        f"- {q.quote_number} ({status_value}) £{total_value:,.0f}"
+                        f" - {q.title[:60] if q.title else ''}\n"
+                    )
+
+            ticket_summary = ""
+            if tickets:
+                ticket_summary = "Support Tickets:\n"
+                for t in tickets:
+                    status_value = t.status.value if hasattr(t.status, "value") else str(t.status)
+                    priority_value = t.priority.value if hasattr(t.priority, "value") else str(t.priority)
+                    ticket_summary += (
+                        f"- {t.ticket_number} [{priority_value}/{status_value}] "
+                        f"{t.subject[:70] if t.subject else ''}\n"
+                    )
+
+            if quote_summary:
+                summary_sections.append("Quote Pipeline Overview:\n" + quote_summary)
+            if ticket_summary:
+                summary_sections.append("Support Ticket Overview:\n" + ticket_summary)
+            if summary_sections:
+                activity_summary = "\n".join(summary_sections)
             
             # Extract key information from AI analysis
             needs_assessment = ""
@@ -326,7 +391,8 @@ Your Company: {tenant.company_name}
             
             if customer.ai_analysis_raw:
                 ai_data = customer.ai_analysis_raw
-                print(f"[ACTION SUGGESTIONS] AI analysis keys: {ai_data.keys() if isinstance(ai_data, dict) else 'Not a dict'}")
+                logger = logging.getLogger(__name__)
+                logger.debug(f"AI analysis keys: {ai_data.keys() if isinstance(ai_data, dict) else 'Not a dict'}")
                 if isinstance(ai_data, dict):
                     # Try new format first (from lead generation)
                     needs_assessment = ai_data.get('needs_assessment', '')
@@ -377,9 +443,9 @@ Your Company: {tenant.company_name}
                                     needs_assessment = f"From AI analysis: {str(val)[:500]}"
                                 break
                     
-                    print(f"[ACTION SUGGESTIONS] Extracted - Needs: {len(needs_assessment)} chars, Opportunities: {len(business_opportunities)} chars, Help: {len(how_we_can_help)} chars")
+                    logger.debug(f"Extracted AI data - Needs: {len(needs_assessment)} chars, Opportunities: {len(business_opportunities)} chars, Help: {len(how_we_can_help)} chars")
             else:
-                print(f"[ACTION SUGGESTIONS] WARNING: No AI analysis data for {customer.company_name}")
+                logger.warning(f"No AI analysis data available for {customer.company_name}")
             
             # Build comprehensive tenant context
             tenant_context = f"""
@@ -414,7 +480,7 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
             # Require database prompt - no fallbacks
             if not prompt_obj:
                 error_msg = f"Action suggestions prompt not found in database for tenant {self.tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
-                print(f"[ERROR] {error_msg}")
+                logger.error(error_msg)
                 raise ValueError(error_msg)
             
             # Render prompt with variables
@@ -425,6 +491,8 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
                 "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
                 "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
                 "activity_summary": activity_summary,
+                "quote_summary": quote_summary or 'No quotes found',
+                "ticket_summary": ticket_summary or 'No tickets logged',
                 "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
                 "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
                 "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
@@ -432,24 +500,29 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
             })
             user_prompt = rendered['user_prompt']
             system_prompt = rendered['system_prompt']
-            model = rendered['model']
+            logger.debug("[ACTION PROMPT - SYSTEM]\n%s", system_prompt)
+            logger.debug("[ACTION PROMPT - USER]\n%s", user_prompt)
             max_tokens = rendered['max_tokens']
+            if not max_tokens or max_tokens < 10000:
+                max_tokens = 10000
             
             # Use AIProviderService (required - no fallback)
             provider_response = await self.provider_service.generate(
                 prompt=prompt_obj,
                 variables={
-                    "company_name": customer.company_name,
-                    "status": customer.status.value,
-                    "lead_score": str(customer.lead_score or 'N/A'),
-                    "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
-                    "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
-                    "activity_summary": activity_summary,
-                    "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
-                    "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
-                    "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
-                    "tenant_context": tenant_context
-                },
+                "company_name": customer.company_name,
+                "status": customer.status.value,
+                "lead_score": str(customer.lead_score or 'N/A'),
+                "sector": customer.business_sector.value if customer.business_sector else 'Unknown',
+                "days_since_contact": str(days_since_contact) if days_since_contact is not None else 'No previous contact',
+                "activity_summary": activity_summary,
+                "quote_summary": quote_summary or 'No quotes found',
+                "ticket_summary": ticket_summary or 'No tickets logged',
+                "needs_assessment": needs_assessment if needs_assessment else 'Not assessed yet',
+                "business_opportunities": business_opportunities if business_opportunities else 'Not identified yet',
+                "how_we_can_help": how_we_can_help if how_we_can_help else 'Not analyzed yet',
+                "tenant_context": tenant_context
+            },
                 max_tokens=max_tokens,
                 response_format={"type": "json_object"}
             )
@@ -459,19 +532,24 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
             
             # Cache the suggestions in the database
             customer.ai_suggestions = suggestions
-            customer.ai_suggestions_generated_at = generated_at
+            customer.ai_suggestions_date = generated_at
             self.db.commit()
             
-            return suggestions
+            return {
+                'success': True,
+                'suggestions': suggestions,
+                'generated_at': generated_at.isoformat(),
+                'cached': False
+            }
             
         except json.JSONDecodeError as e:
-            print(f"[ActivityService] JSON decode error: {e}")
-            print(f"[ActivityService] Response content: {provider_response.content[:500]}")
+            logger = logging.getLogger(__name__)
+            logger.error(f"JSON decode error in action suggestions: {e}")
+            logger.debug(f"Response content: {provider_response.content[:500]}")
             raise ValueError(f"Invalid JSON response from AI: {str(e)}")
         except Exception as e:
-            print(f"[ActivityService] Error generating action suggestions: {e}")
-            import traceback
-            traceback.print_exc()
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error generating action suggestions: {e}", exc_info=True)
             raise
     
     def get_activities(
@@ -508,4 +586,3 @@ B2B PARTNERSHIP OPPORTUNITIES (How to work WITH similar businesses):
         
         result = self.db.execute(stmt)
         return result.scalars().all()
-

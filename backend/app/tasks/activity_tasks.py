@@ -70,7 +70,7 @@ def refresh_customer_suggestions(self, customer_id: str, tenant_id: str) -> Dict
             return {'success': False, 'error': 'Tenant not found'}
         
         # Get API keys
-        api_keys = get_api_keys(db, tenant_id)
+        api_keys = get_api_keys(db, tenant)
         if not api_keys.openai:
             print("❌ No OpenAI API key configured")
             return {'success': False, 'error': 'No OpenAI API key configured'}
@@ -554,4 +554,3 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
         return {'success': False, 'error': str(e)}
     finally:
         db.close()
-

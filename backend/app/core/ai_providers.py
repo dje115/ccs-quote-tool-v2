@@ -117,7 +117,7 @@ class OpenAIProvider(AIProvider):
                                 input=input_string,
                                 tools=tools or [],
                                 tool_choice=kwargs.get("tool_choice", "auto"),
-                                max_completion_tokens=kwargs.get("max_completion_tokens", max_tokens)
+                                max_output_tokens=kwargs.get("max_completion_tokens", max_tokens)
                             )
                         ),
                         timeout=timeout_seconds
@@ -1377,4 +1377,3 @@ def create_provider(provider_slug: str, api_key: str, base_url: Optional[str] = 
     except Exception as e:
         print(f"[Provider Factory] Error creating provider {provider_slug}: {e}")
         return None
-

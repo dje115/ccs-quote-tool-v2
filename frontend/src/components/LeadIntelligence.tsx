@@ -425,9 +425,9 @@ const LeadIntelligence: React.FC<LeadIntelligenceProps> = ({
               <Box sx={{ flex: 1, overflow: 'auto' }}>
                 {similarLeads.length > 0 ? (
                   <List>
-                    {similarLeads.map((lead) => (
+                    {similarLeads.map((lead, idx) => (
                       <ListItem
-                        key={lead.id}
+                        key={lead.id || lead.company_name || `similar-lead-${idx}`}
                         sx={{
                           px: 0,
                           py: 1.5,

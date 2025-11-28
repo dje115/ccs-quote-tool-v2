@@ -16,11 +16,10 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, or_, union_all, desc
 
-from app.models.crm import Customer
+from app.models.crm import Customer, Contact
 from app.models.sales import SalesActivity, ActivityType
 from app.models.helpdesk import Ticket, TicketComment
 from app.models.quotes import Quote
-from app.models.contacts import Contact
 
 logger = logging.getLogger(__name__)
 

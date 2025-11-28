@@ -12,10 +12,11 @@ from decimal import Decimal
 import uuid
 import asyncio
 from datetime import datetime
+import logging
 
 from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
-from app.models.quotes import Quote, QuoteStatus
+from app.models.quotes import Quote, QuoteStatus, QuoteItem
 from app.models.quote_documents import QuoteDocument, QuoteDocumentVersion, DocumentType
 from app.models.quote_prompt_history import QuotePromptHistory
 from app.models.tenant import User, Tenant
@@ -24,9 +25,47 @@ from app.services.quote_pricing_service import QuotePricingService
 from app.services.quote_consistency_service import QuoteConsistencyService
 from app.services.quote_builder_service import QuoteBuilderService
 from app.services.quote_versioning_service import QuoteVersioningService
+from app.services.quote_workflow_service import (
+    QuoteWorkflowService,
+    QuoteWorkflowError,
+    QuoteNotFoundError,
+    InvalidStatusTransitionError,
+)
+from app.services.quote_manual_builder_service import (
+    QuoteManualBuilderService,
+    QuoteManualBuilderError,
+    QuoteManualBuilderValidationError,
+)
+from app.services.quote_ai_manual_builder_service import (
+    QuoteAIManualBuilderService,
+    QuoteAIManualBuilderError,
+)
+from app.services.quote_review_service import QuoteReviewService
 from app.core.api_keys import get_api_keys
 
 router = APIRouter()
+
+
+def _parse_status_filter(status_filter: str) -> QuoteStatus:
+    """Convert incoming status filter values to QuoteStatus enum members."""
+    normalized = (status_filter or "").strip()
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status filter cannot be empty"
+        )
+    try:
+        # First try matching enum value (what the frontend sends, e.g. 'draft')
+        return QuoteStatus(normalized)
+    except ValueError:
+        try:
+            # Fallback to enum name to support legacy clients sending 'DRAFT'
+            return QuoteStatus[normalized.upper()]
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status '{status_filter}'"
+            ) from exc
 
 
 class QuoteCreate(BaseModel):
@@ -57,7 +96,8 @@ class QuoteResponse(BaseModel):
     quote_number: str
     title: str
     status: str
-    total_amount: float
+    approval_state: str
+    total_amount: float | None = None
     created_at: datetime
     
     class Config:
@@ -106,6 +146,129 @@ class QuoteCalculatePricingRequest(BaseModel):
     quote_id: str
 
 
+class QuoteStatusChangeRequest(BaseModel):
+    status: QuoteStatus
+    comment: str | None = None
+    action: str | None = None
+
+
+class QuoteItemUpdatePayload(BaseModel):
+    id: str | None = None
+    description: str
+    category: str | None = None
+    item_type: str | None = "standard"
+    unit_type: str | None = "each"
+    section_name: str | None = None
+    quantity: Decimal | None = None
+    unit_cost: Decimal | None = None
+    unit_price: Decimal | None = None
+    discount_rate: Decimal | None = None
+    discount_amount: Decimal | None = None
+    margin_percent: float | None = None
+    tax_rate: float | None = None
+    supplier_id: str | None = None
+    is_optional: bool = False
+    is_alternate: bool = False
+    alternate_group: str | None = None
+    bundle_parent_id: str | None = None
+    metadata: Dict[str, Any] | None = None
+    notes: str | None = None
+    sort_order: int | None = None
+
+
+class QuoteItemsUpdateRequest(BaseModel):
+    items: List[QuoteItemUpdatePayload]
+    tax_rate: float | None = None
+
+
+class QuoteReviewMessage(BaseModel):
+    role: str
+    content: str
+
+
+class QuoteReviewRequest(BaseModel):
+    messages: List[QuoteReviewMessage]
+    include_line_items: bool = True
+    model: str | None = None
+
+
+class QuoteItemResponse(BaseModel):
+    id: str
+    description: str
+    category: str | None = None
+    item_type: str | None = None
+    unit_type: str | None = None
+    section_name: str | None = None
+    quantity: float | None = None
+    unit_cost: float | None = None
+    unit_price: float | None = None
+    discount_rate: float | None = None
+    discount_amount: float | None = None
+    total_price: float | None = None
+    margin_percent: float | None = None
+    tax_rate: float | None = None
+    supplier_id: str | None = None
+    is_optional: bool = False
+    is_alternate: bool = False
+    alternate_group: str | None = None
+    bundle_parent_id: str | None = None
+    metadata: Dict[str, Any] | None = None
+    notes: str | None = None
+    sort_order: int | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class QuoteWorkflowLogEntry(BaseModel):
+    id: str
+    from_status: str | None = None
+    to_status: str | None = None
+    action: str | None = None
+    comment: str | None = None
+    created_by: str | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuoteAIBuilderRequest(BaseModel):
+    prompt: str = Field(..., min_length=5, description="Describe what the AI should build.")
+    append: bool = Field(default=False, description="Append to existing manual items instead of replacing them.")
+    tax_rate: float | None = Field(default=None, description="Override tax rate (decimal, e.g. 0.2 for 20%).")
+    target_margin_percent: float | None = Field(
+        default=None, description="Optional blended gross margin target percentage."
+    )
+
+
+class QuoteAIItemPreview(BaseModel):
+    section: str | None = None
+    category: str | None = None
+    description: str
+    quantity: float
+    unit_price: float
+    total_price: float
+    is_optional: bool
+    notes: str | None = None
+
+
+class QuoteAITotalsResponse(BaseModel):
+    subtotal: float
+    tax_rate: float
+    tax_amount: float
+    total_amount: float
+
+
+class QuoteAIBuilderResponse(BaseModel):
+    summary: str
+    assumptions: List[str]
+    append: bool
+    items_added: int
+    totals: QuoteAITotalsResponse
+    items_preview: List[QuoteAIItemPreview]
+
+
 class PaginatedQuoteResponse(BaseModel):
     """Paginated quotes response"""
     items: List[QuoteResponse]
@@ -119,7 +282,7 @@ class PaginatedQuoteResponse(BaseModel):
 async def list_quotes(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    status: QuoteStatus | None = None,
+    status: Optional[str] = Query(None),
     customer_id: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -143,9 +306,11 @@ async def list_quotes(
             Quote.is_deleted == False
         )
         
-        if status:
-            stmt = stmt.where(Quote.status == status)
-            count_stmt = count_stmt.where(Quote.status == status)
+        status_enum: QuoteStatus | None = None
+        if status is not None:
+            status_enum = _parse_status_filter(status)
+            stmt = stmt.where(Quote.status == status_enum)
+            count_stmt = count_stmt.where(Quote.status == status_enum)
         
         if customer_id:
             stmt = stmt.where(Quote.customer_id == customer_id)
@@ -183,6 +348,7 @@ async def list_quotes(
                 quote_number=quote.quote_number,
                 title=quote.title,
                 status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
+                approval_state=quote.approval_state.value if hasattr(quote.approval_state, 'value') else str(quote.approval_state),
                 total_amount=float(quote.total_amount) if quote.total_amount else 0.0,
                 created_at=quote.created_at
             )
@@ -2054,3 +2220,232 @@ async def rollback_document_version(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error rolling back document version: {str(e)}"
         )
+
+
+@router.get("/{quote_id}/items", response_model=List[QuoteItemResponse])
+async def list_quote_items(
+    quote_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Return quote line items sorted by section/sort order."""
+    stmt = (
+        select(QuoteItem)
+        .where(
+            and_(
+                QuoteItem.quote_id == quote_id,
+                QuoteItem.tenant_id == current_tenant.id,
+                QuoteItem.is_deleted == False,  # noqa: E712
+            )
+        )
+        .order_by(QuoteItem.sort_order.asc())
+    )
+    result = await db.execute(stmt)
+    items = result.scalars().all()
+    return [
+        QuoteItemResponse(
+            id=item.id,
+            description=item.description,
+            category=item.category,
+            item_type=item.item_type,
+            unit_type=item.unit_type,
+            section_name=item.section_name,
+            quantity=float(item.quantity or 0),
+            unit_cost=float(item.unit_cost) if item.unit_cost is not None else None,
+            unit_price=float(item.unit_price or 0),
+            discount_rate=float(item.discount_rate or 0),
+            discount_amount=float(item.discount_amount or 0),
+            total_price=float(item.total_price or 0),
+            margin_percent=item.margin_percent,
+            tax_rate=item.tax_rate,
+            supplier_id=item.supplier_id,
+            is_optional=item.is_optional,
+            is_alternate=item.is_alternate,
+            alternate_group=item.alternate_group,
+            bundle_parent_id=item.bundle_parent_id,
+            metadata=item.item_metadata or {},
+            notes=item.notes,
+            sort_order=item.sort_order,
+        )
+        for item in items
+    ]
+
+
+@router.put("/{quote_id}/items/bulk")
+async def bulk_update_quote_items(
+    quote_id: str,
+    payload: QuoteItemsUpdateRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """
+    Bulk upsert quote line items for manual builder/ spreadsheet editing.
+    """
+    service = QuoteManualBuilderService(db, str(current_tenant.id))
+
+    try:
+        result = await service.bulk_upsert_items(
+            quote_id,
+            [item.model_dump() for item in payload.items],
+            tax_rate=payload.tax_rate,
+        )
+        return result
+    except QuoteManualBuilderValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except QuoteManualBuilderError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to update quote items: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update quote items"
+        ) from exc
+
+
+@router.post("/{quote_id}/ai/manual-review")
+async def run_quote_manual_review(
+    quote_id: str,
+    payload: QuoteReviewRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Run GPT-5 Mini powered manual quote review."""
+    service = QuoteReviewService(db, str(current_tenant.id))
+    try:
+        response = await service.run_review(
+            quote_id,
+            [msg.model_dump() for msg in payload.messages],
+            include_line_items=payload.include_line_items,
+            model=payload.model or "gpt-5.1-mini"
+        )
+        return response
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to run quote manual review: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to run manual quote review"
+        ) from exc
+
+
+@router.post("/{quote_id}/ai/manual-builder", response_model=QuoteAIBuilderResponse)
+async def build_quote_with_ai(
+    quote_id: str,
+    payload: QuoteAIBuilderRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Generate manual quote line items using AI and apply them to the quote."""
+    service = QuoteAIManualBuilderService(db, str(current_tenant.id))
+    try:
+        result = await service.build_items(
+            quote_id=quote_id,
+            user_prompt=payload.prompt,
+            append=payload.append,
+            target_margin_percent=payload.target_margin_percent,
+            tax_rate=payload.tax_rate,
+        )
+        builder_totals = result.get("builder_result", {})
+        totals = QuoteAITotalsResponse(
+            subtotal=builder_totals.get("subtotal", 0.0),
+            tax_rate=builder_totals.get("tax_rate", payload.tax_rate or 0.0),
+            tax_amount=builder_totals.get("tax_amount", 0.0),
+            total_amount=builder_totals.get("total_amount", 0.0),
+        )
+        assumptions = result.get("assumptions") or []
+        if isinstance(assumptions, str):
+            assumptions = [assumptions]
+        return QuoteAIBuilderResponse(
+            summary=result.get("summary", "AI generated quote."),
+            assumptions=assumptions,
+            append=result.get("append", payload.append),
+            items_added=result.get("items_added", 0),
+            totals=totals,
+            items_preview=result.get("items_preview", []),
+        )
+    except QuoteManualBuilderValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (QuoteManualBuilderError, QuoteAIManualBuilderError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to build quote with AI: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to build quote with AI"
+        ) from exc
+
+
+@router.post("/{quote_id}/status")
+async def change_quote_status(
+    quote_id: str,
+    request: QuoteStatusChangeRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Change quote status and record workflow log."""
+    service = QuoteWorkflowService(db, str(current_tenant.id))
+
+    try:
+        updated_quote = await service.change_status(
+            quote_id,
+            request.status,
+            user_id=str(current_user.id),
+            action=request.action,
+            comment=request.comment,
+        )
+        return {
+            "success": True,
+            "quote_id": updated_quote.id,
+            "status": updated_quote.status.value,
+            "approval_state": updated_quote.approval_state.value,
+            "sent_at": updated_quote.sent_at,
+            "accepted_at": updated_quote.accepted_at,
+            "rejected_at": updated_quote.rejected_at,
+            "cancelled_at": updated_quote.cancelled_at,
+        }
+    except QuoteNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidStatusTransitionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except QuoteWorkflowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to change quote status: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to change quote status"
+        ) from exc
+
+
+@router.get("/{quote_id}/workflow-log", response_model=List[QuoteWorkflowLogEntry])
+async def get_quote_workflow_log(
+    quote_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Return workflow history for a quote."""
+    service = QuoteWorkflowService(db, str(current_tenant.id))
+
+    try:
+        entries = await service.get_workflow_log(quote_id)
+        return entries
+    except QuoteWorkflowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to fetch workflow log: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load workflow log"
+        ) from exc

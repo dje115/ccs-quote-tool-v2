@@ -693,6 +693,43 @@ async def convert_lead_to_customer(
             except ValueError:
                 print(f"Warning: Could not map company_size '{lead.company_size}' to BusinessSize enum")
         
+        # Prepare comprehensive AI analysis data including all discovery fields
+        ai_analysis_data = _safe_parse_ai_analysis(lead.ai_analysis) or {}
+        
+        # Ensure ai_analysis_data is a dict
+        if not isinstance(ai_analysis_data, dict):
+            ai_analysis_data = {}
+        
+        # Add all additional discovery AI fields to the analysis data
+        if lead.ai_confidence_score is not None:
+            ai_analysis_data['ai_confidence_score'] = lead.ai_confidence_score
+        if lead.ai_recommendation:
+            ai_analysis_data['ai_recommendation'] = lead.ai_recommendation
+        if lead.ai_notes:
+            ai_analysis_data['ai_notes'] = lead.ai_notes
+        if lead.potential_project_value is not None:
+            ai_analysis_data['potential_project_value'] = lead.potential_project_value
+        if lead.timeline_estimate:
+            ai_analysis_data['timeline_estimate'] = lead.timeline_estimate
+        if lead.annual_revenue:
+            ai_analysis_data['annual_revenue'] = lead.annual_revenue
+        if lead.social_media_links:
+            social_media = _safe_json_parse(lead.social_media_links)
+            if social_media:
+                ai_analysis_data['social_media_links'] = social_media
+        
+        # Add qualification reason if not already in analysis
+        if lead.qualification_reason and 'qualification_reason' not in ai_analysis_data:
+            ai_analysis_data['qualification_reason'] = lead.qualification_reason
+        
+        # Build description combining qualification reason and notes
+        description_parts = []
+        if lead.qualification_reason:
+            description_parts.append(lead.qualification_reason)
+        if lead.notes:
+            description_parts.append(f"Discovery Notes: {lead.notes}")
+        description = "\n\n".join(description_parts) if description_parts else f"Converted from discovery - {lead.company_name}"
+        
         # Create customer record
         customer = Customer(
             id=str(uuid.uuid4()),
@@ -701,22 +738,54 @@ async def convert_lead_to_customer(
             status=CustomerStatus.LEAD,  # Start as LEAD status
             business_sector=business_sector,
             business_size=business_size,
-            description=lead.qualification_reason or f"Converted from discovery - {lead.company_name}",
+            description=description,
             website=lead.website,
             main_email=lead.contact_email,
             main_phone=lead.contact_phone,
             billing_address=lead.address,
             billing_postcode=lead.postcode,
             lead_score=lead.lead_score,
-            ai_analysis_raw=_safe_parse_ai_analysis(lead.ai_analysis),
-            companies_house_data=_safe_json_parse(lead.companies_house_data),
-            google_maps_data=_safe_json_parse(lead.google_maps_data),
+            # Copy comprehensive AI analysis data (Discovery AI Analysis + all related fields)
+            ai_analysis_raw=ai_analysis_data if ai_analysis_data else None,
+            # Copy external data sources (always parse and copy, even if empty dict)
+            # This preserves the data structure even if minimal
+            companies_house_data=_safe_json_parse(lead.companies_house_data) if lead.companies_house_data is not None else None,
+            google_maps_data=_safe_json_parse(lead.google_maps_data) if lead.google_maps_data is not None else None,
+            website_data=_safe_json_parse(lead.website_data) if lead.website_data is not None else None,
+            linkedin_url=lead.linkedin_url,
+            linkedin_data=_safe_json_parse(lead.linkedin_data) if lead.linkedin_data is not None else None,
+            # Copy company registration if available
+            company_registration=lead.company_registration,
+            registration_confirmed=lead.registration_confirmed,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc)
         )
         
         db.add(customer)
         await db.flush()  # Get the customer ID
+        
+        # Create contact record if contact name/title exists
+        if lead.contact_name:
+            from app.models.crm import Contact, ContactRole
+            # Parse contact name (assume "First Last" format)
+            name_parts = lead.contact_name.strip().split(' ', 1)
+            first_name = name_parts[0] if name_parts else lead.contact_name
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
+            
+            contact = Contact(
+                id=str(uuid.uuid4()),
+                customer_id=customer.id,
+                first_name=first_name,
+                last_name=last_name or 'Unknown',
+                job_title=lead.contact_title,
+                email=lead.contact_email,
+                phone=lead.contact_phone,
+                role=ContactRole.PRIMARY if not lead.contact_title else ContactRole.OTHER,
+                is_primary=True,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            db.add(contact)
         
         # Update the lead to reference the new customer
         lead.converted_to_customer_id = customer.id

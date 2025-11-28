@@ -258,6 +258,18 @@ export const quoteAPI = {
   createDocumentVersion: (quoteId: string, documentType: string, changesSummary?: string) => apiClient.post(`/quotes/${quoteId}/documents/${documentType}/version`, { changes_summary: changesSummary }),
   getDocumentVersions: (quoteId: string, documentType: string) => apiClient.get(`/quotes/${quoteId}/documents/${documentType}/versions`),
   rollbackDocumentVersion: (quoteId: string, documentType: string, targetVersion: number) => apiClient.post(`/quotes/${quoteId}/documents/${documentType}/rollback/${targetVersion}`),
+  changeStatus: (quoteId: string, data: { status: string; comment?: string; action?: string }) =>
+    apiClient.post(`/quotes/${quoteId}/status`, data),
+  getWorkflowLog: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/workflow-log`),
+  getItems: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/items`),
+  bulkUpdateItems: (quoteId: string, data: { items: any[]; tax_rate?: number }) =>
+    apiClient.put(`/quotes/${quoteId}/items/bulk`, data),
+  reviewManualQuote: (quoteId: string, data: { messages: { role: string; content: string }[]; include_line_items?: boolean; model?: string }) =>
+    apiClient.post(`/quotes/${quoteId}/ai/manual-review`, data),
+  aiManualBuild: (
+    quoteId: string,
+    data: { prompt: string; append?: boolean; tax_rate?: number; target_margin_percent?: number }
+  ) => apiClient.post(`/quotes/${quoteId}/ai/manual-builder`, data),
   
   // Prompt Management APIs
   getPrompt: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/prompt`),
@@ -435,6 +447,3 @@ export const metricsAPI = {
     apiClient.get('/metrics/csat', { params: { start_date: startDate, end_date: endDate } }),
   getDashboard: () => apiClient.get('/metrics/dashboard'),
 };
-
-
-

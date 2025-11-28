@@ -72,3 +72,5 @@ COMMENT ON TABLE pricing_verification_queue IS 'Queue for manual verification of
 
 
 
+
+

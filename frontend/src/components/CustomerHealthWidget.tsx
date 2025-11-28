@@ -31,7 +31,9 @@ import {
   LocalFireDepartment as FireIcon,
   Assignment as TicketIcon,
   Receipt as QuoteIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Info as InfoIcon,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { customerHealthAPI } from '../services/api';
 
@@ -80,7 +82,6 @@ const CustomerHealthWidget: React.FC<CustomerHealthWidgetProps> = ({
       const response = await customerHealthAPI.getHealth(customerId, daysBack);
       setHealthData(response.data);
     } catch (err: any) {
-      console.error('Error loading customer health:', err);
       setError(err.response?.data?.detail || 'Failed to load health data');
     } finally {
       setLoading(false);
@@ -141,7 +142,9 @@ const CustomerHealthWidget: React.FC<CustomerHealthWidgetProps> = ({
     );
   }
 
-  const healthScore = healthData?.health_score || 0;
+  // Convert health score from 0.0-1.0 to 0-100 percentage
+  const healthScoreRaw = healthData?.health_score || 0;
+  const healthScore = Math.round(healthScoreRaw * 100); // Convert to percentage
   const healthColor = getHealthColor(healthScore);
   const healthLabel = getHealthLabel(healthScore);
 
@@ -167,9 +170,41 @@ const CustomerHealthWidget: React.FC<CustomerHealthWidgetProps> = ({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <HeartIcon color={healthColor as any} sx={{ fontSize: 32 }} />
             <Box>
-              <Typography variant="h6" component="div" fontWeight="bold">
-                Customer Health
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="h6" component="div" fontWeight="bold">
+                  Customer Health
+                </Typography>
+                <Tooltip
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                        How Customer Health Score is Calculated:
+                      </Typography>
+                      <Typography variant="body2" component="div" sx={{ mb: 0.5 }}>
+                        <strong>Base Score:</strong> 50% (starting point)
+                      </Typography>
+                      <Typography variant="body2" component="div" sx={{ mb: 0.5 }}>
+                        <strong>Ticket Trends:</strong> ±20% (decreasing = +20%, increasing = -20%)
+                      </Typography>
+                      <Typography variant="body2" component="div" sx={{ mb: 0.5 }}>
+                        <strong>Quote Win Rate:</strong> Up to +20% (based on accepted quotes)
+                      </Typography>
+                      <Typography variant="body2" component="div" sx={{ mb: 0.5 }}>
+                        <strong>SLA Adherence:</strong> Up to +10% (based on response times)
+                      </Typography>
+                      <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
+                        Score is calculated over the last {daysBack} days of activity.
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.5 }}>
+                    <HelpOutlineIcon fontSize="small" color="action" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Typography variant="caption" color="text.secondary">
                 Last {daysBack} days
               </Typography>
@@ -200,7 +235,7 @@ const CustomerHealthWidget: React.FC<CustomerHealthWidgetProps> = ({
         <Box sx={{ mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
             <Typography variant="h3" component="div" fontWeight="bold" color={`${healthColor}.main`}>
-              {healthScore}
+              {healthScore}%
             </Typography>
             <Chip
               label={healthLabel}
@@ -222,6 +257,15 @@ const CustomerHealthWidget: React.FC<CustomerHealthWidgetProps> = ({
               }
             }}
           />
+          {/* Explanation */}
+          <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
+              How it's calculated:
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem', lineHeight: 1.4 }}>
+              Base score (50%) adjusted by ticket trends (±20%), quote win rate (up to +20%), and SLA adherence (up to +10%) over the last {daysBack} days.
+            </Typography>
+          </Box>
         </Box>
 
         {/* Factors */}

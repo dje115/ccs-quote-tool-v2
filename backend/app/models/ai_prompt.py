@@ -42,6 +42,7 @@ class PromptCategory(str, enum.Enum):
     QUOTE_EMAIL_COPY = "quote_email_copy"
     QUOTE_SUMMARY = "quote_summary"
     QUOTE_GENERATION = "quote_generation"  # Universal AI quote generation (industry-agnostic)
+    MANUAL_QUOTE_REVIEW = "manual_quote_review"
 
 
 class AIPrompt(Base, TimestampMixin):
@@ -137,4 +138,3 @@ class AIPromptVersion(Base, TimestampMixin):
     __table_args__ = (
         Index('idx_prompt_version', 'prompt_id', 'version'),
     )
-

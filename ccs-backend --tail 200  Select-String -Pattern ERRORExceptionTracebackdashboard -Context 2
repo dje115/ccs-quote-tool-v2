@@ -1,0 +1,146 @@
+warning: in the working copy of 'backend/app/models/__init__.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/app/models/quotes.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/backend/app/models/__init__.py b/backend/app/models/__init__.py[m
+[1mindex d0bb0de..93f512f 100644[m
+[1m--- a/backend/app/models/__init__.py[m
+[1m+++ b/backend/app/models/__init__.py[m
+[36m@@ -6,7 +6,19 @@[m [mfrom .base import Base[m
+ from .tenant import Tenant, User, TenantStatus, UserRole[m
+ from .crm import Customer, Contact, CustomerInteraction, CustomerStatus, BusinessSector, BusinessSize, ContactRole[m
+ from .leads import LeadGenerationCampaign, Lead, LeadInteraction, LeadGenerationPrompt, LeadGenerationStatus, LeadStatus, LeadSource[m
+[31m-from .quotes import Quote, QuoteItem, QuoteTemplate, PricingItem, QuoteStatus[m
+[32m+[m[32mfrom .quotes import ([m
+[32m+[m[32m    Quote,[m
+[32m+[m[32m    QuoteItem,[m
+[32m+[m[32m    QuoteTemplate,[m
+[32m+[m[32m    PricingItem,[m
+[32m+[m[32m    QuoteStatus,[m
+[32m+[m[32m    QuoteApprovalState,[m
+[32m+[m[32m    QuoteWorkflowLog,[m
+[32m+[m[32m    CustomerOrder,[m
+[32m+[m[32m    SupplierPurchaseOrder,[m
+[32m+[m[32m    OrderStatus,[m
+[32m+[m[32m    PurchaseOrderStatus,[m
+[32m+[m[32m)[m
+ from .quote_documents import QuoteDocument, QuoteDocumentVersion, DocumentType[m
+ from .quote_prompt_history import QuotePromptHistory[m
+ from .product import Product, PricingRule, QuoteVersion[m
+[36m@@ -24,7 +36,8 @@[m [m__all__ = [[m
+     "Tenant", "User", "TenantStatus", "UserRole",[m
+     "Customer", "Contact", "CustomerInteraction", "CustomerStatus", "BusinessSector", "BusinessSize", "ContactRole",[m
+     "LeadGenerationCampaign", "Lead", "LeadInteraction", "LeadGenerationPrompt", "LeadGenerationStatus", "LeadStatus", "LeadSource",[m
+[31m-    "Quote", "QuoteItem", "QuoteTemplate", "PricingItem", "QuoteStatus",[m
+[32m+[m[32m    "Quote", "QuoteItem", "QuoteTemplate", "PricingItem", "QuoteStatus", "QuoteApprovalState",[m
+[32m+[m[32m    "QuoteWorkflowLog", "CustomerOrder", "SupplierPurchaseOrder", "OrderStatus", "PurchaseOrderStatus",[m
+     "QuoteDocument", "QuoteDocumentVersion", "DocumentType",[m
+     "QuotePromptHistory",[m
+     "Product", "PricingRule", "QuoteVersion",[m
+[1mdiff --git a/backend/app/models/quotes.py b/backend/app/models/quotes.py[m
+[1mindex ff0be54..240306d 100644[m
+[1m--- a/backend/app/models/quotes.py[m
+[1m+++ b/backend/app/models/quotes.py[m
+[36m@@ -22,6 +22,33 @@[m [mclass QuoteStatus(enum.Enum):[m
+     CANCELLED = "cancelled"[m
+ [m
+ [m
+[32m+[m[32mclass QuoteApprovalState(enum.Enum):[m
+[32m+[m[32m    """Approval workflow state"""[m
+[32m+[m[32m    NOT_REQUIRED = "not_required"[m
+[32m+[m[32m    PENDING = "pending"[m
+[32m+[m[32m    APPROVED = "approved"[m
+[32m+[m[32m    REJECTED = "rejected"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mclass OrderStatus(enum.Enum):[m
+[32m+[m[32m    """Customer order status"""[m
+[32m+[m[32m    DRAFT = "draft"[m
+[32m+[m[32m    PENDING = "pending"[m
+[32m+[m[32m    IN_PROGRESS = "in_progress"[m
+[32m+[m[32m    COMPLETE = "complete"[m
+[32m+[m[32m    CANCELLED = "cancelled"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mclass PurchaseOrderStatus(enum.Enum):[m
+[32m+[m[32m    """Supplier purchase order status"""[m
+[32m+[m[32m    DRAFT = "draft"[m
+[32m+[m[32m    SENT = "sent"[m
+[32m+[m[32m    ACKNOWLEDGED = "acknowledged"[m
+[32m+[m[32m    RECEIVED = "received"[m
+[32m+[m[32m    CLOSED = "closed"[m
+[32m+[m[32m    CANCELLED = "cancelled"[m
+[32m+[m
+[32m+[m
+ class Quote(BaseModel):[m
+     """Quote model"""[m
+     __tablename__ = "quotes"[m
+[36m@@ -73,6 +100,15 @@[m [mclass Quote(BaseModel):[m
+     [m
+     # Status and dates[m
+     status = Column(Enum(QuoteStatus), default=QuoteStatus.DRAFT, nullable=False)[m
+[32m+[m[32m    approval_state = Column(Enum(QuoteApprovalState), default=QuoteApprovalState.NOT_REQUIRED, nullable=False)[m
+[32m+[m[32m    manual_mode = Column(Boolean, default=False, nullable=False)[m
+[32m+[m[32m    version_number = Column(Integer, default=1, nullable=False)[m
+[32m+[m[32m    parent_quote_id = Column(String(36), ForeignKey("quotes.id"), nullable=True)[m
+[32m+[m[32m    sent_at = Column(DateTime(timezone=True), nullable=True)[m
+[32m+[m[32m    accepted_at = Column(DateTime(timezone=True), nullable=True)[m
+[32m+[m[32m    rejected_at = Column(DateTime(timezone=True), nullable=True)[m
+[32m+[m[32m    cancelled_at = Column(DateTime(timezone=True), nullable=True)[m
+[32m+[m[32m    cancel_reason = Column(Text, nullable=True)[m
+     valid_until = Column(DateTime(timezone=True), nullable=True)[m
+     [m
+     # Pricing[m
+[36m@@ -110,6 +146,9 @@[m [mclass Quote(BaseModel):[m
+     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")[m
+     created_by_user = relationship("User", foreign_keys=[created_by])[m
+     documents = relationship("QuoteDocument", back_populates="quote", cascade="all, delete-orphan")[m
+[32m+[m[32m    parent_quote = relationship("Quote", remote_side=[id], backref="child_versions")[m
+[32m+[m[32m    workflow_logs = relationship("QuoteWorkflowLog", back_populates="quote", cascade="all, delete-orphan")[m
+[32m+[m[32m    customer_order = relationship("CustomerOrder", back_populates="quote", uselist=False)[m
+     [m
+     def __repr__(self):[m
+         return f"<Quote {self.quote_number} - {self.title}>"[m
+[36m@@ -131,13 +170,27 @@[m [mclass QuoteItem(BaseModel):[m
+     # Item details[m
+     description = Column(Text, nullable=False)[m
+     category = Column(String(100), nullable=True)[m
+[32m+[m[32m    item_type = Column(String(50), default="standard", nullable=False)[m
+[32m+[m[32m    unit_type = Column(String(50), default="each", nullable=False)[m
+[32m+[m[32m    section_name = Column(String(255), nullable=True)[m
+     [m
+     # Pricing[m
+     quantity = Column(Numeric(10, 2), default=1, nullable=False)[m
+[32m+[m[32m    unit_cost = Column(Numeric(10, 2), default=0, nullable=True)[m
+     unit_price = Column(Numeric(10, 2), nullable=False)[m
+     discount_rate = Column(Float, default=0, nullable=False)[m
+     discount_amount = Column(Numeric(10, 2), default=0, nullable=False)[m
+     total_price = Column(Numeric(10, 2), nullable=False)[m
+[32m+[m[32m    margin_percent = Column(Float, default=0, nullable=True)[m
+[32m+[m[32m    tax_rate = Column(Float, default=0, nullable=True)[m
+[32m+[m[41m    [m
+[32m+[m[32m    # Supplier / configuration details[m
+[32m+[m[32m    supplier_id = Column(String(36), ForeignKey("suppliers.id"), nullable=True)[m
+[32m+[m[32m    is_optional = Column(Boolean, default=False, nullable=False)[m
+[32m+[m[32m    is_alternate = Column(Boolean, default=False, nullable=False)[m
+[32m+[m[32m    alternate_group = Column(String(36), nullable=True)[m
+[32m+[m[32m    bundle_parent_id = Column(String(36), nullable=True)[m
+[32m+[m[32m    metadata = Column(JSON, nullable=True, default=dict)[m
+     [m
+     # Additional details[m
+     notes = Column(Text, nullable=True)[m
+[36m@@ -209,3 +262,57 @@[m [mclass PricingItem(BaseModel):[m
+     [m
+     def __repr__(self):[m
+         return f"<PricingItem {self.name}>"[m
+[32m+[m
+[32m+[m
+[32m+[m[32mclass QuoteWorkflowLog(BaseModel):[m
+[32m+[m[32m    """Workflow transition history"""[m
+[32m+[m[32m    __tablename__ = "quote_workflow_log"[m
+[32m+[m[41m    [m
+[32m+[m[32m    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))[m
+[32m+[m[32m    quote_id = Column(String(36), ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False, index=True)[m
+[32m+[m[32m    from_status = Column(String(20), nullable=True)[m
+[32m+[m[32m    to_status = Column(String(20), nullable=True)[m
+[32m+[m[32m    action = Column(String(50), nullable=True)[m
+[32m+[m[32m    comment = Column(Text, nullable=True)[m
+[32m+[m[32m    metadata = Column(JSON, nullable=True, default=dict

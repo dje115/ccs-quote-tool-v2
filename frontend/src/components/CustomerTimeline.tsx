@@ -199,6 +199,8 @@ const CustomerTimeline: React.FC<CustomerTimelineProps> = ({
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
+                      primaryTypographyProps={{ component: 'div' }}
+                      secondaryTypographyProps={{ component: 'div' }}
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                           <Typography variant="subtitle2" component="span" fontWeight="medium">
@@ -224,20 +226,20 @@ const CustomerTimeline: React.FC<CustomerTimelineProps> = ({
                       secondary={
                         <Box>
                           {item.description && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            <Typography variant="body2" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
                               {item.description.length > 150
                                 ? `${item.description.substring(0, 150)}...`
                                 : item.description}
                             </Typography>
                           )}
                           <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" component="span" color="text.secondary">
                               {timeInfo.relative}
                             </Typography>
                             {item.created_by && (
                               <>
-                                <Typography variant="caption" color="text.secondary">•</Typography>
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography variant="caption" component="span" color="text.secondary">|</Typography>
+                                <Typography variant="caption" component="span" color="text.secondary">
                                   {item.created_by}
                                 </Typography>
                               </>

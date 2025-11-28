@@ -142,6 +142,7 @@ const PromptManagement: React.FC = () => {
     { value: 'all', label: 'All Categories' },
     { value: 'customer_analysis', label: 'Customer Analysis' },
     { value: 'quote_analysis', label: 'Quote Analysis' },
+    { value: 'manual_quote_review', label: 'Manual Quote Review' },
     { value: 'product_search', label: 'Product Search' },
     { value: 'building_analysis', label: 'Building Analysis' },
     { value: 'activity_enhancement', label: 'Activity Enhancement' },

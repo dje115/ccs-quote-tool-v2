@@ -982,6 +982,151 @@ const CustomerDetail: React.FC = () => {
                   <Typography variant="body2">{customer.ai_analysis_raw.risks}</Typography>
                 </Box>
               )}
+
+              {/* New Discovery AI Analysis Format - Opportunity Summary */}
+              {customer.ai_analysis_raw.opportunity_summary && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 2, border: '1px solid #2196f3' }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <InfoIcon /> Opportunity Summary
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+                    {customer.ai_analysis_raw.opportunity_summary}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Risk Assessment (array format) */}
+              {customer.ai_analysis_raw.risk_assessment && Array.isArray(customer.ai_analysis_raw.risk_assessment) && customer.ai_analysis_raw.risk_assessment.length > 0 && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: '#ffebee', borderRadius: 2, border: '1px solid #f44336' }}>
+                  <Typography variant="subtitle2" color="error.main" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <WarningIcon /> Risk Assessment
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 2, m: 0 }}>
+                    {customer.ai_analysis_raw.risk_assessment.map((risk: string, idx: number) => (
+                      <Box component="li" key={idx} sx={{ mb: 1 }}>
+                        <Typography variant="body2">{risk}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Recommendations (array format) */}
+              {customer.ai_analysis_raw.recommendations && Array.isArray(customer.ai_analysis_raw.recommendations) && customer.ai_analysis_raw.recommendations.length > 0 && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: '#e8f5e9', borderRadius: 2, border: '2px solid #4caf50' }}>
+                  <Typography variant="subtitle2" color="success.dark" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LightbulbIcon /> Recommendations
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                    Strategic recommendations based on AI analysis
+                  </Typography>
+                  <Box component="ol" sx={{ pl: 2, m: 0 }}>
+                    {customer.ai_analysis_raw.recommendations.map((rec: string, idx: number) => (
+                      <Box component="li" key={idx} sx={{ mb: 1 }}>
+                        <Typography variant="body2">{rec}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Next Steps (array format) */}
+              {customer.ai_analysis_raw.next_steps && Array.isArray(customer.ai_analysis_raw.next_steps) && customer.ai_analysis_raw.next_steps.length > 0 && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: '#fff3e0', borderRadius: 2, border: '2px solid #ff9800' }}>
+                  <Typography variant="subtitle2" color="warning.dark" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CheckCircleIcon /> Next Steps
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                    Recommended actions to move forward with this opportunity
+                  </Typography>
+                  <Box component="ol" sx={{ pl: 2, m: 0 }}>
+                    {customer.ai_analysis_raw.next_steps.map((step: string, idx: number) => (
+                      <Box component="li" key={idx} sx={{ mb: 1 }}>
+                        <Typography variant="body2">{step}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Conversion Probability and AI Confidence Score */}
+              {(customer.ai_analysis_raw.conversion_probability !== undefined || customer.ai_analysis_raw.ai_confidence_score !== undefined) && (
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {customer.ai_analysis_raw.conversion_probability !== undefined && (
+                    <Grid
+                      size={{
+                        xs: 12,
+                        sm: 6
+                      }}>
+                      <Box sx={{ p: 2, bgcolor: '#f3f4f6', borderRadius: 2, border: '1px solid #e5e7eb' }}>
+                        <Typography variant="caption" color="text.secondary">Conversion Probability</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                          <Typography variant="h6" fontWeight="bold">
+                            {customer.ai_analysis_raw.conversion_probability}%
+                          </Typography>
+                          <Chip 
+                            label={
+                              customer.ai_analysis_raw.conversion_probability >= 70 ? 'High' :
+                              customer.ai_analysis_raw.conversion_probability >= 40 ? 'Medium' : 'Low'
+                            }
+                            color={
+                              customer.ai_analysis_raw.conversion_probability >= 70 ? 'success' :
+                              customer.ai_analysis_raw.conversion_probability >= 40 ? 'warning' : 'default'
+                            }
+                            size="small"
+                          />
+                        </Box>
+                      </Box>
+                    </Grid>
+                  )}
+                  {customer.ai_analysis_raw.ai_confidence_score !== undefined && (
+                    <Grid
+                      size={{
+                        xs: 12,
+                        sm: 6
+                      }}>
+                      <Box sx={{ p: 2, bgcolor: '#f3f4f6', borderRadius: 2, border: '1px solid #e5e7eb' }}>
+                        <Typography variant="caption" color="text.secondary">AI Confidence Score</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                          <Typography variant="h6" fontWeight="bold">
+                            {Math.round((customer.ai_analysis_raw.ai_confidence_score || 0) * 100)}%
+                          </Typography>
+                          <Chip 
+                            label={
+                              (customer.ai_analysis_raw.ai_confidence_score || 0) >= 0.7 ? 'High' :
+                              (customer.ai_analysis_raw.ai_confidence_score || 0) >= 0.4 ? 'Medium' : 'Low'
+                            }
+                            color={
+                              (customer.ai_analysis_raw.ai_confidence_score || 0) >= 0.7 ? 'success' :
+                              (customer.ai_analysis_raw.ai_confidence_score || 0) >= 0.4 ? 'warning' : 'default'
+                            }
+                            size="small"
+                          />
+                        </Box>
+                      </Box>
+                    </Grid>
+                  )}
+                </Grid>
+              )}
+
+              {/* Qualification Reason */}
+              {customer.ai_analysis_raw.qualification_reason && (
+                <Box sx={{ mb: 2, p: 2, bgcolor: '#f1f8e9', borderRadius: 2, border: '1px solid #8bc34a' }}>
+                  <Typography variant="subtitle2" color="success.dark" gutterBottom sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CheckCircleIcon /> Qualification Reason
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+                    {customer.ai_analysis_raw.qualification_reason}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Analyzed At Timestamp */}
+              {customer.ai_analysis_raw.analyzed_at && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, fontStyle: 'italic' }}>
+                  Analysis generated: {new Date(customer.ai_analysis_raw.analyzed_at).toLocaleString()}
+                </Typography>
+              )}
             </Paper>
           )}
 
@@ -1998,14 +2143,10 @@ const CustomerDetail: React.FC = () => {
       )}
       {/* Tab Panel 7: Activity - AI-Powered Activity Center */}
       {currentTab === 7 && customer && (
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
-            <ActivityCenter customerId={customer.id} />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <CustomerTimeline customerId={customer.id} limit={30} />
-          </Grid>
-        </Grid>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <ActivityCenter customerId={customer.id} />
+          <CustomerTimeline customerId={customer.id} limit={30} />
+        </Box>
       )}
       {/* Tab Panel 8: Quotes */}
       {currentTab === 8 && (
@@ -2235,6 +2376,4 @@ const CustomerDetail: React.FC = () => {
 };
 
 export default CustomerDetail;
-
-
 

@@ -20,3 +20,5 @@ COMMENT ON COLUMN products.gallery_images IS 'JSON array of additional image pat
 
 
 
+
+
