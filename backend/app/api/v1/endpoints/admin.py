@@ -75,20 +75,17 @@ async def get_dashboard_stats(
         raise HTTPException(status_code=403, detail="Admin access required")
     
     try:
-        import asyncio
-        
-        # Count tenants by status and total users in parallel
+        # Count tenants by status and total users sequentially
+        # Note: AsyncSession doesn't support concurrent operations on the same session
         active_stmt = select(func.count(Tenant.id)).where(Tenant.status == TenantStatus.ACTIVE)
         trial_stmt = select(func.count(Tenant.id)).where(Tenant.status == TenantStatus.TRIAL)
         suspended_stmt = select(func.count(Tenant.id)).where(Tenant.status == TenantStatus.SUSPENDED)
         users_stmt = select(func.count(User.id))
         
-        active_result, trial_result, suspended_result, users_result = await asyncio.gather(
-            db.execute(active_stmt),
-            db.execute(trial_stmt),
-            db.execute(suspended_stmt),
-            db.execute(users_stmt)
-        )
+        active_result = await db.execute(active_stmt)
+        trial_result = await db.execute(trial_stmt)
+        suspended_result = await db.execute(suspended_stmt)
+        users_result = await db.execute(users_stmt)
         
         active_tenants = active_result.scalar() or 0
         trial_tenants = trial_result.scalar() or 0
@@ -123,7 +120,9 @@ async def get_dashboard_stats(
         
     except Exception as e:
         logger.error(f"Failed to load dashboard stats: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to load dashboard stats: {str(e)}")
 
 
 @router.get("/users", response_model=List[UserResponse])

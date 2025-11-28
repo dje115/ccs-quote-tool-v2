@@ -143,12 +143,14 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 
 export default {
   name: 'Tenants',
   setup() {
+    const router = useRouter()
     const loading = ref(false)
     const creating = ref(false)
     const showCreateDialog = ref(false)
