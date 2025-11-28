@@ -19,6 +19,12 @@ const GlobalAIMonitor: React.FC = () => {
 
   // Initial load of running analyses - only if authenticated
   useEffect(() => {
+    // Skip on public pages (login, signup)
+    const isPublicPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
+    if (isPublicPage) {
+      return;
+    }
+    
     // SECURITY: Gate on proven session state (/auth/me) instead of localStorage
     // HttpOnly cookies cannot be read by JavaScript, so we verify auth via API call
     const loadRunningAnalyses = async () => {

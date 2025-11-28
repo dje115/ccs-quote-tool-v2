@@ -45,6 +45,13 @@ export const useWebSocket = (): UseWebSocketReturn => {
     // Backend WebSocket endpoint reads token from cookies in handshake (preferred)
     // Fallback: Send token from localStorage in auth message if cookie not available
     // We still need to verify authentication by checking if user is logged in
+    // Skip authentication check on public pages (login, signup)
+    const isPublicPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
+    if (isPublicPage) {
+      console.log('[WebSocket] Public page, skipping connection');
+      return;
+    }
+    
     let isAuthenticated = false;
     try {
       const { authAPI } = await import('../services/api');

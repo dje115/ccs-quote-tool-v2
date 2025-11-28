@@ -49,12 +49,17 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     
+    // Don't try to refresh on public pages (login, signup)
+    const isPublicPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
+    
     // Prevent infinite loops: don't retry refresh endpoint or if already retrying
+    // Also skip token refresh on public pages where 401 is expected
     if (
       !originalRequest ||
       originalRequest._retry ||
       originalRequest.url?.includes('/auth/refresh') ||
-      error.response?.status !== 401
+      error.response?.status !== 401 ||
+      isPublicPage
     ) {
       return Promise.reject(error);
     }
