@@ -27,9 +27,21 @@ class AIPromptService:
     async def _get_redis(self) -> Optional[redis.Redis]:
         """Get Redis client for caching"""
         try:
+            # Check if we're in a context where async operations are available
+            # In Celery workers, the event loop may be closed
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No event loop running (e.g., in Celery worker)
+                return None
+            
             if self._redis_client is None:
                 self._redis_client = await get_redis()
             return self._redis_client
+        except RuntimeError as e:
+            # Event loop is closed or not available (common in Celery workers)
+            # Silently skip caching - this is expected in sync contexts
+            return None
         except Exception as e:
             print(f"[AIPromptService] Redis not available: {e}")
             return None
@@ -59,23 +71,31 @@ class AIPromptService:
         
         For other categories, quote_type is ignored.
         """
-        # Try cache first
+        # Try cache first (skip if async not available, e.g., in Celery workers)
         cache_key = self._get_cache_key(category, tenant_id or self.tenant_id, quote_type)
-        redis_client = await self._get_redis()
-        
-        if redis_client:
-            try:
-                cached = await redis_client.get(cache_key)
-                if cached:
-                    prompt_data = json.loads(cached)
-                    # Reconstruct prompt object from cached data
-                    prompt = self.db.query(AIPrompt).filter(
-                        AIPrompt.id == prompt_data['id']
-                    ).first()
-                    if prompt and prompt.is_active:
-                        return prompt
-            except Exception as e:
-                print(f"[AIPromptService] Cache read error: {e}")
+        try:
+            redis_client = await self._get_redis()
+            
+            if redis_client:
+                try:
+                    cached = await redis_client.get(cache_key)
+                    if cached:
+                        prompt_data = json.loads(cached)
+                        # Reconstruct prompt object from cached data
+                        prompt = self.db.query(AIPrompt).filter(
+                            AIPrompt.id == prompt_data['id']
+                        ).first()
+                        if prompt and prompt.is_active:
+                            return prompt
+                except Exception as e:
+                    # Cache read failed - continue to database lookup
+                    pass
+        except RuntimeError:
+            # Event loop is closed (e.g., in Celery worker) - skip caching
+            pass
+        except Exception as e:
+            # Other errors - log but continue
+            pass
         
         # Build query
         query = self.db.query(AIPrompt).filter(
@@ -151,28 +171,36 @@ class AIPromptService:
         return None
     
     async def _cache_prompt(self, prompt: AIPrompt, cache_key: str):
-        """Cache prompt in Redis"""
-        redis_client = await self._get_redis()
-        if redis_client:
-            try:
-                prompt_data = {
-                    'id': prompt.id,
-                    'category': prompt.category,
-                    'name': prompt.name,
-                    'system_prompt': prompt.system_prompt,
-                    'user_prompt_template': prompt.user_prompt_template,
-                    'model': prompt.model,
-                    'temperature': prompt.temperature,
-                    'max_tokens': prompt.max_tokens,
-                    'variables': prompt.variables
-                }
-                await redis_client.setex(
-                    cache_key,
-                    3600,  # 1 hour TTL
-                    json.dumps(prompt_data)
-                )
-            except Exception as e:
-                print(f"[AIPromptService] Cache write error: {e}")
+        """Cache prompt in Redis (skips silently if async not available)"""
+        try:
+            redis_client = await self._get_redis()
+            if redis_client:
+                try:
+                    prompt_data = {
+                        'id': prompt.id,
+                        'category': prompt.category,
+                        'name': prompt.name,
+                        'system_prompt': prompt.system_prompt,
+                        'user_prompt_template': prompt.user_prompt_template,
+                        'model': prompt.model,
+                        'temperature': prompt.temperature,
+                        'max_tokens': prompt.max_tokens,
+                        'variables': prompt.variables
+                    }
+                    await redis_client.setex(
+                        cache_key,
+                        3600,  # 1 hour TTL
+                        json.dumps(prompt_data)
+                    )
+                except Exception:
+                    # Cache write failed - silently continue
+                    pass
+        except RuntimeError:
+            # Event loop is closed (e.g., in Celery worker) - skip caching
+            pass
+        except Exception:
+            # Other errors - silently skip caching
+            pass
     
     def render_prompt(
         self,
@@ -446,12 +474,20 @@ class AIPromptService:
         return query.order_by(AIPrompt.category, AIPrompt.version.desc()).all()
     
     async def _invalidate_cache(self, category: str, tenant_id: Optional[str]):
-        """Invalidate cache for a prompt category"""
-        redis_client = await self._get_redis()
-        if redis_client:
-            try:
-                cache_key = self._get_cache_key(category, tenant_id, None)
-                await redis_client.delete(cache_key)
-            except Exception as e:
-                print(f"[AIPromptService] Cache invalidation error: {e}")
+        """Invalidate cache for a prompt category (skips silently if async not available)"""
+        try:
+            redis_client = await self._get_redis()
+            if redis_client:
+                try:
+                    cache_key = self._get_cache_key(category, tenant_id, None)
+                    await redis_client.delete(cache_key)
+                except Exception:
+                    # Cache invalidation failed - silently continue
+                    pass
+        except RuntimeError:
+            # Event loop is closed (e.g., in Celery worker) - skip cache invalidation
+            pass
+        except Exception:
+            # Other errors - silently skip
+            pass
 
