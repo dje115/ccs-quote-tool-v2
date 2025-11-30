@@ -75,7 +75,14 @@ docker-compose -f docker-compose.prod.yml up -d --build
    - Feature comparisons
    - Architecture improvements
 
-7. **[CHANGELOG.md](./CHANGELOG.md)**
+7. **[SLA_AND_SUPPORT_CONTRACTS.md](./SLA_AND_SUPPORT_CONTRACTS.md)** 🆕 **NEW**
+   - Complete SLA management system
+   - Support contracts with SLA policies
+   - SLA compliance tracking and reporting
+   - Policy templates and configuration
+   - Analytics and forecasting
+
+8. **[CHANGELOG.md](./CHANGELOG.md)**
    - Version history
    - Recent changes and fixes
 
@@ -178,6 +185,25 @@ docker-compose -f docker-compose.prod.yml up -d --build
 - **Enhanced table interactions** with clickable headers and hover effects
 - **Improved campaign management** with working controls
 - **Better data display** with proper campaign names and relationships
+
+### 📊 SLA & Support Contracts System 🆕
+- **Comprehensive SLA policy management** with flexible configuration
+- **8 pre-configured SLA policy templates** (Standard, Extended, 24/7, Premium, etc.)
+- **Real-time SLA compliance tracking** and monitoring
+- **SLA breach detection** with warning and critical levels
+- **Auto-escalation workflow** on SLA breaches (priority escalation, auto-assignment, system comments)
+- **Email notifications** for SLA breaches to assigned agents and admins
+- **Scheduled SLA compliance reports** (daily, weekly, monthly) via Celery Beat
+- **Support contract management** with SLA policy linking
+- **SLA breach indicators** (green/orange/red flags) on Customers and Leads list pages
+- **Customer SLA widget** on customer detail page with compliance metrics
+- **SLA compliance history** per customer with daily tracking and trends
+- **Enhanced helpdesk dashboard** with SLA metrics cards
+- **SLA Analytics Dashboard** with Chart.js visualizations (Doughnut, Bar, Line charts)
+- **Custom Report Builder** for SLA and customer data with multiple export formats
+- **Agent performance tracking** by SLA compliance
+- **Historical trends analysis** with forecasting-ready data structure
+- **SLA factors integrated** into customer health scoring
 
 ---
 
