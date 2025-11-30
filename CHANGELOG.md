@@ -6,6 +6,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.0] - 2025-11-30
+
+### 🚀 Major Feature: Complete SLA & Support Contracts System
+
+#### ✨ New Features
+
+**SLA Management & Tracking**
+- Comprehensive SLA policy management with flexible configuration
+- 8 pre-configured SLA policy templates (Standard, Extended, 24/7, Premium, etc.)
+- Real-time SLA compliance tracking and monitoring
+- SLA breach detection with warning and critical levels
+- Auto-escalation workflow on SLA breaches (priority escalation, auto-assignment, system comments)
+- Email notifications for SLA breaches to assigned agents and admins
+- Scheduled SLA compliance reports (daily, weekly, monthly) via Celery Beat
+
+**Support Contracts**
+- Support contract management with SLA policy linking
+- Multi-tenant support contract system
+- Contract metadata and renewal tracking
+- Integration with helpdesk tickets
+
+**Customer & Lead Enhancements**
+- SLA breach indicators (green/orange/red flags) on Customers and Leads list pages
+- Customer SLA widget on customer detail page showing overall status, compliance rates, and active breaches
+- SLA compliance history per customer with daily tracking and trends
+- SLA status column in customer tickets tab
+- SLA factors integrated into customer health scoring (15 points for compliance)
+
+**Helpdesk Enhancements**
+- Enhanced helpdesk dashboard with SLA metrics cards (compliance rate, active breaches, tickets with SLA, breached tickets)
+- Ticket SLA status display in customer detail tickets tab
+- Real-time SLA monitoring with WebSocket updates
+
+**Analytics & Reporting**
+- Enhanced SLA Dashboard with Chart.js visualizations (Doughnut, Bar, Line charts)
+- Custom Report Builder (`/sla/reports`) with multiple report types, date ranges, metric selection, and export formats
+- Historical trends analysis with period breakdown
+- Agent performance tracking by SLA compliance
+- Forecasting-ready data structure
+
+#### 🔧 Improvements
+
+- Enhanced customer health scoring to include SLA compliance factors
+- Improved helpdesk stats endpoint with SLA metrics
+- Better error handling in SLA tracking service
+- Optimized SLA compliance queries for performance
+- Enhanced WebSocket events for real-time SLA updates
+
+#### 📝 Documentation
+
+- Updated README.md with SLA system features
+- Created comprehensive SLA_AND_SUPPORT_CONTRACTS.md documentation
+- Updated API documentation with new SLA endpoints
+- Added SLA policy template documentation
+
+#### 🐛 Bug Fixes
+
+- Fixed SLA breach status calculation in customer/lead lists
+- Corrected SLA compliance history date range handling
+- Fixed template creation endpoint enum handling
+- Resolved Chart.js import issues in SLA Dashboard
+
+---
+
 ## [2.7.0] - 2025-10-18
 
 ### 🚀 Major System Upgrades & Stabilization
