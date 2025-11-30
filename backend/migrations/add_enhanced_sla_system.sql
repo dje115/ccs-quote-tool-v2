@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS sla_breach_alerts (
     acknowledged_at TIMESTAMP WITH TIME ZONE,
     acknowledged_by VARCHAR(36) REFERENCES users(id),
     
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_sla_breach_tenant_unacknowledged ON sla_breach_alerts(tenant_id, acknowledged, created_at);

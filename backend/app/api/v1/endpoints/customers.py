@@ -5,7 +5,7 @@ Customer management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, case
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr
 import uuid
@@ -170,7 +170,7 @@ async def list_leads(
         breach_stmt = select(
             Ticket.customer_id,
             func.max(
-                func.case(
+                case(
                     (SLABreachAlert.alert_level == 'critical', 3),
                     (SLABreachAlert.alert_level == 'warning', 2),
                     else_=1
@@ -182,11 +182,7 @@ async def list_leads(
             and_(
                 Ticket.customer_id.in_(customer_ids),
                 Ticket.tenant_id == current_tenant.id,
-                Ticket.is_deleted == False,
-                or_(
-                    SLABreachAlert.acknowledged.is_(None),
-                    SLABreachAlert.acknowledged == False
-                )
+                SLABreachAlert.acknowledged == False
             )
         ).group_by(Ticket.customer_id)
         
@@ -290,7 +286,7 @@ async def list_customers(
         breach_stmt = select(
             Ticket.customer_id,
             func.max(
-                func.case(
+                case(
                     (SLABreachAlert.alert_level == 'critical', 3),
                     (SLABreachAlert.alert_level == 'warning', 2),
                     else_=1
@@ -302,11 +298,7 @@ async def list_customers(
             and_(
                 Ticket.customer_id.in_(customer_ids),
                 Ticket.tenant_id == current_user.tenant_id,
-                Ticket.is_deleted == False,
-                or_(
-                    SLABreachAlert.acknowledged.is_(None),
-                    SLABreachAlert.acknowledged == False
-                )
+                SLABreachAlert.acknowledged == False
             )
         ).group_by(Ticket.customer_id)
         

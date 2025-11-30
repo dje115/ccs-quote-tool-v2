@@ -6,7 +6,7 @@ SLA Management API Endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, update, func, Integer
+from sqlalchemy import select, and_, or_, update, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timezone, timedelta
@@ -409,6 +409,9 @@ async def list_breach_alerts(
         )
         
         if acknowledged is not None:
+            # Handle string "false" or "true" from query params
+            if isinstance(acknowledged, str):
+                acknowledged = acknowledged.lower() == 'true'
             stmt = stmt.where(SLABreachAlert.acknowledged == acknowledged)
         if alert_level:
             stmt = stmt.where(SLABreachAlert.alert_level == alert_level)
@@ -424,7 +427,10 @@ async def list_breach_alerts(
         
         return [SLABreachAlertResponse.model_validate(a) for a in alerts]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error listing breach alerts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error listing breach alerts: {str(e)}")
 
 
 @router.post("/breach-alerts/{alert_id}/acknowledge", response_model=SLABreachAlertResponse)
@@ -517,8 +523,8 @@ async def get_sla_performance_by_agent(
             User.name.label('agent_name'),
             User.email.label('agent_email'),
             func.count(Ticket.id).label('total_tickets'),
-            func.sum(func.cast(Ticket.sla_first_response_breached, Integer)).label('fr_breaches'),
-            func.sum(func.cast(Ticket.sla_resolution_breached, Integer)).label('res_breaches'),
+            func.sum(func.cast(Ticket.sla_first_response_breached, int)).label('fr_breaches'),
+            func.sum(func.cast(Ticket.sla_resolution_breached, int)).label('res_breaches'),
             func.avg(
                 func.extract('epoch', Ticket.first_response_at - Ticket.created_at) / 3600
             ).label('avg_fr_hours'),
@@ -704,7 +710,6 @@ async def get_customer_sla_summary(
             and_(
                 Ticket.customer_id == customer_id,
                 Ticket.tenant_id == current_tenant.id,
-                Ticket.is_deleted == False
             )
         )
         tickets_result = await db.execute(tickets_stmt)
@@ -721,11 +726,8 @@ async def get_customer_sla_summary(
             and_(
                 Ticket.customer_id == customer_id,
                 Ticket.tenant_id == current_tenant.id,
-                Ticket.is_deleted == False,
-                or_(
-                    SLABreachAlert.acknowledged.is_(None),
-                    SLABreachAlert.acknowledged == False
-                )
+,
+                SLABreachAlert.acknowledged == False
             )
         )
         breach_result = await db.execute(breach_alerts_stmt)
@@ -900,7 +902,7 @@ async def get_customer_sla_compliance_history(
             and_(
                 Ticket.customer_id == customer_id,
                 Ticket.tenant_id == current_tenant.id,
-                Ticket.is_deleted == False,
+,
                 SLAComplianceRecord.recorded_at >= start_dt,
                 SLAComplianceRecord.recorded_at <= end_dt
             )

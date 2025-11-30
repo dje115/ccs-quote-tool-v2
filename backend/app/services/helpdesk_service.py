@@ -535,10 +535,7 @@ class HelpdeskService:
         active_breach_alerts = self.db.query(func.count(SLABreachAlert.id)).filter(
             and_(
                 SLABreachAlert.tenant_id == self.tenant_id,
-                or_(
-                    SLABreachAlert.acknowledged.is_(None),
-                    SLABreachAlert.acknowledged == False
-                )
+                SLABreachAlert.acknowledged == False
             )
         ).scalar() or 0
         
