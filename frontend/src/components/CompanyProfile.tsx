@@ -311,18 +311,18 @@ const CompanyProfile: React.FC = () => {
             : aiData.partnership_opportunities || prev.partnership_opportunities || '');
         
         return {
-          ...prev,
-          company_description: aiData.company_description || prev.company_description,
-          products_services: aiData.products_services || [],
-          unique_selling_points: aiData.unique_selling_points || [],
-          target_markets: aiData.target_markets || [],
-          sales_methodology: aiData.sales_methodology || prev.sales_methodology,
-          elevator_pitch: aiData.elevator_pitch || prev.elevator_pitch,
+        ...prev,
+        company_description: aiData.company_description || prev.company_description,
+        products_services: aiData.products_services || [],
+        unique_selling_points: aiData.unique_selling_points || [],
+        target_markets: aiData.target_markets || [],
+        sales_methodology: aiData.sales_methodology || prev.sales_methodology,
+        elevator_pitch: aiData.elevator_pitch || prev.elevator_pitch,
           partnership_opportunities: partnershipValue,
-          company_phone_numbers: aiData.company_phone_numbers || prev.company_phone_numbers,
-          company_email_addresses: aiData.company_email_addresses || prev.company_email_addresses,
-          company_address: aiData.company_address || prev.company_address,
-          website_keywords: aiData.website_keywords || prev.website_keywords
+        company_phone_numbers: aiData.company_phone_numbers || prev.company_phone_numbers,
+        company_email_addresses: aiData.company_email_addresses || prev.company_email_addresses,
+        company_address: aiData.company_address || prev.company_address,
+        website_keywords: aiData.website_keywords || prev.website_keywords
         };
       });
       setSuccess('All AI suggestions applied! Click "Save Company Profile" to save changes.');
@@ -336,18 +336,18 @@ const CompanyProfile: React.FC = () => {
             : aiData.partnership_opportunities || prev.partnership_opportunities || '');
         
         return {
-          ...prev,
-          company_description: aiData.company_description || prev.company_description,
-          products_services: [...new Set([...prev.products_services, ...(aiData.products_services || [])])],
-          unique_selling_points: [...new Set([...prev.unique_selling_points, ...(aiData.unique_selling_points || [])])],
-          target_markets: [...new Set([...prev.target_markets, ...(aiData.target_markets || [])])],
-          sales_methodology: aiData.sales_methodology || prev.sales_methodology,
-          elevator_pitch: aiData.elevator_pitch || prev.elevator_pitch,
+        ...prev,
+        company_description: aiData.company_description || prev.company_description,
+        products_services: [...new Set([...prev.products_services, ...(aiData.products_services || [])])],
+        unique_selling_points: [...new Set([...prev.unique_selling_points, ...(aiData.unique_selling_points || [])])],
+        target_markets: [...new Set([...prev.target_markets, ...(aiData.target_markets || [])])],
+        sales_methodology: aiData.sales_methodology || prev.sales_methodology,
+        elevator_pitch: aiData.elevator_pitch || prev.elevator_pitch,
           partnership_opportunities: partnershipValue,
-          company_phone_numbers: [...new Set([...prev.company_phone_numbers, ...(aiData.company_phone_numbers || [])])],
-          company_email_addresses: [...prev.company_email_addresses, ...(aiData.company_email_addresses || [])],
-          company_address: aiData.company_address || prev.company_address,
-          website_keywords: { ...prev.website_keywords, ...aiData.website_keywords }
+        company_phone_numbers: [...new Set([...prev.company_phone_numbers, ...(aiData.company_phone_numbers || [])])],
+        company_email_addresses: [...prev.company_email_addresses, ...(aiData.company_email_addresses || [])],
+        company_address: aiData.company_address || prev.company_address,
+        website_keywords: { ...prev.website_keywords, ...aiData.website_keywords }
         };
       });
       setSuccess('All AI suggestions merged! Click "Save Company Profile" to save changes.');

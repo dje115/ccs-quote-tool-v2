@@ -33,7 +33,9 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   PersonAdd as PersonAddIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { campaignAPI } from '../services/api';
@@ -45,10 +47,52 @@ const CampaignDetail: React.FC = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<string>('lead_score');
+  const [sortOrder, setSortOrder] = useState<string>('desc');
   const [editFormData, setEditFormData] = useState({
     name: '',
     description: '',
     company_names: [] as string[]
+  });
+  
+  // Helper function to shorten sector names
+  const shortenSector = (sector: string | null | undefined): string => {
+    if (!sector || sector === 'Unknown') return 'Unknown';
+    // If longer than 25 characters, truncate and add ellipsis
+    if (sector.length > 25) {
+      return sector.substring(0, 22) + '...';
+    }
+    return sector;
+  };
+  
+  // Handle sorting
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+  
+  // Sort leads
+  const sortedLeads = [...leads].sort((a, b) => {
+    let aVal: any = a[sortBy];
+    let bVal: any = b[sortBy];
+    
+    // Handle null/undefined values
+    if (aVal == null) aVal = '';
+    if (bVal == null) bVal = '';
+    
+    // Convert to string for comparison
+    aVal = String(aVal).toLowerCase();
+    bVal = String(bVal).toLowerCase();
+    
+    if (sortOrder === 'asc') {
+      return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    } else {
+      return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+    }
   });
 
   useEffect(() => {
@@ -546,7 +590,17 @@ const CampaignDetail: React.FC = () => {
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
                 <TableCell><strong>Company</strong></TableCell>
                 <TableCell><strong>Website</strong></TableCell>
-                <TableCell><strong>Sector</strong></TableCell>
+                <TableCell 
+                  sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                  onClick={() => handleSort('business_sector')}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <strong>Sector</strong>
+                    {sortBy === 'business_sector' && (
+                      sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                    )}
+                  </Box>
+                </TableCell>
                 <TableCell align="right"><strong>Score</strong></TableCell>
                 <TableCell><strong>Status</strong></TableCell>
                 <TableCell align="right"><strong>Actions</strong></TableCell>
@@ -565,7 +619,7 @@ const CampaignDetail: React.FC = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                (leads || []).map((lead) => (
+                sortedLeads.map((lead) => (
                   <TableRow key={lead.id} hover>
                     <TableCell>
                       <Typography variant="body2" fontWeight="500">
@@ -592,9 +646,10 @@ const CampaignDetail: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={lead.business_sector || 'Unknown'}
+                        label={shortenSector(lead.business_sector)}
                         size="small"
                         variant="outlined"
+                        title={lead.business_sector || 'Unknown'}
                       />
                     </TableCell>
                     <TableCell align="right">

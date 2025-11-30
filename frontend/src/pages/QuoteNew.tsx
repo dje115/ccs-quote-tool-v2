@@ -44,7 +44,8 @@ import api from '../services/api';
 const QuoteNew: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const customerIdParam = searchParams.get('customer');
+  // Support both 'customer' and 'customer_id' parameters
+  const customerIdParam = searchParams.get('customer') || searchParams.get('customer_id');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -85,10 +86,27 @@ const QuoteNew: React.FC = () => {
     loadCustomers();
   }, []);
 
+  // Update customer_id when customerIdParam changes
+  useEffect(() => {
+    if (customerIdParam && customerIdParam !== formData.customer_id) {
+      setFormData(prev => ({ ...prev, customer_id: customerIdParam }));
+    }
+  }, [customerIdParam]);
+
   const loadCustomers = async () => {
     try {
-      const response = await customerAPI.list({ limit: 1000 });
-      setCustomers(response.data || []);
+      // Include leads in the customer list for quote creation
+      const response = await customerAPI.list({ limit: 1000, exclude_leads: false });
+      const customersList = response.data || [];
+      setCustomers(customersList);
+      
+      // If customerIdParam is provided and customer exists in the list, set it
+      if (customerIdParam && customersList.length > 0) {
+        const customerExists = customersList.some((c: any) => c.id === customerIdParam);
+        if (customerExists && formData.customer_id !== customerIdParam) {
+          setFormData(prev => ({ ...prev, customer_id: customerIdParam }));
+        }
+      }
     } catch (error) {
       console.error('Error loading customers:', error);
     }

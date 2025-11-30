@@ -198,6 +198,7 @@ export const supplierAPI = {
 // Customer API
 export const customerAPI = {
   list: (params?: any, config?: any) => apiClient.get('/customers/', { params, ...config }),
+  listLeads: () => apiClient.get('/customers/leads'),
   create: (data: any) => apiClient.post('/customers/', data),
   get: (id: string, config?: any) => apiClient.get(`/customers/${id}`, config),
   update: (id: string, data: any) => apiClient.put(`/customers/${id}`, data),
@@ -210,6 +211,40 @@ export const customerAPI = {
   updateKnownFacts: (id: string, knownFacts: string) => apiClient.put(`/customers/${id}/known-facts`, { known_facts: knownFacts }),
   changeStatus: (id: string, status: string) => apiClient.patch(`/customers/${id}/status`, { status }),
   getCompetitors: (params?: any) => apiClient.get('/customers/competitors', { params }),
+};
+
+// Opportunity API
+export const opportunityAPI = {
+  list: (params?: any) => apiClient.get('/opportunities/', { params }),
+  get: (id: string) => apiClient.get(`/opportunities/${id}`),
+  create: (data: any) => apiClient.post('/opportunities/', data),
+  update: (id: string, data: any) => apiClient.put(`/opportunities/${id}`, data),
+  updateStage: (id: string, stage: string) => apiClient.put(`/opportunities/${id}/stage`, { stage }),
+  attachQuote: (id: string, quoteId: string) => apiClient.post(`/opportunities/${id}/attach-quote`, { quote_id: quoteId }),
+  delete: (id: string) => apiClient.delete(`/opportunities/${id}`),
+  getCustomerOpportunities: (customerId: string) => apiClient.get(`/opportunities/customer/${customerId}`),
+};
+
+export const contractAPI = {
+  // Templates
+  listTemplates: (params?: any) => apiClient.get('/contracts/templates', { params }),
+  getTemplate: (id: string) => apiClient.get(`/contracts/templates/${id}`),
+  createTemplate: (data: any) => apiClient.post('/contracts/templates', data),
+  updateTemplate: (id: string, data: any) => apiClient.put(`/contracts/templates/${id}`, data),
+  deleteTemplate: (id: string) => apiClient.delete(`/contracts/templates/${id}`),
+  generateTemplate: (data: any) => apiClient.post('/contracts/templates/generate', data),
+  copyTemplate: (id: string, newName: string) => apiClient.post(`/contracts/templates/${id}/copy`, { new_name: newName }),
+  
+  // Template Versions
+  createVersion: (templateId: string, data: any) => apiClient.post(`/contracts/templates/${templateId}/versions`, data),
+  getVersion: (templateId: string, versionId: string) => apiClient.get(`/contracts/templates/${templateId}/versions/${versionId}`),
+  
+  // Contracts
+  list: (params?: any) => apiClient.get('/contracts/', { params }),
+  get: (id: string) => apiClient.get(`/contracts/${id}`),
+  create: (data: any) => apiClient.post('/contracts/', data),
+  update: (id: string, data: any) => apiClient.put(`/contracts/${id}`, data),
+  delete: (id: string) => apiClient.delete(`/contracts/${id}`),
 };
 
 // Lead API
@@ -451,4 +486,51 @@ export const metricsAPI = {
   getCSAT: (startDate?: string, endDate?: string) => 
     apiClient.get('/metrics/csat', { params: { start_date: startDate, end_date: endDate } }),
   getDashboard: () => apiClient.get('/metrics/dashboard'),
+};
+
+// Support Contracts API
+export const supportContractAPI = {
+  list: (params?: any) => apiClient.get('/support-contracts', { params }),
+  get: (id: string) => apiClient.get(`/support-contracts/${id}`),
+  create: (data: any) => apiClient.post('/support-contracts', data),
+  update: (id: string, data: any) => apiClient.put(`/support-contracts/${id}`, data),
+  cancel: (id: string, reason: string) => apiClient.post(`/support-contracts/${id}/cancel`, null, { params: { cancellation_reason: reason } }),
+  getRecurringRevenue: () => apiClient.get('/support-contracts/recurring-revenue/summary'),
+  getExpiringSoon: (daysAhead?: number) => apiClient.get('/support-contracts/expiring-soon/list', { params: { days_ahead: daysAhead } }),
+};
+
+// SLA API
+export const slaAPI = {
+  // SLA Policies
+  listPolicies: (params?: any) => apiClient.get('/sla/policies', { params }),
+  getPolicy: (id: string) => apiClient.get(`/sla/policies/${id}`),
+  createPolicy: (data: any) => apiClient.post('/sla/policies', data),
+  updatePolicy: (id: string, data: any) => apiClient.put(`/sla/policies/${id}`, data),
+  deletePolicy: (id: string) => apiClient.delete(`/sla/policies/${id}`),
+  
+  // SLA Compliance
+  getCompliance: (params: any) => apiClient.get('/sla/compliance', { params }),
+  getTicketCompliance: (ticketId: string) => apiClient.get(`/sla/tickets/${ticketId}/compliance`),
+  getContractCompliance: (contractId: string) => apiClient.get(`/sla/contracts/${contractId}/compliance`),
+  
+  // Breach Alerts
+  listBreachAlerts: (params?: any) => apiClient.get('/sla/breach-alerts', { params }),
+  acknowledgeBreachAlert: (alertId: string) => apiClient.post(`/sla/breach-alerts/${alertId}/acknowledge`),
+  
+  // Performance & Reports
+  getPerformanceByAgent: (params: any) => apiClient.get('/sla/performance/by-agent', { params }),
+  exportReport: (params: any) => apiClient.get('/sla/reports/export', { params, responseType: 'blob' }),
+  getTrends: (params: any) => apiClient.get('/sla/trends', { params }),
+  
+  // Notification Rules
+  getNotificationRules: () => apiClient.get('/sla/notification-rules'),
+  updateNotificationSettings: (policyId: string, data: any) => apiClient.put(`/sla/policies/${policyId}/notification-settings`, data),
+  
+  // Customer SLA
+  getCustomerSummary: (customerId: string) => apiClient.get(`/sla/customers/${customerId}/summary`),
+  getCustomerComplianceHistory: (customerId: string, params?: any) => apiClient.get(`/sla/customers/${customerId}/compliance-history`, { params }),
+  
+  // Templates
+  listTemplates: () => apiClient.get('/sla/templates'),
+  createFromTemplate: (templateId: string, name: string) => apiClient.post(`/sla/templates/${templateId}/create-policy`, { name }),
 };

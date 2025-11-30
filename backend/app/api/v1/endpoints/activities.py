@@ -138,6 +138,31 @@ async def create_activity(
             activity_data=activity_dict
         ))
         
+        # Update customer last_contact_date and trigger lifecycle check (background task)
+        try:
+            from app.tasks.lifecycle_automation_tasks import check_lifecycle_transitions_task
+            from app.models.crm import Customer
+            from sqlalchemy import select, update
+            from datetime import datetime, timezone
+            
+            # Update last_contact_date using async session
+            update_stmt = update(Customer).where(
+                Customer.id == activity.customer_id,
+                Customer.tenant_id == current_tenant.id
+            ).values(
+                last_contact_date=datetime.now(timezone.utc)
+            )
+            await db.execute(update_stmt)
+            await db.commit()
+            
+            # Trigger lifecycle check as background task
+            check_lifecycle_transitions_task.delay(activity.customer_id, current_tenant.id)
+        except Exception as e:
+            # Log but don't fail the request if lifecycle check fails
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Lifecycle check failed for customer {activity.customer_id}: {e}")
+        
         return new_activity
         
     except KeyError as e:

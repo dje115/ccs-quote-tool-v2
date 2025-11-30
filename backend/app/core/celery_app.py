@@ -24,7 +24,8 @@ celery_app = Celery(
         "app.tasks.contract_renewal_tasks",
         "app.tasks.sla_tasks",
         "app.tasks.quote_tasks",
-        "app.tasks.lead_analysis_tasks"
+        "app.tasks.lead_analysis_tasks",
+        "app.tasks.lifecycle_automation_tasks"
     ]  # Import task modules
 )
 
@@ -48,6 +49,10 @@ celery_app.conf.update(
             'task': 'app.tasks.campaign_monitor_tasks.monitor_campaign_health',
             'schedule': 300.0,  # Every 5 minutes
         },
+        'check-dormant-customers': {
+            'task': 'check_dormant_customers',
+            'schedule': 86400.0,  # Every 24 hours (daily)
+        },
         'generate-health-report': {
             'task': 'app.tasks.campaign_monitor_tasks.get_campaign_health_report',
             'schedule': 21600.0,  # Every 6 hours
@@ -67,7 +72,22 @@ celery_app.conf.update(
         },
         'check-sla-violations': {
             'task': 'check_sla_violations',
-            'schedule': 300.0,  # Every 5 minutes
+            'schedule': 3600.0,  # Every hour
+        },
+        'generate-daily-sla-report': {
+            'task': 'generate_sla_compliance_report',
+            'schedule': 86400.0,  # Daily at midnight
+            'args': (None, 'daily'),  # All tenants, daily report
+        },
+        'generate-weekly-sla-report': {
+            'task': 'generate_sla_compliance_report',
+            'schedule': 604800.0,  # Weekly (7 days)
+            'args': (None, 'weekly'),  # All tenants, weekly report
+        },
+        'generate-monthly-sla-report': {
+            'task': 'generate_sla_compliance_report',
+            'schedule': 2592000.0,  # Monthly (30 days)
+            'args': (None, 'monthly'),  # All tenants, monthly report
         },
         'auto-escalate-sla-violations': {
             'task': 'auto_escalate_sla_violations',

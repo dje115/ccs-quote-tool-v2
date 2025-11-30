@@ -145,7 +145,8 @@ const Quotes: React.FC = () => {
   const loadManualCustomers = async () => {
     try {
       setManualLoading(true);
-      const response = await customerAPI.list({ limit: 100 });
+      // Include leads in the customer list for manual quote creation
+      const response = await customerAPI.list({ limit: 100, exclude_leads: false });
       setManualCustomers(response.data || []);
     } catch (error) {
       console.error('Error loading customers for manual quote', error);

@@ -37,7 +37,8 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Tooltip
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
@@ -65,10 +66,12 @@ import {
   Info as InfoIcon,
   Lightbulb as LightbulbIcon,
   AutoAwesome as SparkleIcon,
-  Support as SupportIcon
+  Support as SupportIcon,
+  Work as WorkIcon,
+  Visibility as ViewIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { customerAPI, contactAPI, quoteAPI, helpdeskAPI } from '../services/api';
+import { customerAPI, contactAPI, quoteAPI, helpdeskAPI, opportunityAPI } from '../services/api';
 import { useAbortController } from '../hooks/useAbortController';
 import axios from 'axios';
 
@@ -99,6 +102,7 @@ const CustomerDetail: React.FC = () => {
   const [contacts, setContacts] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<any>(null);
@@ -131,11 +135,12 @@ const CustomerDetail: React.FC = () => {
         return;
       }
       
-      const [customerRes, contactsRes, quotesRes, ticketsRes] = await Promise.all([
+      const [customerRes, contactsRes, quotesRes, ticketsRes, opportunitiesRes] = await Promise.all([
         customerAPI.get(id, { signal }),
         contactAPI.list(id, { signal }),
         quoteAPI.list({ customer_id: id }, { signal }),
-        helpdeskAPI.getTickets({ customer_id: id }, { signal })
+        helpdeskAPI.getTickets({ customer_id: id }, { signal }),
+        opportunityAPI.getCustomerOpportunities(id).catch(() => ({ data: [] })) // Load opportunities, ignore errors
       ]);
 
       // Check if request was cancelled before updating state
@@ -157,6 +162,8 @@ const CustomerDetail: React.FC = () => {
       // Handle tickets response - it can be {tickets: [...]} or just [...]
       const ticketsData = ticketsRes.data?.tickets || ticketsRes.data || [];
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
+      // Handle opportunities response
+      setOpportunities(opportunitiesRes.data || []);
     } catch (error: any) {
       // Ignore cancellation errors
       if (axios.isCancel(error) || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
@@ -425,6 +432,30 @@ const CustomerDetail: React.FC = () => {
     } catch (error) {
       console.error('Failed to update status:', error);
       setAiAnalysisError('Failed to update status');
+      setTimeout(() => setAiAnalysisError(null), 5000);
+    }
+  };
+
+  const handleLifecycleAutoManagedChange = async (enabled: boolean) => {
+    // Optimistic update
+    setCustomer((prev: any) => ({
+      ...prev,
+      lifecycle_auto_managed: enabled
+    }));
+    
+    try {
+      await customerAPI.update(id!, { lifecycle_auto_managed: enabled });
+      setAiAnalysisSuccess(enabled ? 'Lifecycle automation enabled' : 'Lifecycle automation disabled');
+      setTimeout(() => setAiAnalysisSuccess(null), 3000);
+      await loadCustomerData();
+    } catch (error) {
+      console.error('Failed to update lifecycle automation:', error);
+      // Revert optimistic update on error
+      setCustomer((prev: any) => ({
+        ...prev,
+        lifecycle_auto_managed: !enabled
+      }));
+      setAiAnalysisError('Failed to update lifecycle automation');
       setTimeout(() => setAiAnalysisError(null), 5000);
     }
   };
@@ -752,6 +783,7 @@ const CustomerDetail: React.FC = () => {
         >
           <Tab icon={<PhoneIcon />} iconPosition="start" label="Activity" />
           <Tab icon={<DescriptionIcon />} iconPosition="start" label="Quotes" />
+          <Tab icon={<WorkIcon />} iconPosition="start" label="Opportunities" />
           <Tab icon={<SupportIcon />} iconPosition="start" label="Tickets" />
         </Tabs>
       </Paper>
@@ -764,6 +796,7 @@ const CustomerDetail: React.FC = () => {
           onEditContact={handleEditContact}
           onConfirmRegistration={handleConfirmRegistration}
           onStatusChange={handleStatusChange}
+          onLifecycleAutoManagedChange={handleLifecycleAutoManagedChange}
         />
       )}
       {/* Tab Panel 1: Discovery Intelligence - Data from Campaign Phase */}
@@ -2155,13 +2188,22 @@ const CustomerDetail: React.FC = () => {
             <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <DescriptionIcon /> Quotes
             </Typography>
-            <Button 
-              variant="contained" 
-              startIcon={<AddIcon />}
-              onClick={() => navigate(`/quotes/new?customer_id=${id}`)}
-            >
-              Create New Quote
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button 
+                variant="outlined" 
+                startIcon={<AddIcon />}
+                onClick={() => navigate(`/quotes/new?customer=${id}`)}
+              >
+                Create AI Quote
+              </Button>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />}
+                onClick={() => navigate(`/quotes/new/legacy?customer=${id}`)}
+              >
+                Create Manual Quote
+              </Button>
+            </Box>
           </Box>
           
           {quotes.length === 0 ? (
@@ -2217,8 +2259,146 @@ const CustomerDetail: React.FC = () => {
         </Paper>
       )}
       
-      {/* Tab Panel 9: Tickets */}
+      {/* Tab Panel 9: Opportunities */}
       {currentTab === 9 && (
+        <Paper sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <WorkIcon /> Opportunities
+            </Typography>
+            <Button 
+              variant="contained" 
+              startIcon={<AddIcon />}
+              onClick={() => {
+                // Navigate to opportunities page with customer pre-selected
+                navigate(`/opportunities?customer_id=${id}`);
+              }}
+            >
+              Create New Opportunity
+            </Button>
+          </Box>
+          
+          {opportunities.length === 0 ? (
+            <Alert severity="info">
+              No opportunities found for this customer. Create a new opportunity to track deals.
+            </Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell><strong>Title</strong></TableCell>
+                    <TableCell><strong>Stage</strong></TableCell>
+                    <TableCell><strong>Probability</strong></TableCell>
+                    <TableCell><strong>Value</strong></TableCell>
+                    <TableCell><strong>Deal Date</strong></TableCell>
+                    <TableCell><strong>Created</strong></TableCell>
+                    <TableCell><strong>Actions</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {opportunities.map((opp: any) => (
+                    <TableRow key={opp.id} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="medium">
+                          {opp.title}
+                        </Typography>
+                        {opp.description && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {opp.description.substring(0, 60)}...
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={opp.stage === 'qualified' ? 'Qualified' :
+                                 opp.stage === 'scoping' ? 'Scoping' :
+                                 opp.stage === 'proposal_sent' ? 'Proposal Sent' :
+                                 opp.stage === 'negotiation' ? 'Negotiation' :
+                                 opp.stage === 'verbal_yes' ? 'Verbal Yes' :
+                                 opp.stage === 'closed_won' ? 'Closed Won' :
+                                 opp.stage === 'closed_lost' ? 'Closed Lost' : opp.stage}
+                          size="small"
+                          color={
+                            opp.stage === 'qualified' ? 'info' :
+                            opp.stage === 'scoping' ? 'primary' :
+                            opp.stage === 'proposal_sent' ? 'warning' :
+                            opp.stage === 'negotiation' ? 'warning' :
+                            opp.stage === 'verbal_yes' ? 'success' :
+                            opp.stage === 'closed_won' ? 'success' :
+                            opp.stage === 'closed_lost' ? 'error' : 'default'
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2">{opp.conversion_probability}%</Typography>
+                          <Box
+                            sx={{
+                              width: 50,
+                              height: 8,
+                              bgcolor: 'grey.200',
+                              borderRadius: 1,
+                              overflow: 'hidden'
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                width: `${opp.conversion_probability}%`,
+                                height: '100%',
+                                bgcolor: opp.conversion_probability > 70 ? 'success.main' : 
+                                         opp.conversion_probability > 40 ? 'warning.main' : 'error.main'
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {opp.estimated_value ? (
+                          <Typography variant="body2" fontWeight="medium">
+                            £{opp.estimated_value.toLocaleString()}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Not set
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {opp.potential_deal_date ? (
+                          <Typography variant="body2">
+                            {new Date(opp.potential_deal_date).toLocaleDateString()}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Not set
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {new Date(opp.created_at).toLocaleDateString()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <IconButton
+                          size="small"
+                          onClick={() => navigate(`/opportunities/${opp.id}`)}
+                        >
+                          <ViewIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      )}
+      
+      {/* Tab Panel 10: Tickets */}
+      {currentTab === 10 && (
         <Paper sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2246,54 +2426,91 @@ const CustomerDetail: React.FC = () => {
                     <TableCell><strong>Subject</strong></TableCell>
                     <TableCell><strong>Status</strong></TableCell>
                     <TableCell><strong>Priority</strong></TableCell>
+                    <TableCell><strong>SLA Status</strong></TableCell>
                     <TableCell><strong>Created</strong></TableCell>
                     <TableCell><strong>Actions</strong></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {tickets.map((ticket: any) => (
-                    <TableRow key={ticket.id} hover>
-                      <TableCell>{ticket.ticket_number}</TableCell>
-                      <TableCell>{ticket.subject}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={ticket.status} 
-                          size="small"
-                          color={
-                            ticket.status === 'open' ? 'error' :
-                            ticket.status === 'in_progress' ? 'warning' :
-                            ticket.status === 'resolved' ? 'success' :
-                            ticket.status === 'closed' ? 'default' : 'default'
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={ticket.priority} 
-                          size="small"
-                          color={
-                            ticket.priority === 'urgent' ? 'error' :
-                            ticket.priority === 'high' ? 'warning' :
-                            ticket.priority === 'medium' ? 'info' : 'default'
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>{new Date(ticket.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="small"
-                          onClick={() => navigate(`/helpdesk/${ticket.id}`)}
-                        >
-                          View
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {tickets.map((ticket: any) => {
+                    const hasSLA = ticket.sla_policy_id;
+                    const hasBreach = ticket.sla_first_response_breached || ticket.sla_resolution_breached;
+                    const slaStatus = hasSLA ? (hasBreach ? 'breached' : 'compliant') : 'no_sla';
+                    
+                    return (
+                      <TableRow key={ticket.id} hover>
+                        <TableCell>{ticket.ticket_number}</TableCell>
+                        <TableCell>{ticket.subject}</TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={ticket.status} 
+                            size="small"
+                            color={
+                              ticket.status === 'open' ? 'error' :
+                              ticket.status === 'in_progress' ? 'warning' :
+                              ticket.status === 'resolved' ? 'success' :
+                              ticket.status === 'closed' ? 'default' : 'default'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={ticket.priority} 
+                            size="small"
+                            color={
+                              ticket.priority === 'urgent' ? 'error' :
+                              ticket.priority === 'high' ? 'warning' :
+                              ticket.priority === 'medium' ? 'info' : 'default'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {hasSLA ? (
+                            <Tooltip title={
+                              hasBreach 
+                                ? `SLA Breached: ${ticket.sla_first_response_breached ? 'First Response' : ''}${ticket.sla_first_response_breached && ticket.sla_resolution_breached ? ' & ' : ''}${ticket.sla_resolution_breached ? 'Resolution' : ''}`
+                                : 'SLA Compliant'
+                            }>
+                              <Chip
+                                icon={hasBreach ? <ErrorIcon /> : <CheckCircleIcon />}
+                                label={hasBreach ? 'Breached' : 'Compliant'}
+                                size="small"
+                                color={hasBreach ? 'error' : 'success'}
+                              />
+                            </Tooltip>
+                          ) : (
+                            <Chip
+                              label="No SLA"
+                              size="small"
+                              color="default"
+                              variant="outlined"
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>{new Date(ticket.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="small"
+                            onClick={() => navigate(`/helpdesk/${ticket.id}`)}
+                          >
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
           )}
         </Paper>
+
+        {/* SLA Compliance History */}
+        {customer?.id && (
+          <Box sx={{ mb: 3 }}>
+            <CustomerSLAHistory customerId={customer.id} />
+          </Box>
+        )}
       )}
       {/* Contact Dialog */}
       <ContactDialog

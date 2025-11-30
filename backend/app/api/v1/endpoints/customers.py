@@ -5,7 +5,7 @@ Customer management endpoints
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_, func
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr
 import uuid
@@ -72,6 +72,10 @@ class CustomerResponse(BaseModel):
     ai_analysis_task_id: str | None = None
     ai_analysis_started_at: datetime | None = None
     ai_analysis_completed_at: datetime | None = None
+    last_contact_date: datetime | None = None
+    conversion_probability: int | None = None
+    next_scheduled_contact: datetime | None = None  # Next Point of Action (NPA)
+    sla_breach_status: str | None = None  # 'none', 'warning', 'critical' - SLA breach status for customer's tickets
     
     class Config:
         from_attributes = True
@@ -91,6 +95,7 @@ class CustomerUpdate(BaseModel):
     billing_postcode: str | None = None
     known_facts: str | None = None
     is_competitor: bool | None = None
+    lifecycle_auto_managed: bool | None = None
 
 
 def _safe_parse_json_field(value):
@@ -109,6 +114,102 @@ def _safe_parse_json_field(value):
     return None
 
 
+@router.get("/leads", response_model=List[CustomerResponse])
+async def list_leads(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    _: None = Depends(lambda: check_permission("customers:read"))
+):
+    """
+    Get all CRM leads (customers with status=LEAD)
+    Includes lead-specific metrics like lead_score, last_contact_date, conversion_probability
+    Also includes next_scheduled_contact (NPA) from activities
+    """
+    from app.models.sales import SalesActivity
+    from datetime import datetime, timezone
+    
+    stmt = select(Customer).where(
+        and_(
+            Customer.tenant_id == current_tenant.id,
+            Customer.status == CustomerStatus.LEAD,
+            Customer.is_deleted == False
+        )
+    ).order_by(Customer.created_at.desc())
+    
+    result = await db.execute(stmt)
+    customers = result.scalars().all()
+    
+    # Get next scheduled contact (NPA) for each customer
+    customer_ids = [str(c.id) for c in customers]
+    next_contacts = {}
+    sla_breach_statuses = {}
+    
+    if customer_ids:
+        # Query for the earliest future follow-up date for each customer
+        npa_stmt = select(
+            SalesActivity.customer_id,
+            func.min(SalesActivity.follow_up_date).label('next_contact')
+        ).where(
+            and_(
+                SalesActivity.customer_id.in_(customer_ids),
+                SalesActivity.tenant_id == current_tenant.id,
+                SalesActivity.follow_up_date.isnot(None),
+                SalesActivity.follow_up_date > datetime.now(timezone.utc)
+            )
+        ).group_by(SalesActivity.customer_id)
+        
+        npa_result = await db.execute(npa_stmt)
+        for row in npa_result:
+            next_contacts[str(row.customer_id)] = row.next_contact
+        
+        # Get SLA breach status for each customer's tickets
+        from app.models.helpdesk import Ticket
+        from app.models.sla_compliance import SLABreachAlert
+        
+        breach_stmt = select(
+            Ticket.customer_id,
+            func.max(
+                func.case(
+                    (SLABreachAlert.alert_level == 'critical', 3),
+                    (SLABreachAlert.alert_level == 'warning', 2),
+                    else_=1
+                )
+            ).label('max_severity')
+        ).join(
+            SLABreachAlert, Ticket.id == SLABreachAlert.ticket_id, isouter=True
+        ).where(
+            and_(
+                Ticket.customer_id.in_(customer_ids),
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.is_deleted == False,
+                or_(
+                    SLABreachAlert.acknowledged.is_(None),
+                    SLABreachAlert.acknowledged == False
+                )
+            )
+        ).group_by(Ticket.customer_id)
+        
+        breach_result = await db.execute(breach_stmt)
+        for row in breach_result:
+            if row.max_severity == 3:
+                sla_breach_statuses[str(row.customer_id)] = 'critical'
+            elif row.max_severity == 2:
+                sla_breach_statuses[str(row.customer_id)] = 'warning'
+            else:
+                sla_breach_statuses[str(row.customer_id)] = 'none'
+    
+    # Build response with next scheduled contact
+    response = []
+    for customer in customers:
+        customer_dict = CustomerResponse.model_validate(customer).model_dump()
+        customer_dict['next_scheduled_contact'] = next_contacts.get(str(customer.id))
+        customer_dict['sla_breach_status'] = sla_breach_statuses.get(str(customer.id), 'none')
+        response.append(CustomerResponse(**customer_dict))
+    
+    return response
+
+
 @router.get("/", response_model=List[CustomerResponse])
 async def list_customers(
     skip: int = 0,
@@ -117,11 +218,15 @@ async def list_customers(
     sector: Optional[BusinessSector] = None,
     search: Optional[str] = None,
     is_competitor: Optional[bool] = None,
+    exclude_leads: bool = True,  # By default, exclude leads from customers list
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
     """
     List customers for current tenant
+    
+    By default, excludes customers with status=LEAD (these are shown in the separate Leads view).
+    Set exclude_leads=False to include leads in the customers list.
     
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     Database queries are executed asynchronously, allowing concurrent request handling.
@@ -133,6 +238,11 @@ async def list_customers(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
+    
+    # By default, exclude leads (status=LEAD) from customers list
+    # Leads should be viewed in the separate /leads-crm route
+    if exclude_leads:
+        stmt = stmt.where(Customer.status != CustomerStatus.LEAD)
     
     # Apply filters
     if status:
@@ -148,12 +258,80 @@ async def list_customers(
     result = await db.execute(stmt)
     customers = result.scalars().all()
     
+    # Get next scheduled contact (NPA) for each customer
+    customer_ids = [str(c.id) for c in customers]
+    next_contacts = {}
+    sla_breach_statuses = {}
+    
+    if customer_ids:
+        from app.models.sales import SalesActivity
+        from datetime import datetime, timezone
+        from sqlalchemy import func
+        npa_stmt = select(
+            SalesActivity.customer_id,
+            func.min(SalesActivity.follow_up_date).label('next_contact')
+        ).where(
+            and_(
+                SalesActivity.customer_id.in_(customer_ids),
+                SalesActivity.tenant_id == current_user.tenant_id,
+                SalesActivity.follow_up_date.isnot(None),
+                SalesActivity.follow_up_date > datetime.now(timezone.utc)
+            )
+        ).group_by(SalesActivity.customer_id)
+        
+        npa_result = await db.execute(npa_stmt)
+        for row in npa_result:
+            next_contacts[str(row.customer_id)] = row.next_contact
+        
+        # Get SLA breach status for each customer's tickets
+        from app.models.helpdesk import Ticket
+        from app.models.sla_compliance import SLABreachAlert
+        
+        breach_stmt = select(
+            Ticket.customer_id,
+            func.max(
+                func.case(
+                    (SLABreachAlert.alert_level == 'critical', 3),
+                    (SLABreachAlert.alert_level == 'warning', 2),
+                    else_=1
+                )
+            ).label('max_severity')
+        ).join(
+            SLABreachAlert, Ticket.id == SLABreachAlert.ticket_id, isouter=True
+        ).where(
+            and_(
+                Ticket.customer_id.in_(customer_ids),
+                Ticket.tenant_id == current_user.tenant_id,
+                Ticket.is_deleted == False,
+                or_(
+                    SLABreachAlert.acknowledged.is_(None),
+                    SLABreachAlert.acknowledged == False
+                )
+            )
+        ).group_by(Ticket.customer_id)
+        
+        breach_result = await db.execute(breach_stmt)
+        for row in breach_result:
+            if row.max_severity == 3:
+                sla_breach_statuses[str(row.customer_id)] = 'critical'
+            elif row.max_severity == 2:
+                sla_breach_statuses[str(row.customer_id)] = 'warning'
+            else:
+                sla_breach_statuses[str(row.customer_id)] = 'none'
+    
     # Fix ai_analysis_raw field that might be a string instead of dict
+    # Build response with next scheduled contact
+    response = []
     for customer in customers:
         if hasattr(customer, 'ai_analysis_raw'):
             customer.ai_analysis_raw = _safe_parse_json_field(customer.ai_analysis_raw)
+        
+        customer_dict = CustomerResponse.model_validate(customer).model_dump()
+        customer_dict['next_scheduled_contact'] = next_contacts.get(str(customer.id))
+        customer_dict['sla_breach_status'] = sla_breach_statuses.get(str(customer.id), 'none')
+        response.append(CustomerResponse(**customer_dict))
     
-    return customers
+    return response
 
 
 @router.get("/competitors", response_model=List[CustomerResponse])
@@ -370,6 +548,8 @@ async def update_customer(
         customer.known_facts = customer_update.known_facts if customer_update.known_facts.strip() else None
     if customer_update.is_competitor is not None:
         customer.is_competitor = customer_update.is_competitor
+    if customer_update.lifecycle_auto_managed is not None:
+        customer.lifecycle_auto_managed = customer_update.lifecycle_auto_managed
     
     await db.commit()
     await db.refresh(customer)

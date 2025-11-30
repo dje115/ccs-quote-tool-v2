@@ -19,6 +19,7 @@ from app.models.leads import LeadGenerationCampaign, Lead, LeadInteraction, Lead
 from app.models.quotes import Quote, QuoteItem, QuoteTemplate, PricingItem
 from app.models.product import Product, PricingRule, QuoteVersion
 from app.models.ai_prompt import AIPrompt, AIPromptVersion
+from app.models.opportunities import Opportunity
 from passlib.context import CryptContext
 import uuid
 

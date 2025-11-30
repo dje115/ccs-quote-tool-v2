@@ -146,6 +146,11 @@ class Customer(BaseModel):
     portal_access_token_generated_at = Column(DateTime(timezone=True), nullable=True)  # When token was generated
     portal_permissions = Column(JSON, nullable=True)  # Granular permissions: {"tickets": true, "quotes": true, "orders": true, "reporting": true}
     
+    # Lifecycle Management
+    lifecycle_auto_managed = Column(Boolean, default=True, nullable=False)  # Allow automatic lifecycle transitions
+    last_contact_date = Column(DateTime(timezone=True), nullable=True)  # Last contact/activity date for dormancy checks
+    conversion_probability = Column(Integer, nullable=True)  # 0-100 percentage for lead/prospect conversion
+    
     # Relationships
     contacts = relationship("Contact", back_populates="customer", cascade="all, delete-orphan")
     interactions = relationship("CustomerInteraction", back_populates="customer", cascade="all, delete-orphan")

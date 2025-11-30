@@ -23,7 +23,12 @@ import {
   Edit as EditIcon,
   Visibility as ViewIcon,
   Search as SearchIcon,
-  Assessment as AssessmentIcon
+  Assessment as AssessmentIcon,
+  Schedule as ScheduleIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
+  Flag as FlagIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { customerAPI } from '../services/api';
@@ -36,6 +41,8 @@ const Customers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
+  const [sortBy, setSortBy] = useState<string>('company_name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     loadCustomers();
@@ -57,6 +64,49 @@ const Customers: React.FC = () => {
     customer.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (customer.website && customer.website.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedCustomers = [...filteredCustomers].sort((a, b) => {
+    let aVal: any;
+    let bVal: any;
+
+    switch (sortBy) {
+      case 'company_name':
+        aVal = a.company_name?.toLowerCase() || '';
+        bVal = b.company_name?.toLowerCase() || '';
+        break;
+      case 'lead_score':
+        aVal = a.lead_score || 0;
+        bVal = b.lead_score || 0;
+        break;
+      case 'last_contact_date':
+        aVal = a.last_contact_date ? new Date(a.last_contact_date).getTime() : 0;
+        bVal = b.last_contact_date ? new Date(b.last_contact_date).getTime() : 0;
+        break;
+      case 'next_scheduled_contact':
+        aVal = a.next_scheduled_contact ? new Date(a.next_scheduled_contact).getTime() : 0;
+        bVal = b.next_scheduled_contact ? new Date(b.next_scheduled_contact).getTime() : 0;
+        break;
+      case 'business_sector':
+        aVal = a.business_sector?.toLowerCase() || '';
+        bVal = b.business_sector?.toLowerCase() || '';
+        break;
+      default:
+        return 0;
+    }
+
+    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   const handleAddCustomer = () => {
     setEditingCustomer(null);
@@ -152,30 +202,109 @@ const Customers: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Company Name</TableCell>
+              <TableCell>SLA</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('company_name')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <strong>Company Name</strong>
+                  {sortBy === 'company_name' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell>Website</TableCell>
-              <TableCell>Business Type</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('business_sector')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <strong>Business Type</strong>
+                  {sortBy === 'business_sector' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell>Status</TableCell>
-              <TableCell>Lead Score</TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('lead_score')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <strong>Lead Score</strong>
+                  {sortBy === 'lead_score' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('last_contact_date')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <strong>Last Contact</strong>
+                  {sortBy === 'last_contact_date' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('next_scheduled_contact')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <strong>Next Action</strong>
+                  {sortBy === 'next_scheduled_contact' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={9} align="center">
                   Loading...
                 </TableCell>
               </TableRow>
-            ) : filteredCustomers.length === 0 ? (
+            ) : sortedCustomers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={9} align="center">
                   No customers found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredCustomers.map((customer) => (
-                <TableRow key={customer.id} hover>
+              sortedCustomers.map((customer) => {
+                const hasScheduledContact = customer.next_scheduled_contact && new Date(customer.next_scheduled_contact) > new Date();
+                const isUpcoming = hasScheduledContact && new Date(customer.next_scheduled_contact) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+                
+                return (
+                <TableRow 
+                  key={customer.id} 
+                  hover
+                  sx={{ 
+                    backgroundColor: hasScheduledContact ? (isUpcoming ? 'rgba(255, 193, 7, 0.1)' : 'rgba(76, 175, 80, 0.05)') : 'inherit'
+                  }}
+                >
+                  <TableCell>
+                    <Tooltip title={
+                      customer.sla_breach_status === 'critical' ? 'Critical SLA breach' :
+                      customer.sla_breach_status === 'warning' ? 'SLA warning' :
+                      'No SLA breaches'
+                    }>
+                      <FlagIcon 
+                        sx={{ 
+                          color: customer.sla_breach_status === 'critical' ? '#f44336' :
+                                 customer.sla_breach_status === 'warning' ? '#ff9800' :
+                                 '#4caf50',
+                          fontSize: 20
+                        }} 
+                      />
+                    </Tooltip>
+                  </TableCell>
                   <TableCell>{customer.company_name}</TableCell>
                   <TableCell>
                     {customer.website ? (
@@ -219,6 +348,34 @@ const Customers: React.FC = () => {
                       <Chip label="No Score" size="small" variant="outlined" />
                     )}
                   </TableCell>
+                  <TableCell>
+                    {customer.last_contact_date ? (
+                      <Typography variant="body2">
+                        {new Date(customer.last_contact_date).toLocaleDateString()}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">Never</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {customer.next_scheduled_contact ? (
+                      <Box>
+                        <Chip
+                          label={new Date(customer.next_scheduled_contact).toLocaleDateString()}
+                          size="small"
+                          color={isUpcoming ? 'warning' : 'success'}
+                          icon={<ScheduleIcon fontSize="small" />}
+                        />
+                        {isUpcoming && (
+                          <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
+                            Upcoming
+                          </Typography>
+                        )}
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">None scheduled</Typography>
+                    )}
+                  </TableCell>
                   <TableCell align="right">
                     <IconButton
                       size="small"
@@ -246,7 +403,8 @@ const Customers: React.FC = () => {
                     )}
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

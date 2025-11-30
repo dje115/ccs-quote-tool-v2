@@ -70,10 +70,20 @@ class Ticket(Base, TimestampMixin):
     assigned_at = Column(DateTime(timezone=True), nullable=True)
     
     # SLA tracking
-    sla_target_hours = Column(Integer, nullable=True)  # Target resolution time in hours
+    sla_policy_id = Column(String(36), ForeignKey("sla_policies.id"), nullable=True, index=True)  # Applied SLA policy
+    sla_target_hours = Column(Integer, nullable=True)  # Target resolution time in hours (calculated from policy)
+    sla_first_response_hours = Column(Integer, nullable=True)  # Target first response time in hours
     first_response_at = Column(DateTime(timezone=True), nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     closed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # SLA compliance tracking
+    sla_first_response_breached = Column(Boolean, default=False, nullable=False)  # Did we breach first response SLA?
+    sla_resolution_breached = Column(Boolean, default=False, nullable=False)  # Did we breach resolution SLA?
+    sla_first_response_breached_at = Column(DateTime(timezone=True), nullable=True)  # When first response SLA was breached
+    sla_resolution_breached_at = Column(DateTime(timezone=True), nullable=True)  # When resolution SLA was breached
+    sla_first_response_met_at = Column(DateTime(timezone=True), nullable=True)  # When first response SLA was met
+    sla_resolution_met_at = Column(DateTime(timezone=True), nullable=True)  # When resolution SLA was met
     
     # Related entities
     related_quote_id = Column(String(36), ForeignKey("quotes.id"), nullable=True)
@@ -96,6 +106,7 @@ class Ticket(Base, TimestampMixin):
     created_by_user = relationship("User", foreign_keys=[created_by_user_id])
     related_quote = relationship("Quote", foreign_keys=[related_quote_id])
     related_contract = relationship("SupportContract", foreign_keys=[related_contract_id])
+    sla_policy = relationship("SLAPolicy", foreign_keys=[sla_policy_id])
     comments = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComment.created_at")
     attachments = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
     history = relationship("TicketHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketHistory.created_at")
@@ -228,7 +239,7 @@ class KnowledgeBaseArticle(Base, TimestampMixin):
 
 
 class SLAPolicy(Base, TimestampMixin):
-    """SLA policy model"""
+    """Enhanced SLA policy model with comprehensive metrics"""
     __tablename__ = "sla_policies"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -237,22 +248,55 @@ class SLAPolicy(Base, TimestampMixin):
     # Policy details
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
+    sla_level = Column(String(50), nullable=True)  # e.g., "Gold", "Silver", "Bronze", "24/7", "Business Hours"
     
-    # SLA targets (in hours)
-    first_response_hours = Column(Integer, nullable=True)
-    resolution_hours = Column(Integer, nullable=True)
+    # Response Time SLAs (in hours)
+    first_response_hours = Column(Integer, nullable=True)  # Target time for first response
+    first_response_hours_urgent = Column(Integer, nullable=True)  # Override for urgent tickets
+    first_response_hours_high = Column(Integer, nullable=True)  # Override for high priority
+    first_response_hours_medium = Column(Integer, nullable=True)  # Override for medium priority
+    first_response_hours_low = Column(Integer, nullable=True)  # Override for low priority
     
-    # Conditions
-    priority = Column(Enum(TicketPriority), nullable=True)  # Apply to specific priority
-    ticket_type = Column(Enum(TicketType), nullable=True)  # Apply to specific type
-    customer_ids = Column(JSON, nullable=True)  # Apply to specific customers
+    # Resolution Time SLAs (in hours)
+    resolution_hours = Column(Integer, nullable=True)  # Target time for resolution
+    resolution_hours_urgent = Column(Integer, nullable=True)  # Override for urgent tickets
+    resolution_hours_high = Column(Integer, nullable=True)  # Override for high priority
+    resolution_hours_medium = Column(Integer, nullable=True)  # Override for medium priority
+    resolution_hours_low = Column(Integer, nullable=True)  # Override for low priority
+    
+    # Availability/Uptime SLAs (percentage)
+    uptime_target = Column(Integer, nullable=True)  # e.g., 99.9% stored as 9990 (99.90%)
+    availability_hours = Column(String(50), nullable=True)  # e.g., "24/7", "Business Hours", "9-5 Mon-Fri"
+    
+    # Business Hours Configuration
+    business_hours_start = Column(String(10), nullable=True)  # e.g., "09:00"
+    business_hours_end = Column(String(10), nullable=True)  # e.g., "17:00"
+    business_days = Column(JSON, nullable=True)  # e.g., ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    timezone = Column(String(50), default="Europe/London", nullable=False)
+    
+    # Escalation Rules
+    escalation_warning_percent = Column(Integer, default=80, nullable=False)  # Warn at 80% of SLA time
+    escalation_critical_percent = Column(Integer, default=95, nullable=False)  # Critical alert at 95%
+    auto_escalate_on_breach = Column(Boolean, default=True, nullable=False)
+    
+    # Conditions for applying this SLA
+    priority = Column(Enum(TicketPriority), nullable=True)  # Apply to specific priority (null = all)
+    ticket_type = Column(Enum(TicketType), nullable=True)  # Apply to specific type (null = all)
+    customer_ids = Column(JSON, nullable=True)  # Apply to specific customers (null = all)
+    contract_type = Column(String(50), nullable=True)  # Apply to specific contract types
     
     # Status
-    is_active = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    is_default = Column(Boolean, default=False, nullable=False)  # Default SLA for tenant
     
     # Relationships
     tenant = relationship("Tenant")
     
     def __repr__(self):
         return f"<SLAPolicy {self.name}>"
+    
+    __table_args__ = (
+        Index('idx_sla_tenant_active', 'tenant_id', 'is_active'),
+        Index('idx_sla_default', 'tenant_id', 'is_default'),
+    )
 

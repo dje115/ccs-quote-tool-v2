@@ -17,6 +17,9 @@ from app.models.tenant import User, Tenant
 from app.models.crm import Customer, CustomerStatus, Contact
 from app.models.leads import Lead, LeadStatus
 from app.models.quotes import Quote, QuoteStatus
+from app.models.opportunities import Opportunity, OpportunityStage
+from app.models.helpdesk import Ticket
+from app.models.sla_compliance import SLAComplianceRecord, SLABreachAlert
 from app.services.ai_analysis_service import AIAnalysisService
 from app.core.api_keys import get_api_keys
 
@@ -37,6 +40,19 @@ class DashboardStats(BaseModel):
     total_revenue: float
     avg_deal_value: float
     conversion_rate: float
+    # Opportunity metrics
+    active_opportunities: int
+    opportunities_qualified: int
+    opportunities_proposal_sent: int
+    opportunities_closed_won: int
+    opportunities_total_value: float
+    # Lifecycle distribution
+    lifecycle_distribution: Dict[str, int]
+    # SLA metrics
+    sla_compliance_rate: float
+    sla_active_breaches: int
+    sla_tickets_at_risk: int
+    sla_total_tickets: int
 
 
 class ConversionFunnelItem(BaseModel):
@@ -70,9 +86,17 @@ class AIInsight(BaseModel):
     action: str | None
 
 
+class PipelineStageItem(BaseModel):
+    stage: str
+    count: int
+    total_value: float
+    percentage: float
+
+
 class DashboardResponse(BaseModel):
     stats: DashboardStats
     conversion_funnel: List[ConversionFunnelItem]
+    pipeline_stages: List[PipelineStageItem]  # Opportunity pipeline stages
     recent_activity: List[RecentActivity]
     monthly_trends: List[MonthlyTrend]
     ai_insights: List[AIInsight]
@@ -175,6 +199,71 @@ async def get_dashboard(
         inactive_count = inactive_result.scalar() or 0
         total_quotes = quotes_result.scalar() or 0
         
+        # Get opportunity metrics
+        opportunity_queries = await asyncio.gather(
+            db.execute(select(func.count(Opportunity.id)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.is_deleted == False,
+                    ~Opportunity.stage.in_([OpportunityStage.CLOSED_WON, OpportunityStage.CLOSED_LOST])
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.QUALIFIED,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.PROPOSAL_SENT,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.CLOSED_WON,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.is_deleted == False,
+                    Opportunity.estimated_value.isnot(None)
+                )
+            ))
+        )
+        
+        active_opportunities = opportunity_queries[0].scalar() or 0
+        opportunities_qualified = opportunity_queries[1].scalar() or 0
+        opportunities_proposal_sent = opportunity_queries[2].scalar() or 0
+        opportunities_closed_won = opportunity_queries[3].scalar() or 0
+        opp_value = opportunity_queries[4].scalar()
+        opportunities_total_value = float(opp_value) if opp_value else 0.0
+        
+        # Get lifecycle distribution (using existing statuses - INACTIVE for dormant, LOST for closed lost)
+        lifecycle_distribution = {
+            "LEAD": leads_count,
+            "PROSPECT": prospects_count,
+            "CUSTOMER": customers_count,
+            "INACTIVE": inactive_count,  # Maps to DORMANT in lifecycle service
+            "LOST": 0  # Will be calculated separately if needed
+        }
+        
+        # Get LOST status count
+        lost_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.status == CustomerStatus.LOST,
+                Customer.is_deleted == False
+            )
+        ))
+        lifecycle_distribution["LOST"] = lost_result.scalar() or 0
+        
         # Execute remaining quote queries in parallel
         quotes_pending_result, quotes_accepted_result, revenue_result = await asyncio.gather(
             db.execute(select(func.count(Quote.id)).where(
@@ -242,6 +331,73 @@ async def get_dashboard(
                 color="#95a5a6"
             )
         ]
+        
+        # Opportunity pipeline stages
+        pipeline_stage_queries = await asyncio.gather(
+            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.QUALIFIED,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.SCOPING,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.PROPOSAL_SENT,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.NEGOTIATION,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.VERBAL_YES,
+                    Opportunity.is_deleted == False
+                )
+            )),
+            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+                and_(
+                    Opportunity.tenant_id == tenant_id,
+                    Opportunity.stage == OpportunityStage.CLOSED_WON,
+                    Opportunity.is_deleted == False
+                )
+            ))
+        )
+        
+        pipeline_stages = []
+        stage_labels = ["Qualified", "Scoping", "Proposal Sent", "Negotiation", "Verbal Yes", "Closed Won"]
+        total_pipeline_value = 0.0
+        
+        for idx, result in enumerate(pipeline_stage_queries):
+            row = result.first()
+            count = row[0] if row else 0
+            value = float(row[1]) if row and row[1] else 0.0
+            total_pipeline_value += value
+            
+            pipeline_stages.append(PipelineStageItem(
+                stage=stage_labels[idx],
+                count=count,
+                total_value=value,
+                percentage=0.0  # Will calculate after we have total
+            ))
+        
+        # Calculate percentages
+        for stage in pipeline_stages:
+            stage.percentage = (stage.total_value / total_pipeline_value * 100) if total_pipeline_value > 0 else 0.0
         
         # Recent activity (last 10 items)
         recent_customers_result = await db.execute(
@@ -411,6 +567,59 @@ async def get_dashboard(
             for lead in top_leads_query
         ]
         
+        # SLA Metrics
+        # Get total tickets with SLA policies
+        total_tickets_result = await db.execute(
+            select(func.count(Ticket.id)).where(
+                and_(
+                    Ticket.tenant_id == tenant_id,
+                    Ticket.sla_policy_id.isnot(None),
+                    Ticket.status.notin_(['closed', 'resolved'])
+                )
+            )
+        )
+        sla_total_tickets = total_tickets_result.scalar() or 0
+        
+        # Get active breach alerts (unacknowledged)
+        active_breaches_result = await db.execute(
+            select(func.count(SLABreachAlert.id)).where(
+                and_(
+                    SLABreachAlert.tenant_id == tenant_id,
+                    SLABreachAlert.acknowledged == False
+                )
+            )
+        )
+        sla_active_breaches = active_breaches_result.scalar() or 0
+        
+        # Get tickets at risk (80%+ of SLA time used)
+        # This is a simplified calculation - in production, you'd calculate based on actual SLA targets
+        tickets_at_risk_result = await db.execute(
+            select(func.count(Ticket.id)).where(
+                and_(
+                    Ticket.tenant_id == tenant_id,
+                    Ticket.sla_policy_id.isnot(None),
+                    Ticket.status.notin_(['closed', 'resolved'])
+                )
+            )
+        )
+        sla_tickets_at_risk = tickets_at_risk_result.scalar() or 0  # Simplified - would need actual calculation
+        
+        # Calculate compliance rate from compliance records
+        compliance_records_result = await db.execute(
+            select(SLAComplianceRecord).where(
+                and_(
+                    SLAComplianceRecord.tenant_id == tenant_id,
+                    SLAComplianceRecord.created_at >= datetime.now() - timedelta(days=30)
+                )
+            )
+        )
+        compliance_records = compliance_records_result.scalars().all()
+        
+        sla_compliance_rate = 0.0
+        if compliance_records:
+            compliant_count = sum(1 for r in compliance_records if r.compliant)
+            sla_compliance_rate = round((compliant_count / len(compliance_records)) * 100, 1)
+        
         print(f"🔍 Dashboard Debug - Returning stats: total_leads={discovery_count}, total_discovery={discovery_count}")
         
         return DashboardResponse(
@@ -427,9 +636,20 @@ async def get_dashboard(
                 quotes_accepted=quotes_accepted,
                 total_revenue=total_revenue,
                 avg_deal_value=avg_deal_value,
-                conversion_rate=round(conversion_rate, 1)
+                conversion_rate=round(conversion_rate, 1),
+                active_opportunities=active_opportunities,
+                opportunities_qualified=opportunities_qualified,
+                opportunities_proposal_sent=opportunities_proposal_sent,
+                opportunities_closed_won=opportunities_closed_won,
+                opportunities_total_value=opportunities_total_value,
+                lifecycle_distribution=lifecycle_distribution,
+                sla_compliance_rate=sla_compliance_rate,
+                sla_active_breaches=sla_active_breaches,
+                sla_tickets_at_risk=sla_tickets_at_risk,
+                sla_total_tickets=sla_total_tickets
             ),
             conversion_funnel=conversion_funnel,
+            pipeline_stages=pipeline_stages,
             recent_activity=recent_activity,
             monthly_trends=monthly_trends,
             ai_insights=ai_insights,

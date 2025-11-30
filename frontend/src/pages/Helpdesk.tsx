@@ -35,7 +35,7 @@ import {
   Search as SearchIcon,
   Visibility as ViewIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { helpdeskAPI, customerAPI } from '../services/api';
 import TicketComposer from '../components/TicketComposer';
 
@@ -60,6 +60,7 @@ interface Ticket {
 
 const Helpdesk: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,14 +75,21 @@ const Helpdesk: React.FC = () => {
     description: '',
     priority: 'medium',
     category: '',
-    customer_id: ''
+    customer_id: searchParams.get('customer_id') || ''
   });
   const [stats, setStats] = useState({
     total: 0,
     open: 0,
     in_progress: 0,
     resolved: 0,
-    closed: 0
+    closed: 0,
+    urgent: 0,
+    sla: {
+      tickets_with_sla: 0,
+      breached_count: 0,
+      compliance_rate: 100,
+      active_breach_alerts: 0
+    }
   });
 
   useEffect(() => {
@@ -95,10 +103,20 @@ const Helpdesk: React.FC = () => {
     }
   }, [createDialogOpen]);
 
+  // Auto-open create dialog if customer_id is in URL (after customers are loaded)
+  useEffect(() => {
+    const customerId = searchParams.get('customer_id');
+    if (customerId && customers.length > 0 && !createDialogOpen) {
+      setNewTicket(prev => ({ ...prev, customer_id: customerId }));
+      setCreateDialogOpen(true);
+    }
+  }, [searchParams, customers]);
+
   const loadCustomers = async () => {
     try {
       setLoadingCustomers(true);
-      const response = await customerAPI.list();
+      // Include leads in the customer list for ticket creation
+      const response = await customerAPI.list({ limit: 1000, exclude_leads: false });
       setCustomers(response.data || []);
     } catch (err) {
       console.error('Error loading customers:', err);
@@ -274,6 +292,85 @@ const Helpdesk: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* SLA Metrics Cards */}
+      {stats.sla && stats.sla.tickets_with_sla > 0 && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12}>
+            <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AssessmentIcon color="primary" />
+              SLA Metrics
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ 
+              background: stats.sla.compliance_rate >= 95 ? 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' :
+                          stats.sla.compliance_rate >= 80 ? 'linear-gradient(135deg, #ffc107 0%, #ff9800 100%)' :
+                          'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)',
+              color: 'white'
+            }}>
+              <CardContent>
+                <Typography variant="body2" sx={{ opacity: 0.9 }} gutterBottom>
+                  SLA Compliance Rate
+                </Typography>
+                <Typography variant="h4" fontWeight="bold">{stats.sla.compliance_rate}%</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  {stats.sla.tickets_with_sla} tickets tracked
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card sx={{ 
+              background: stats.sla.active_breach_alerts > 0 ? 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)' :
+                          'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
+              color: 'white'
+            }}>
+              <CardContent>
+                <Typography variant="body2" sx={{ opacity: 0.9 }} gutterBottom>
+                  Active Breach Alerts
+                </Typography>
+                <Typography variant="h4" fontWeight="bold">{stats.sla.active_breach_alerts}</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  Unacknowledged breaches
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography color="textSecondary" gutterBottom>
+                  Tickets with SLA
+                </Typography>
+                <Typography variant="h4">{stats.sla.tickets_with_sla}</Typography>
+                <Typography variant="caption" color="textSecondary">
+                  {stats.sla.tickets_with_sla > 0 ? 
+                    `${Math.round((stats.sla.tickets_with_sla / stats.total) * 100)}% of total` : 
+                    'No SLA policies applied'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card>
+              <CardContent>
+                <Typography color="textSecondary" gutterBottom>
+                  Breached Tickets
+                </Typography>
+                <Typography variant="h4" color={stats.sla.breached_count > 0 ? 'error' : 'success'}>
+                  {stats.sla.breached_count}
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+                  {stats.sla.tickets_with_sla > 0 ? 
+                    `${Math.round((stats.sla.breached_count / stats.sla.tickets_with_sla) * 100)}% breach rate` : 
+                    'N/A'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 2 }}>

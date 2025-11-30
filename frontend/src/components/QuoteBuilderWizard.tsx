@@ -49,6 +49,7 @@ const QuoteBuilderWizard: React.FC<QuoteBuilderWizardProps> = ({
   const [customerId, setCustomerId] = useState<string>(initialCustomerId || '');
   const [quoteTitle, setQuoteTitle] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
 
   // Step 2: Requirements Description
   const [customerRequest, setCustomerRequest] = useState('');
@@ -68,12 +69,52 @@ const QuoteBuilderWizard: React.FC<QuoteBuilderWizardProps> = ({
     loadCustomers();
   }, []);
 
+  // Update customerId when initialCustomerId changes (e.g., from URL param)
+  useEffect(() => {
+    if (initialCustomerId && initialCustomerId !== customerId) {
+      setCustomerId(initialCustomerId);
+    }
+  }, [initialCustomerId]);
+
+  // Set customerId after customers are loaded if initialCustomerId is provided
+  useEffect(() => {
+    if (initialCustomerId && customers.length > 0) {
+      // Verify the customer exists in the list
+      const customerExists = customers.some(c => c.id === initialCustomerId);
+      if (customerExists) {
+        setCustomerId(prev => {
+          if (prev !== initialCustomerId) {
+            console.log('Setting customerId from customers list:', initialCustomerId);
+            return initialCustomerId;
+          }
+          return prev;
+        });
+      }
+    }
+  }, [customers, initialCustomerId]);
+
   const loadCustomers = async () => {
     try {
-      const response = await customerAPI.list({ limit: 1000 });
-      setCustomers(response.data?.items || response.data || []);
+      setLoadingCustomers(true);
+      // Include leads in the customer list for quote creation
+      const response = await customerAPI.list({ limit: 1000, exclude_leads: false });
+      const customersList = response.data?.items || response.data || [];
+      setCustomers(customersList);
+      
+      // If initialCustomerId is provided and customer exists in the list, set it
+      if (initialCustomerId && customersList.length > 0) {
+        const customerExists = customersList.some((c: any) => c.id === initialCustomerId);
+        if (customerExists) {
+          console.log('Setting customerId from initialCustomerId:', initialCustomerId);
+          setCustomerId(initialCustomerId);
+        } else {
+          console.warn('Customer not found in list:', initialCustomerId, 'Available customers:', customersList.map((c: any) => c.id));
+        }
+      }
     } catch (error) {
       console.error('Error loading customers:', error);
+    } finally {
+      setLoadingCustomers(false);
     }
   };
 
@@ -209,7 +250,7 @@ const QuoteBuilderWizard: React.FC<QuoteBuilderWizardProps> = ({
             )}
             <Grid container spacing={3} sx={{ mt: 1 }}>
               <Grid item xs={12}>
-                <FormControl fullWidth size="medium">
+                <FormControl fullWidth size="medium" sx={{ mb: 2 }}>
                   <InputLabel id="customer-select-label">Customer *</InputLabel>
                   <Select
                     labelId="customer-select-label"
@@ -217,11 +258,12 @@ const QuoteBuilderWizard: React.FC<QuoteBuilderWizardProps> = ({
                     label="Customer *"
                     onChange={(e) => setCustomerId(e.target.value)}
                     required
+                    disabled={loadingCustomers}
                     sx={{ 
                       minHeight: '56px',
                       fontSize: '1rem',
                       '& .MuiSelect-select': {
-                        padding: '14px 14px'
+                        padding: '16px 14px'
                       }
                     }}
                     MenuProps={{
@@ -232,14 +274,44 @@ const QuoteBuilderWizard: React.FC<QuoteBuilderWizardProps> = ({
                       },
                     }}
                   >
-                    <MenuItem value="">
-                      <em>Select a customer...</em>
-                    </MenuItem>
-                    {customers.map((customer) => (
-                      <MenuItem key={customer.id} value={customer.id} sx={{ fontSize: '1rem', py: 1.5 }}>
-                        {customer.company_name}
+                    {loadingCustomers ? (
+                      <MenuItem value="" disabled>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <CircularProgress size={20} />
+                          <Typography>Loading customers...</Typography>
+                        </Box>
                       </MenuItem>
-                    ))}
+                    ) : (
+                      [
+                        <MenuItem key="placeholder" value="" sx={{ py: 1.5 }}>
+                          <em>Select a customer or lead...</em>
+                        </MenuItem>,
+                        ...customers.map((customer) => (
+                          <MenuItem 
+                            key={customer.id} 
+                            value={customer.id} 
+                            sx={{ 
+                              fontSize: '1rem', 
+                              py: 2,
+                              minHeight: '48px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Box>
+                              <Typography variant="body1" fontWeight="medium">
+                                {customer.company_name}
+                              </Typography>
+                              {customer.status && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                  Status: {customer.status}
+                                </Typography>
+                              )}
+                            </Box>
+                          </MenuItem>
+                        ))
+                      ]
+                    )}
                   </Select>
                 </FormControl>
               </Grid>

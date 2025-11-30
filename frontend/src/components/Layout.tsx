@@ -21,6 +21,7 @@ import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
   TrendingUp as LeadsIcon,
+  PersonAdd as PersonAddIcon,
   Campaign as CampaignIcon,
   Description as QuotesIcon,
   Settings as SettingsIcon,
@@ -33,7 +34,10 @@ import {
   Psychology as PsychologyIcon,
   Support as SupportIcon,
   Timeline as TimelineIcon,
-  Assessment as AssessmentIcon
+  Assessment as AssessmentIcon,
+  Work as OpportunitiesIcon,
+  Description as ContractsIcon,
+  Assignment as SupportContractsIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -120,11 +124,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const menuItems = [
     { text: t('navigation.dashboard'), icon: <DashboardIcon />, path: '/dashboard' },
     { text: t('navigation.customers'), icon: <PeopleIcon />, path: '/customers' },
+    { text: 'Leads', icon: <PersonAddIcon />, path: '/leads-crm' },
     { text: t('navigation.discoveries'), icon: <LeadsIcon />, path: '/leads' },
+    { text: 'Opportunities', icon: <OpportunitiesIcon />, path: '/opportunities' },
     { text: t('navigation.planning'), icon: <ArchitectureIcon />, path: '/planning-applications' },
     { text: t('navigation.campaigns'), icon: <CampaignIcon />, path: '/campaigns' },
     { text: t('navigation.quotes'), icon: <QuotesIcon />, path: '/quotes' },
+    { text: 'Contracts', icon: <ContractsIcon />, path: '/contracts' },
+    { text: 'Support Contracts', icon: <SupportContractsIcon />, path: '/support-contracts' },
     { text: 'Helpdesk', icon: <SupportIcon />, path: '/helpdesk' },
+    { text: 'SLA Management', icon: <AssessmentIcon />, path: '/sla' },
+    { text: 'SLA Dashboard', icon: <AssessmentIcon />, path: '/sla/dashboard' },
+    { text: 'SLA Reports', icon: <AssessmentIcon />, path: '/sla/reports' },
     { text: 'Trends', icon: <TimelineIcon />, path: '/trends' },
     { text: 'Metrics', icon: <AssessmentIcon />, path: '/metrics' },
         { text: 'Suppliers', icon: <LocalShippingIcon />, path: '/suppliers' },

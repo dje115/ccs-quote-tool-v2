@@ -23,7 +23,10 @@ const CustomerEdit = lazy(() => import('./pages/CustomerEdit'));
 const CustomerNew = lazy(() => import('./pages/CustomerNew'));
 const CustomerAnalysis = lazy(() => import('./pages/CustomerAnalysis'));
 const Leads = lazy(() => import('./pages/Leads'));
+const LeadsCRM = lazy(() => import('./pages/LeadsCRM'));
 const LeadDetail = lazy(() => import('./pages/LeadDetail'));
+const Opportunities = lazy(() => import('./pages/Opportunities'));
+const OpportunityDetail = lazy(() => import('./pages/OpportunityDetail'));
 const Campaigns = lazy(() => import('./pages/Campaigns'));
 const PlanningApplications = lazy(() => import('./pages/PlanningApplications'));
 const CampaignCreate = lazy(() => import('./pages/CampaignCreate'));
@@ -43,6 +46,14 @@ const Helpdesk = lazy(() => import('./pages/Helpdesk'));
 const TicketDetail = lazy(() => import('./pages/TicketDetail'));
 const TrendsDashboard = lazy(() => import('./pages/TrendsDashboard'));
 const MetricsDashboard = lazy(() => import('./pages/MetricsDashboard'));
+const Contracts = lazy(() => import('./pages/Contracts'));
+const ContractTemplates = lazy(() => import('./pages/ContractTemplates'));
+const ContractTemplateEditor = lazy(() => import('./pages/ContractTemplateEditor'));
+const ContractDetail = lazy(() => import('./pages/ContractDetail'));
+const SLAManagement = lazy(() => import('./pages/SLAManagement'));
+const SLADashboard = lazy(() => import('./pages/SLADashboard'));
+const SLAReportBuilder = lazy(() => import('./pages/SLAReportBuilder'));
+const SupportContracts = lazy(() => import('./pages/SupportContracts'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -176,6 +187,14 @@ function App() {
             }
           />
           <Route
+            path="/leads-crm"
+            element={
+              <ProtectedRoute>
+                <LeadsCRM />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/leads"
             element={
               <ProtectedRoute>
@@ -276,6 +295,78 @@ function App() {
             element={
               <ProtectedRoute>
                 <QuoteDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/opportunities"
+            element={
+              <ProtectedRoute>
+                <Opportunities />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/opportunities/:id"
+            element={
+              <ProtectedRoute>
+                <OpportunityDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts"
+            element={
+              <ProtectedRoute>
+                <Contracts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts/templates"
+            element={
+              <ProtectedRoute>
+                <ContractTemplates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts/templates/:id/edit"
+            element={
+              <ProtectedRoute>
+                <ContractTemplateEditor />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts/:id"
+            element={
+              <ProtectedRoute>
+                <ContractDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sla"
+            element={<ProtectedRoute><SLAManagement /></ProtectedRoute>}
+          />
+          <Route
+            path="/sla/dashboard"
+            element={<ProtectedRoute><SLADashboard /></ProtectedRoute>}
+          />
+          <Route
+            path="/sla/reports"
+            element={<ProtectedRoute><SLAReportBuilder /></ProtectedRoute>}
+          />
+          <Route
+            path="/support-contracts"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <SupportContracts />
+                  </Suspense>
+                </Layout>
               </ProtectedRoute>
             }
           />

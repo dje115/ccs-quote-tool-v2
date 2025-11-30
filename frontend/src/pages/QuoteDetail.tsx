@@ -25,16 +25,24 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Stack
+  Stack,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  IconButton
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
   Edit as EditIcon,
   Download as DownloadIcon,
-  Send as SendIcon
+  Send as SendIcon,
+  Work as WorkIcon,
+  Link as LinkIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { quoteAPI } from '../services/api';
+import { quoteAPI, opportunityAPI, customerAPI } from '../services/api';
 import QuoteAICopilot from '../components/QuoteAICopilot';
 import QuoteDocumentViewer from '../components/QuoteDocumentViewer';
 import QuoteDocumentEditor from '../components/QuoteDocumentEditor';
@@ -55,6 +63,12 @@ const QuoteDetail: React.FC = () => {
   const [statusDialog, setStatusDialog] = useState<{ open: boolean; status: string | null; label: string }>({ open: false, status: null, label: '' });
   const [statusComment, setStatusComment] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [linkedOpportunities, setLinkedOpportunities] = useState<any[]>([]);
+  const [linkOpportunityDialogOpen, setLinkOpportunityDialogOpen] = useState(false);
+  const [availableOpportunities, setAvailableOpportunities] = useState<any[]>([]);
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string>('');
+  const [linkOpportunityLoading, setLinkOpportunityLoading] = useState(false);
+  const [linkOpportunityError, setLinkOpportunityError] = useState<string | null>(null);
   const TAB_INDEX = {
     OVERVIEW: 0,
     LINE_ITEMS: 1,
@@ -114,11 +128,55 @@ const QuoteDetail: React.FC = () => {
       setError(null);
       const response = await quoteAPI.get(id!);
       setQuote(response.data);
+      
+      // Load linked opportunities if quote has opportunity_ids
+      if (response.data.opportunity_ids && Array.isArray(response.data.opportunity_ids) && response.data.opportunity_ids.length > 0) {
+        try {
+          const oppPromises = response.data.opportunity_ids.map((oppId: string) => 
+            opportunityAPI.get(oppId).catch(() => null)
+          );
+          const oppResults = await Promise.all(oppPromises);
+          setLinkedOpportunities(oppResults.filter(r => r !== null).map(r => r.data));
+        } catch (err) {
+          console.error('Error loading linked opportunities:', err);
+        }
+      }
     } catch (error: any) {
       console.error('Error loading quote:', error);
       setError(error.response?.data?.detail || 'Failed to load quote');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const loadAvailableOpportunities = async () => {
+    if (!quote?.customer_id) return;
+    try {
+      const response = await opportunityAPI.getCustomerOpportunities(quote.customer_id);
+      // Filter out already linked opportunities
+      const linkedIds = linkedOpportunities.map(opp => opp.id);
+      setAvailableOpportunities((response.data || []).filter((opp: any) => !linkedIds.includes(opp.id)));
+    } catch (error) {
+      console.error('Error loading available opportunities:', error);
+      setAvailableOpportunities([]);
+    }
+  };
+  
+  const handleLinkOpportunity = async () => {
+    if (!selectedOpportunityId || !id) return;
+    setLinkOpportunityLoading(true);
+    setLinkOpportunityError(null);
+    try {
+      await opportunityAPI.attachQuote(selectedOpportunityId, id);
+      // Reload quote to get updated opportunity_ids
+      await loadQuote();
+      setLinkOpportunityDialogOpen(false);
+      setSelectedOpportunityId('');
+    } catch (error: any) {
+      console.error('Error linking opportunity:', error);
+      setLinkOpportunityError(error.response?.data?.detail || 'Failed to link opportunity');
+    } finally {
+      setLinkOpportunityLoading(false);
     }
   };
 
@@ -291,6 +349,56 @@ const QuoteDetail: React.FC = () => {
                 </List>
               </Grid>
             </Grid>
+
+            <Divider sx={{ my: 3 }} />
+
+            {/* Linked Opportunities Section */}
+            {quote.customer_id && (
+              <Box sx={{ mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <WorkIcon /> Linked Opportunities
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<LinkIcon />}
+                    onClick={() => {
+                      setLinkOpportunityDialogOpen(true);
+                      loadAvailableOpportunities();
+                    }}
+                  >
+                    Link to Opportunity
+                  </Button>
+                </Box>
+                {linkedOpportunities.length === 0 ? (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    This quote is not linked to any opportunities. Link it to track it in your sales pipeline.
+                  </Alert>
+                ) : (
+                  <List>
+                    {linkedOpportunities.map((opp: any) => (
+                      <ListItem
+                        key={opp.id}
+                        secondaryAction={
+                          <IconButton
+                            edge="end"
+                            onClick={() => navigate(`/opportunities/${opp.id}`)}
+                          >
+                            <WorkIcon />
+                          </IconButton>
+                        }
+                      >
+                        <ListItemText
+                          primary={opp.title}
+                          secondary={`Stage: ${opp.stage.replace('_', ' ').replace(/\b\w/g, char => char.toUpperCase())} | Probability: ${opp.conversion_probability}% | Value: ${opp.estimated_value ? `£${opp.estimated_value.toLocaleString()}` : 'Not set'}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
+            )}
 
             <Divider sx={{ my: 3 }} />
 
@@ -654,6 +762,89 @@ const QuoteDetail: React.FC = () => {
           </Button>
           <Button onClick={handleStatusSubmit} variant="contained" disabled={statusUpdating}>
             {statusUpdating ? 'Updating...' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Link Opportunity Dialog */}
+      <Dialog 
+        open={linkOpportunityDialogOpen} 
+        onClose={() => {
+          setLinkOpportunityDialogOpen(false);
+          setSelectedOpportunityId('');
+          setLinkOpportunityError(null);
+        }} 
+        fullWidth 
+        maxWidth="sm"
+      >
+        <DialogTitle>Link Quote to Opportunity</DialogTitle>
+        <DialogContent>
+          {linkOpportunityError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {linkOpportunityError}
+            </Alert>
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select an opportunity to link this quote to. This will help track the quote in your sales pipeline.
+          </Typography>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Select Opportunity</InputLabel>
+            <Select
+              value={selectedOpportunityId}
+              onChange={(e) => setSelectedOpportunityId(e.target.value)}
+              label="Select Opportunity"
+            >
+              {availableOpportunities.length === 0 ? (
+                <MenuItem disabled value="">
+                  No available opportunities
+                </MenuItem>
+              ) : (
+                availableOpportunities.map((opp: any) => (
+                  <MenuItem key={opp.id} value={opp.id}>
+                    <Box>
+                      <Typography variant="body1">{opp.title}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {opp.stage.replace('_', ' ').replace(/\b\w/g, char => char.toUpperCase())} • 
+                        {opp.estimated_value ? ` £${opp.estimated_value.toLocaleString()}` : ' Value not set'} • 
+                        {opp.conversion_probability}% probability
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+          </FormControl>
+          {availableOpportunities.length === 0 && quote?.customer_id && (
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => navigate(`/opportunities?customer_id=${quote.customer_id}`)}
+                fullWidth
+              >
+                Create New Opportunity
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setLinkOpportunityDialogOpen(false);
+              setSelectedOpportunityId('');
+              setLinkOpportunityError(null);
+            }} 
+            disabled={linkOpportunityLoading}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleLinkOpportunity} 
+            variant="contained" 
+            disabled={linkOpportunityLoading || !selectedOpportunityId}
+            startIcon={<LinkIcon />}
+          >
+            {linkOpportunityLoading ? 'Linking...' : 'Link Opportunity'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -102,6 +102,7 @@ class SupportContractService:
             currency=kwargs.get('currency', 'GBP'),
             terms=kwargs.get('terms'),
             sla_level=kwargs.get('sla_level'),
+            sla_policy_id=kwargs.get('sla_policy_id'),
             included_services=kwargs.get('included_services'),
             excluded_services=kwargs.get('excluded_services'),
             support_hours_included=kwargs.get('support_hours_included'),

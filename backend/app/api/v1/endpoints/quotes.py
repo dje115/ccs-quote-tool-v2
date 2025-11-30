@@ -533,7 +533,28 @@ async def get_quote(
     if not quote:
         raise HTTPException(status_code=404, detail="Quote not found")
     
-    return quote
+    # Find opportunities that have this quote_id in their quote_ids array
+    from app.models.opportunities import Opportunity
+    opp_stmt = select(Opportunity).where(
+        Opportunity.tenant_id == current_user.tenant_id,
+        Opportunity.is_deleted == False
+    )
+    opp_result = await db.execute(opp_stmt)
+    all_opportunities = opp_result.scalars().all()
+    
+    # Filter opportunities that have this quote_id in their quote_ids
+    linked_opportunity_ids = []
+    for opp in all_opportunities:
+        if opp.quote_ids and isinstance(opp.quote_ids, list) and quote_id in opp.quote_ids:
+            linked_opportunity_ids.append(opp.id)
+    
+    # Convert quote to dict and add opportunity_ids
+    quote_dict = {
+        **{c.name: getattr(quote, c.name) for c in quote.__table__.columns},
+        'opportunity_ids': linked_opportunity_ids
+    }
+    
+    return quote_dict
 
 
 @router.put("/{quote_id}", response_model=QuoteResponse)
@@ -623,6 +644,15 @@ async def update_quote(
             old_status=old_status.value if hasattr(old_status, 'value') else str(old_status),
             new_status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status)
         ))
+        
+        # Trigger lifecycle automation check when quote status changes
+        try:
+            from app.tasks.lifecycle_automation_tasks import check_lifecycle_transitions_task
+            check_lifecycle_transitions_task.delay(quote.customer_id, str(current_user.tenant_id))
+        except Exception as e:
+            # Log but don't fail the request if lifecycle check fails
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to trigger lifecycle check for customer {quote.customer_id} after quote status change: {e}")
     
     return quote
 
@@ -2402,6 +2432,16 @@ async def change_quote_status(
             action=request.action,
             comment=request.comment,
         )
+        
+        # Trigger lifecycle automation check when quote status changes
+        try:
+            from app.tasks.lifecycle_automation_tasks import check_lifecycle_transitions_task
+            check_lifecycle_transitions_task.delay(updated_quote.customer_id, str(current_tenant.id))
+        except Exception as e:
+            # Log but don't fail the request if lifecycle check fails
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to trigger lifecycle check for customer {updated_quote.customer_id} after quote status change: {e}")
+        
         return {
             "success": True,
             "quote_id": updated_quote.id,

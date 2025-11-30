@@ -29,7 +29,11 @@ from .planning import PlanningApplication, PlanningApplicationCampaign, Planning
 from .ai_prompt import AIPrompt, AIPromptVersion, PromptCategory
 from .ai_provider import AIProvider, ProviderAPIKey, ProviderType
 from .pricing_config import TenantPricingConfig, PricingBundleItem, PricingConfigType, BundleType
-from .support_contract import SupportContract, ContractRenewal, ContractTemplate, ContractType, ContractStatus, RenewalFrequency
+from .support_contract import SupportContract, ContractRenewal, ContractTemplate as SupportContractTemplate, ContractType as SupportContractType, ContractStatus as SupportContractStatus, RenewalFrequency
+from .contracts import Contract, EnhancedContractTemplate, ContractTemplateVersion, ContractType, ContractStatus
+from .opportunities import Opportunity, OpportunityStage
+from .helpdesk import Ticket, TicketComment, TicketAttachment, TicketHistory, KnowledgeBaseArticle, SLAPolicy, TicketStatus, TicketPriority, TicketType
+from .sla_compliance import SLAComplianceRecord, SLABreachAlert
 
 __all__ = [
     "Base",
@@ -48,6 +52,11 @@ __all__ = [
     "AIPrompt", "AIPromptVersion", "PromptCategory",
     "AIProvider", "ProviderAPIKey", "ProviderType",
     "TenantPricingConfig", "PricingBundleItem", "PricingConfigType", "BundleType",
-    "SupportContract", "ContractRenewal", "ContractTemplate", "ContractType", "ContractStatus", "RenewalFrequency"
+    "SupportContract", "ContractRenewal", "SupportContractTemplate", "SupportContractType", "SupportContractStatus", "RenewalFrequency",
+    "Contract", "EnhancedContractTemplate", "ContractTemplateVersion", "ContractType", "ContractStatus",
+    "Opportunity", "OpportunityStage",
+    "Ticket", "TicketComment", "TicketAttachment", "TicketHistory", "KnowledgeBaseArticle", "SLAPolicy",
+    "TicketStatus", "TicketPriority", "TicketType",
+    "SLAComplianceRecord", "SLABreachAlert"
 ]
 

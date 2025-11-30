@@ -469,32 +469,82 @@ class HelpdeskService:
         Get ticket statistics for dashboard
         
         Returns:
-            Dictionary with ticket statistics
+            Dictionary with ticket statistics including SLA metrics
         """
         total = self.db.query(func.count(Ticket.id)).filter(
-            Ticket.tenant_id == self.tenant_id
+            and_(
+                Ticket.tenant_id == self.tenant_id,
+                Ticket.is_deleted == False
+            )
         ).scalar() or 0
         
         open_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.OPEN
+                Ticket.status == TicketStatus.OPEN,
+                Ticket.is_deleted == False
             )
         ).scalar() or 0
         
         in_progress_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.IN_PROGRESS
+                Ticket.status == TicketStatus.IN_PROGRESS,
+                Ticket.is_deleted == False
             )
         ).scalar() or 0
         
         resolved_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.RESOLVED
+                Ticket.status == TicketStatus.RESOLVED,
+                Ticket.is_deleted == False
             )
         ).scalar() or 0
+        
+        closed_count = self.db.query(func.count(Ticket.id)).filter(
+            and_(
+                Ticket.tenant_id == self.tenant_id,
+                Ticket.status == TicketStatus.CLOSED,
+                Ticket.is_deleted == False
+            )
+        ).scalar() or 0
+        
+        # SLA Metrics
+        from app.models.sla_compliance import SLABreachAlert
+        
+        tickets_with_sla = self.db.query(func.count(Ticket.id)).filter(
+            and_(
+                Ticket.tenant_id == self.tenant_id,
+                Ticket.sla_policy_id.isnot(None),
+                Ticket.is_deleted == False
+            )
+        ).scalar() or 0
+        
+        sla_breached_count = self.db.query(func.count(Ticket.id)).filter(
+            and_(
+                Ticket.tenant_id == self.tenant_id,
+                Ticket.is_deleted == False,
+                or_(
+                    Ticket.sla_first_response_breached == True,
+                    Ticket.sla_resolution_breached == True
+                )
+            )
+        ).scalar() or 0
+        
+        active_breach_alerts = self.db.query(func.count(SLABreachAlert.id)).filter(
+            and_(
+                SLABreachAlert.tenant_id == self.tenant_id,
+                or_(
+                    SLABreachAlert.acknowledged.is_(None),
+                    SLABreachAlert.acknowledged == False
+                )
+            )
+        ).scalar() or 0
+        
+        # Calculate compliance rate
+        sla_compliant_count = tickets_with_sla - sla_breached_count
+        sla_compliance_rate = (sla_compliant_count / tickets_with_sla * 100) if tickets_with_sla > 0 else 100.0
         
         urgent_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
@@ -509,7 +559,14 @@ class HelpdeskService:
             'open': open_count,
             'in_progress': in_progress_count,
             'resolved': resolved_count,
-            'urgent': urgent_count
+            'closed': closed_count,
+            'urgent': urgent_count,
+            'sla': {
+                'tickets_with_sla': tickets_with_sla,
+                'breached_count': sla_breached_count,
+                'compliance_rate': round(sla_compliance_rate, 1),
+                'active_breach_alerts': active_breach_alerts
+            }
         }
     
     def _get_sla_policy(

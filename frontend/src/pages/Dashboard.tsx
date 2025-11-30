@@ -46,7 +46,12 @@ import {
   Dashboard as DashboardIcon,
   ShowChart as ChartIcon,
   Insights as InsightsIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  Work as WorkIcon,
+  TrendingUp as TrendingUpIcon,
+  Warning as WarningIcon,
+  Support as SupportIcon,
+  Assessment as AssessmentIcon
 } from '@mui/icons-material';
 import { dashboardAPI } from '../services/api';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
@@ -92,12 +97,31 @@ interface DashboardData {
     total_revenue: number;
     avg_deal_value: number;
     conversion_rate: number;
+    active_opportunities: number;
+    opportunities_qualified: number;
+    opportunities_proposal_sent: number;
+    opportunities_closed_won: number;
+    opportunities_total_value: number;
+    lifecycle_distribution: {
+      [key: string]: number;
+    };
+    sla_compliance_rate: number;
+    sla_active_breaches: number;
+    sla_tickets_at_risk: number;
+    sla_total_tickets: number;
   };
   conversion_funnel: Array<{
     status: string;
     count: number;
     percentage: number;
     color: string;
+  }>;
+  pipeline_stages: Array<{
+    stage: string;
+    count: number;
+    total_value: number;
+    percentage: number;
+    color?: string;
   }>;
   recent_activity: Array<{
     id: string;
@@ -217,7 +241,7 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const { stats, conversion_funnel, recent_activity, monthly_trends, ai_insights, top_leads } = dashboardData;
+  const { stats, conversion_funnel, pipeline_stages, recent_activity, monthly_trends, ai_insights, top_leads } = dashboardData;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-GB', {
@@ -491,6 +515,124 @@ const Dashboard: React.FC = () => {
             </Grid>
           </Grid>
 
+          {/* SLA Stats */}
+          <Grid container spacing={3} sx={{ mb: 4, width: '100%', justifyContent: 'center' }}>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
+              <Card 
+                sx={{ 
+                  background: (stats.sla_compliance_rate || 0) >= 95 
+                    ? 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' 
+                    : (stats.sla_compliance_rate || 0) >= 80
+                    ? 'linear-gradient(135deg, #fad961 0%, #f76b1c 100%)'
+                    : 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+                onClick={() => navigate('/sla/dashboard')}
+              >
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Box>
+                      <Typography variant="h3" fontWeight="bold">
+                        {(stats.sla_compliance_rate || 0).toFixed(1)}%
+                      </Typography>
+                      <Typography variant="body2">SLA Compliance</Typography>
+                    </Box>
+                    <AssessmentIcon sx={{ fontSize: 48, opacity: 0.7 }} />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
+              <Card 
+                sx={{ 
+                  background: (stats.sla_active_breaches || 0) > 0
+                    ? 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+                    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+                onClick={() => navigate('/sla/dashboard')}
+              >
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Box>
+                      <Typography variant="h3" fontWeight="bold">
+                        {stats.sla_active_breaches || 0}
+                      </Typography>
+                      <Typography variant="body2">Active Breaches</Typography>
+                    </Box>
+                    <WarningIcon sx={{ fontSize: 48, opacity: 0.7 }} />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
+              <Card 
+                sx={{ 
+                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+                onClick={() => navigate('/helpdesk')}
+              >
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Box>
+                      <Typography variant="h3" fontWeight="bold">
+                        {stats.sla_tickets_at_risk || 0}
+                      </Typography>
+                      <Typography variant="body2">Tickets at Risk</Typography>
+                    </Box>
+                    <TimelineIcon sx={{ fontSize: 48, opacity: 0.7 }} />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid
+              size={{
+                xs: 12,
+                sm: 6,
+                md: 3
+              }}>
+              <Card 
+                sx={{ 
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+                onClick={() => navigate('/sla/dashboard')}
+              >
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Box>
+                      <Typography variant="h3" fontWeight="bold">
+                        {stats.sla_total_tickets || 0}
+                      </Typography>
+                      <Typography variant="body2">SLA Tracked Tickets</Typography>
+                    </Box>
+                    <SupportIcon sx={{ fontSize: 48, opacity: 0.7 }} />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
           {/* Top Leads & Recent Activity */}
           <Grid container spacing={3} sx={{ width: '100%' }}>
             <Grid
@@ -622,6 +764,98 @@ const Dashboard: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Pipeline Stages Chart */}
+          {pipeline_stages && pipeline_stages.length > 0 && (
+            <Grid
+              size={{
+                xs: 12,
+                md: 6
+              }}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" fontWeight="bold" gutterBottom>
+                    Pipeline Stages
+                  </Typography>
+                  <Bar
+                    data={{
+                      labels: pipeline_stages.map(s => s.stage),
+                      datasets: [
+                        {
+                          label: 'Count',
+                          data: pipeline_stages.map(s => s.count),
+                          backgroundColor: pipeline_stages.map(s => s.color || '#3498db'),
+                          borderColor: pipeline_stages.map(s => s.color || '#3498db'),
+                          borderWidth: 1
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                          callbacks: {
+                            afterLabel: (context: any) => {
+                              const stage = pipeline_stages[context.dataIndex];
+                              return [
+                                `Value: ${formatCurrency(stage.total_value)}`,
+                                `Percentage: ${stage.percentage.toFixed(1)}%`
+                              ];
+                            }
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
+
+          {/* Lifecycle Distribution Chart */}
+          {stats.lifecycle_distribution && Object.keys(stats.lifecycle_distribution).length > 0 && (
+            <Grid
+              size={{
+                xs: 12,
+                md: 6
+              }}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" fontWeight="bold" gutterBottom>
+                    Lifecycle Distribution
+                  </Typography>
+                  <Doughnut
+                    data={{
+                      labels: Object.keys(stats.lifecycle_distribution).map(s => s.replace('_', ' ')),
+                      datasets: [
+                        {
+                          data: Object.values(stats.lifecycle_distribution),
+                          backgroundColor: [
+                            '#3498db', // DISCOVERY
+                            '#f39c12', // LEAD
+                            '#9b59b6', // PROSPECT
+                            '#2ecc71', // CUSTOMER
+                            '#e74c3c', // DORMANT
+                            '#95a5a6'  // Other
+                          ],
+                          borderWidth: 0
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: { position: 'bottom' }
+                      }
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           <Grid size={12}>
             <Card>

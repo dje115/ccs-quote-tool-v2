@@ -6,6 +6,7 @@ Helpdesk API Endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from app.services.sla_tracking_service import SLATrackingService
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timezone
@@ -90,6 +91,41 @@ async def create_ticket(
             )
         finally:
             sync_db.close()
+        
+        # Auto-apply SLA to the ticket
+        try:
+            from app.services.sla_tracking_service import SLATrackingService
+            tracking_service = SLATrackingService(db, current_tenant.id)
+            
+            # Get the ticket from async db
+            from app.models.helpdesk import Ticket
+            ticket_id = ticket.get('id') or ticket.id if hasattr(ticket, 'id') else None
+            if ticket_id:
+                ticket_stmt = select(Ticket).where(Ticket.id == ticket_id)
+                ticket_result = await db.execute(ticket_stmt)
+                ticket_obj = ticket_result.scalar_one_or_none()
+                
+                if ticket_obj:
+                    # Get contract if linked
+                    contract = None
+                    if ticket_obj.related_contract_id:
+                        from app.models.support_contract import SupportContract
+                        contract_stmt = select(SupportContract).where(
+                            SupportContract.id == ticket_obj.related_contract_id
+                        )
+                        contract_result = await db.execute(contract_stmt)
+                        contract = contract_result.scalar_one_or_none()
+                    
+                    # Apply SLA
+                    await tracking_service.apply_sla_to_ticket(ticket_obj)
+                    
+                    # Check initial compliance
+                    await tracking_service.check_ticket_sla_compliance(ticket_obj)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to apply SLA to ticket: {e}")
+        
         return ticket
     except Exception as e:
         import logging
@@ -385,6 +421,24 @@ async def add_comment(
             )
         finally:
             sync_db.close()
+        
+        # Check SLA compliance after comment/status change
+        try:
+            from app.services.sla_tracking_service import SLATrackingService
+            tracking_service = SLATrackingService(db, current_tenant.id)
+            
+            from app.models.helpdesk import Ticket
+            ticket_stmt = select(Ticket).where(Ticket.id == ticket_id)
+            ticket_result = await db.execute(ticket_stmt)
+            ticket_obj = ticket_result.scalar_one_or_none()
+            
+            if ticket_obj:
+                await tracking_service.check_ticket_sla_compliance(ticket_obj)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to check SLA compliance for ticket {ticket_id}: {e}")
+        
         return comment
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

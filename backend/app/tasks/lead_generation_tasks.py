@@ -108,10 +108,27 @@ def run_lead_generation_campaign(self, campaign_data: Dict[str, Any], tenant_id:
             meta={'current': 80, 'total': 100, 'status': 'Saving leads to database...'}
         )
         
+        # Get campaign sector for fallback
+        campaign = db.query(LeadGenerationCampaign).filter(LeadGenerationCampaign.id == campaign_id).first()
+        campaign_sector = 'Unknown'
+        if campaign and campaign.business_sectors:
+            # Extract first sector from JSON array if it's a list
+            if isinstance(campaign.business_sectors, list) and len(campaign.business_sectors) > 0:
+                campaign_sector = campaign.business_sectors[0]
+            elif isinstance(campaign.business_sectors, str):
+                campaign_sector = campaign.business_sectors
+        
         # Save leads to database
         saved_leads = []
         for lead_data in leads:
             try:
+                # Get sector from lead_data, with fallback to campaign sector
+                sector = (
+                    lead_data.get('business_sector') or 
+                    lead_data.get('sector') or 
+                    campaign_sector
+                )
+                
                 # Create lead record
                 lead = Lead(
                     campaign_id=campaign_id,
@@ -120,7 +137,7 @@ def run_lead_generation_campaign(self, campaign_data: Dict[str, Any], tenant_id:
                     contact_phone=lead_data.get('contact_phone', ''),
                     contact_email=lead_data.get('contact_email', ''),
                     postcode=lead_data.get('postcode', ''),
-                    business_sector=lead_data.get('sector', ''),
+                    business_sector=sector if sector and sector.strip() not in ['', 'N/A', 'None', 'null', 'Unknown'] else campaign_sector,
                     lead_score=lead_data.get('lead_score', 60),
                     qualification_reason=lead_data.get('quick_telesales_summary', ''),
                     ai_analysis=lead_data.get('ai_business_intelligence', ''),

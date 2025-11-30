@@ -53,6 +53,7 @@ class SupportContractCreate(BaseModel):
     currency: str = "GBP"
     terms: Optional[str] = None
     sla_level: Optional[str] = None
+    sla_policy_id: Optional[str] = None
     included_services: Optional[List[str]] = None
     excluded_services: Optional[List[str]] = None
     support_hours_included: Optional[int] = None
@@ -78,6 +79,7 @@ class SupportContractUpdate(BaseModel):
     currency: Optional[str] = None
     terms: Optional[str] = None
     sla_level: Optional[str] = None
+    sla_policy_id: Optional[str] = None
     included_services: Optional[List[str]] = None
     excluded_services: Optional[List[str]] = None
     support_hours_included: Optional[int] = None
@@ -109,6 +111,7 @@ class SupportContractResponse(BaseModel):
     currency: str
     terms: Optional[str]
     sla_level: Optional[str]
+    sla_policy_id: Optional[str]
     included_services: Optional[List[str]]
     excluded_services: Optional[List[str]]
     support_hours_included: Optional[int]

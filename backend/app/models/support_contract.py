@@ -77,6 +77,7 @@ class SupportContract(Base, TimestampMixin):
     # Contract details
     terms = Column(Text, nullable=True)  # Contract terms and conditions
     sla_level = Column(String(50), nullable=True)  # Service Level Agreement (e.g., "24/7", "Business Hours", "Next Business Day")
+    sla_policy_id = Column(String(36), ForeignKey("sla_policies.id"), nullable=True, index=True)  # Link to SLA policy
     included_services = Column(JSON, nullable=True)  # List of services included
     excluded_services = Column(JSON, nullable=True)  # List of services excluded
     support_hours_included = Column(Integer, nullable=True)  # Pre-paid support hours
@@ -102,6 +103,7 @@ class SupportContract(Base, TimestampMixin):
     customer = relationship("Customer", backref="support_contracts")
     quote = relationship("Quote", backref="support_contracts")
     cancelled_by_user = relationship("User", foreign_keys=[cancelled_by], backref="cancelled_contracts")
+    sla_policy = relationship("SLAPolicy", foreign_keys=[sla_policy_id])
     
     def __repr__(self):
         return f"<SupportContract {self.contract_number} ({self.contract_type.value})>"

@@ -96,6 +96,16 @@ const Leads: React.FC = () => {
   const [sortBy, setSortBy] = useState<string>('lead_score');
   const [sortOrder, setSortOrder] = useState<string>('desc');
   const [activeTab, setActiveTab] = useState<number>(0);
+  
+  // Helper function to shorten sector names
+  const shortenSector = (sector: string | null | undefined): string => {
+    if (!sector || sector === 'Unknown') return 'Unknown';
+    // If longer than 25 characters, truncate and add ellipsis
+    if (sector.length > 25) {
+      return sector.substring(0, 22) + '...';
+    }
+    return sector;
+  };
 
   useEffect(() => {
     loadLeads();
@@ -561,6 +571,17 @@ const Leads: React.FC = () => {
               <TableCell>Contact</TableCell>
               <TableCell 
                 sx={{ cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('business_sector')}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Sector
+                  {sortBy === 'business_sector' && (
+                    sortOrder === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />
+                  )}
+                </Box>
+              </TableCell>
+              <TableCell 
+                sx={{ cursor: 'pointer', userSelect: 'none' }} 
                 onClick={() => handleSort('postcode')}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -610,13 +631,13 @@ const Leads: React.FC = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">
+                <TableCell colSpan={10} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">
+                <TableCell colSpan={10} align="center">
                   No discoveries found
                 </TableCell>
               </TableRow>
@@ -642,14 +663,7 @@ const Leads: React.FC = () => {
                     </IconButton>
                   </TableCell>
                   <TableCell>
-                    <Box>
-                      <Typography variant="subtitle2">{lead.company_name}</Typography>
-                      {lead.business_sector && (
-                        <Typography variant="caption" color="text.secondary">
-                          {lead.business_sector}
-                        </Typography>
-                      )}
-                    </Box>
+                    <Typography variant="subtitle2">{lead.company_name}</Typography>
                   </TableCell>
                   <TableCell>
                     <Box>
@@ -699,6 +713,14 @@ const Leads: React.FC = () => {
                         </Typography>
                       )}
                     </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={shortenSector(lead.business_sector)}
+                      size="small"
+                      variant="outlined"
+                      title={lead.business_sector || 'Unknown'}
+                    />
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{lead.postcode}</Typography>

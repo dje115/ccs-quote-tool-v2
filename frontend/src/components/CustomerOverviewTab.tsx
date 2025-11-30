@@ -12,7 +12,10 @@ import {
   IconButton,
   Alert,
   Menu,
-  MenuItem
+  MenuItem,
+  FormControlLabel,
+  Switch,
+  Tooltip
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
@@ -26,10 +29,14 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   CheckCircle as CheckCircleIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  AutoAwesome as AutoAwesomeIcon,
+  Settings as SettingsIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
 import ContactDetailDialog from './ContactDetailDialog';
 import CustomerHealthWidget from './CustomerHealthWidget';
+import CustomerSLAWidget from './CustomerSLAWidget';
 import CustomerTimeline from './CustomerTimeline';
 import { useNavigate } from 'react-router-dom';
 
@@ -40,6 +47,7 @@ interface CustomerOverviewTabProps {
   onEditContact: (contact: any) => void;
   onConfirmRegistration: (confirmed: boolean) => void;
   onStatusChange?: (newStatus: string) => void;
+  onLifecycleAutoManagedChange?: (enabled: boolean) => void;
 }
 
 const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
@@ -48,7 +56,8 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
   onAddContact,
   onEditContact,
   onConfirmRegistration,
-  onStatusChange
+  onStatusChange,
+  onLifecycleAutoManagedChange
 }) => {
   const navigate = useNavigate();
   const [selectedContact, setSelectedContact] = useState<any>(null);
@@ -120,29 +129,45 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
 
   const primaryAddress = getPrimaryAddress();
 
-  // Calculate health score based on data completeness and lead score
+  // Calculate health score based on data completeness, lead score, and SLA compliance
   // IMPORTANT: Multiple contacts reduce risk - having relationships with multiple people
   // in a business is crucial for account resilience (updated 2025-10-12)
+  // SLA compliance is now factored in (updated 2025-11-30)
   // TODO: Further adjust when call logs and email logs are implemented
   const calculateHealthScore = () => {
     let score = 0;
     
-    // Basic company information (32 points total)
-    if (customer?.website) score += 8;
-    if (customer?.main_email) score += 8;
-    if (customer?.main_phone) score += 8;
-    if (customer?.company_registration && customer?.registration_confirmed) score += 8;
+    // Basic company information (28 points total)
+    if (customer?.website) score += 7;
+    if (customer?.main_email) score += 7;
+    if (customer?.main_phone) score += 7;
+    if (customer?.company_registration && customer?.registration_confirmed) score += 7;
     
-    // Contacts - scaled by number (up to 28 points)
-    // 1 contact = 12 points, 2+ contacts = 28 points (reduces risk)
-    if (contacts?.length === 1) score += 12;
-    if (contacts?.length >= 2) score += 28;
+    // Contacts - scaled by number (up to 25 points)
+    // 1 contact = 10 points, 2+ contacts = 25 points (reduces risk)
+    if (contacts?.length === 1) score += 10;
+    if (contacts?.length >= 2) score += 25;
     
-    // AI & Data Analysis (40 points total)
-    if (customer?.ai_analysis_raw) score += 18;
-    if (customer?.lead_score && customer.lead_score > 50) score += 12;
-    if (customer?.website_data) score += 5; // Website scraped & analyzed
-    if (customer?.linkedin_url || customer?.linkedin_data) score += 5; // LinkedIn found
+    // AI & Data Analysis (32 points total)
+    if (customer?.ai_analysis_raw) score += 15;
+    if (customer?.lead_score && customer.lead_score > 50) score += 10;
+    if (customer?.website_data) score += 4; // Website scraped & analyzed
+    if (customer?.linkedin_url || customer?.linkedin_data) score += 3; // LinkedIn found
+    
+    // SLA Compliance (15 points total) - NEW
+    // Check if customer has SLA breach status
+    if (customer?.sla_breach_status) {
+      if (customer.sla_breach_status === 'none') {
+        score += 15; // Perfect SLA compliance
+      } else if (customer.sla_breach_status === 'warning') {
+        score += 8; // Some SLA warnings
+      } else if (customer.sla_breach_status === 'critical') {
+        score += 0; // Critical SLA breaches - no points
+      }
+    } else {
+      // No SLA data available - neutral (no points added or deducted)
+      // This could mean no tickets with SLA, which is acceptable
+    }
     
     return Math.min(score, 100);
   };
@@ -741,6 +766,13 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
             </Box>
           )}
 
+          {/* SLA WIDGET */}
+          {customer?.id && (
+            <Box sx={{ mb: 3 }}>
+              <CustomerSLAWidget customerId={customer.id} />
+            </Box>
+          )}
+
           {/* AI INSIGHTS */}
           {customer?.ai_analysis_raw && (
             <Card sx={{ mb: 3, background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}>
@@ -800,15 +832,25 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
               <Typography variant="h6" gutterBottom>Quick Actions</Typography>
               <Divider sx={{ mb: 2 }} />
               
-              <Button
-                fullWidth
-                variant="contained"
-                sx={{ mb: 1 }}
-                startIcon={<AddIcon />}
-                onClick={() => navigate(`/quotes/new?customer=${customer?.id}`)}
-              >
-                Create Quote
-              </Button>
+              <Box sx={{ mb: 1 }}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => navigate(`/quotes/new?customer=${customer?.id}`)}
+                  sx={{ mb: 0.5 }}
+                >
+                  Create AI Quote
+                </Button>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => navigate(`/quotes/new/legacy?customer=${customer?.id}`)}
+                >
+                  Create Manual Quote
+                </Button>
+              </Box>
               
               {customer?.main_phone && (
                 <Button
@@ -879,6 +921,95 @@ const CustomerOverviewTab: React.FC<CustomerOverviewTabProps> = ({
                 <Alert severity="success" icon={<StarIcon />}>
                   High-value lead! Consider prioritizing outreach.
                 </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* LIFECYCLE MANAGEMENT */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AutoAwesomeIcon color="primary" />
+                Lifecycle Management
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={customer?.lifecycle_auto_managed !== false}
+                    onChange={(e) => {
+                      if (onLifecycleAutoManagedChange) {
+                        onLifecycleAutoManagedChange(e.target.checked);
+                      }
+                    }}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body1" fontWeight="medium">
+                      Auto-manage lifecycle
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Automatically transition customer status based on activity and opportunities
+                    </Typography>
+                  </Box>
+                }
+                sx={{ mb: 2 }}
+              />
+              
+              {customer?.lifecycle_auto_managed !== false && (
+                <Alert severity="info" icon={<InfoIcon />} sx={{ mb: 2 }}>
+                  <Typography variant="body2" fontWeight="medium" gutterBottom>
+                    Automation Rules:
+                  </Typography>
+                  <Typography variant="caption" component="div">
+                    <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                      <li>Lead → Prospect: When opportunity reaches Qualified/Scoping/Proposal Sent</li>
+                      <li>Prospect → Customer: When opportunity is Closed Won or first invoice created</li>
+                      <li>Any → Dormant: No contact for 90+ days with no active opportunities</li>
+                      <li>Dormant → Closed Lost: Dormant for 180+ days (auto-closes all deals)</li>
+                    </Box>
+                  </Typography>
+                </Alert>
+              )}
+              
+              {customer?.lifecycle_auto_managed === false && (
+                <Alert severity="warning" icon={<SettingsIcon />}>
+                  Lifecycle automation is disabled. Status changes must be made manually.
+                </Alert>
+              )}
+              
+              {customer?.last_contact_date && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="caption" color="text.secondary">Last Contact</Typography>
+                  <Typography variant="body2">
+                    {new Date(customer.last_contact_date).toLocaleDateString()}
+                  </Typography>
+                </Box>
+              )}
+              
+              {customer?.conversion_probability !== null && customer?.conversion_probability !== undefined && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" color="text.secondary">Conversion Probability</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <Box sx={{ flexGrow: 1, height: 8, bgcolor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+                      <Box
+                        sx={{
+                          height: '100%',
+                          width: `${customer.conversion_probability}%`,
+                          bgcolor: customer.conversion_probability >= 70 ? 'success.main' :
+                                   customer.conversion_probability >= 40 ? 'warning.main' : 'error.main',
+                          transition: 'width 0.3s ease'
+                        }}
+                      />
+                    </Box>
+                    <Typography variant="body2" fontWeight="medium">
+                      {customer.conversion_probability}%
+                    </Typography>
+                  </Box>
+                </Box>
               )}
             </CardContent>
           </Card>

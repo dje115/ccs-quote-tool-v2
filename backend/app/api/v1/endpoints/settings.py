@@ -1008,7 +1008,7 @@ If information is missing or unclear, make reasonable inferences based on the co
                 raise HTTPException(
                     status_code=500,
                     detail="AI service returned empty response. Please check your API key configuration."
-                )
+            )
             
             result_text = response.content
             import json

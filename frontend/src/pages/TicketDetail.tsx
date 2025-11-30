@@ -56,7 +56,13 @@ import {
   AddComment as AddCommentIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { helpdeskAPI } from '../services/api';
+import { helpdeskAPI, slaAPI } from '../services/api';
+import {
+  Assessment as AssessmentIcon,
+  AccessTime as AccessTimeIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon
+} from '@mui/icons-material';
 
 const TicketDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -73,10 +79,13 @@ const TicketDetail: React.FC = () => {
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
   const [priorityMenuAnchor, setPriorityMenuAnchor] = useState<null | HTMLElement>(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState<null | HTMLElement>(null);
+  const [slaCompliance, setSlaCompliance] = useState<any>(null);
+  const [loadingSla, setLoadingSla] = useState(false);
 
   useEffect(() => {
     if (id) {
       loadTicket();
+      loadSlaCompliance();
     }
   }, [id]);
 
@@ -91,6 +100,19 @@ const TicketDetail: React.FC = () => {
       setError(error.response?.data?.detail || 'Failed to load ticket');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSlaCompliance = async () => {
+    try {
+      setLoadingSla(true);
+      const response = await slaAPI.getTicketCompliance(id!);
+      setSlaCompliance(response.data);
+    } catch (error: any) {
+      console.error('Error loading SLA compliance:', error);
+      // Don't show error - SLA might not be configured
+    } finally {
+      setLoadingSla(false);
     }
   };
 
@@ -148,6 +170,7 @@ const TicketDetail: React.FC = () => {
       await helpdeskAPI.updateTicket(id!, { priority: newPriority });
       setPriorityMenuAnchor(null);
       await loadTicket();
+      await loadSlaCompliance(); // Refresh SLA status after priority change
       setSuccess(`Ticket priority updated to ${newPriority}`);
     } catch (error: any) {
       console.error('Error updating priority:', error);
@@ -365,6 +388,94 @@ const TicketDetail: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
+
+      {/* SLA Status Card */}
+      {slaCompliance && (
+        <Paper sx={{ p: 2, mb: 3, borderLeft: '4px solid', borderLeftColor: slaCompliance.compliant ? 'success.main' : 'error.main' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <AssessmentIcon color={slaCompliance.compliant ? 'success' : 'error'} />
+            <Typography variant="h6">
+              SLA Status
+            </Typography>
+            {slaCompliance.compliant ? (
+              <Chip label="Compliant" size="small" color="success" icon={<CheckCircleIcon />} />
+            ) : (
+              <Chip label="Breached" size="small" color="error" icon={<ErrorIcon />} />
+            )}
+          </Box>
+          <Grid container spacing={2}>
+            {slaCompliance.first_response && (
+              <Grid item xs={12} sm={6}>
+                <Card variant="outlined" sx={{ p: 1.5 }}>
+                  <Typography variant="caption" color="text.secondary" gutterBottom>
+                    First Response
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <AccessTimeIcon fontSize="small" color={slaCompliance.first_response.breached ? 'error' : 'success'} />
+                    <Typography variant="body2" fontWeight="medium">
+                      {slaCompliance.first_response.actual_hours?.toFixed(1) || 'N/A'}h / {slaCompliance.first_response.target_hours || 'N/A'}h
+                    </Typography>
+                  </Box>
+                  {slaCompliance.first_response.breached ? (
+                    <Chip label="Breached" size="small" color="error" sx={{ mt: 0.5 }} />
+                  ) : slaCompliance.first_response.met ? (
+                    <Chip label="Met" size="small" color="success" sx={{ mt: 0.5 }} />
+                  ) : (
+                    <Box sx={{ mt: 0.5 }}>
+                      <Typography variant="caption" color="warning.main">
+                        {slaCompliance.first_response.percent_used?.toFixed(1) || 0}% used
+                      </Typography>
+                      {slaCompliance.first_response.time_remaining_hours !== undefined && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {slaCompliance.first_response.time_remaining_hours.toFixed(1)}h remaining
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                </Card>
+              </Grid>
+            )}
+            {slaCompliance.resolution && (
+              <Grid item xs={12} sm={6}>
+                <Card variant="outlined" sx={{ p: 1.5 }}>
+                  <Typography variant="caption" color="text.secondary" gutterBottom>
+                    Resolution
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <AccessTimeIcon fontSize="small" color={slaCompliance.resolution.breached ? 'error' : 'success'} />
+                    <Typography variant="body2" fontWeight="medium">
+                      {slaCompliance.resolution.actual_hours?.toFixed(1) || 'N/A'}h / {slaCompliance.resolution.target_hours || 'N/A'}h
+                    </Typography>
+                  </Box>
+                  {slaCompliance.resolution.breached ? (
+                    <Chip label="Breached" size="small" color="error" sx={{ mt: 0.5 }} />
+                  ) : slaCompliance.resolution.met ? (
+                    <Chip label="Met" size="small" color="success" sx={{ mt: 0.5 }} />
+                  ) : (
+                    <Box sx={{ mt: 0.5 }}>
+                      <Typography variant="caption" color="warning.main">
+                        {slaCompliance.resolution.percent_used?.toFixed(1) || 0}% used
+                      </Typography>
+                      {slaCompliance.resolution.time_remaining_hours !== undefined && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {slaCompliance.resolution.time_remaining_hours.toFixed(1)}h remaining
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                </Card>
+              </Grid>
+            )}
+          </Grid>
+          {slaCompliance.breaches && slaCompliance.breaches.length > 0 && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              <Typography variant="body2" fontWeight="medium">
+                SLA Breach Detected: {slaCompliance.breaches.join(', ').replace('_', ' ')}
+              </Typography>
+            </Alert>
+          )}
+        </Paper>
+      )}
 
       {/* Tabs */}
       <Paper sx={{ mb: 3 }}>

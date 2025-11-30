@@ -44,6 +44,7 @@ class PromptCategory(str, enum.Enum):
     QUOTE_SUMMARY = "quote_summary"
     QUOTE_GENERATION = "quote_generation"  # Universal AI quote generation (industry-agnostic)
     MANUAL_QUOTE_REVIEW = "manual_quote_review"
+    CONTRACT_GENERATION = "contract_generation"  # AI contract template generation
 
 
 class AIPrompt(Base, TimestampMixin):

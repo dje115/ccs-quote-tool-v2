@@ -368,6 +368,27 @@ class EventPublisher:
             "quote_id": quote_id,
             "quote": quote_data
         })
+    
+    # SLA Events
+    async def publish_sla_breach(self, tenant_id: str, alert_id: str, ticket_id: str, ticket_number: str, breach_type: str, breach_percent: int, alert_level: str, sla_policy_id: str, sla_policy_name: Optional[str] = None):
+        """Publish sla.breach event"""
+        await self._publish(tenant_id, "sla.breach", {
+            "alert_id": alert_id,
+            "ticket_id": ticket_id,
+            "ticket_number": ticket_number,
+            "breach_type": breach_type,
+            "breach_percent": breach_percent,
+            "alert_level": alert_level,
+            "sla_policy_id": sla_policy_id,
+            "sla_policy_name": sla_policy_name
+        })
+    
+    async def publish_sla_compliance_updated(self, tenant_id: str, ticket_id: str, compliance_data: Dict[str, Any]):
+        """Publish sla.compliance_updated event"""
+        await self._publish(tenant_id, "sla.compliance_updated", {
+            "ticket_id": ticket_id,
+            "compliance": compliance_data
+        })
 
 
 # Global event publisher instance

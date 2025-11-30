@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Container, Box, Typography, Button, Paper } from '@mui/material';
 import { ArrowBack as BackIcon } from '@mui/icons-material';
@@ -7,7 +7,15 @@ import QuoteBuilderWizard from '../components/QuoteBuilderWizard';
 const QuoteNewEnhanced: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const customerIdParam = searchParams.get('customer');
+  // Support both 'customer' and 'customer_id' parameters
+  const customerIdParam = searchParams.get('customer') || searchParams.get('customer_id');
+
+  // Debug log
+  useEffect(() => {
+    if (customerIdParam) {
+      console.log('QuoteNewEnhanced: customerIdParam from URL:', customerIdParam);
+    }
+  }, [customerIdParam]);
 
   const handleComplete = (quoteId: string) => {
     navigate(`/quotes/${quoteId}`);
