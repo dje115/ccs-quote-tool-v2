@@ -726,7 +726,6 @@ async def get_customer_sla_summary(
             and_(
                 Ticket.customer_id == customer_id,
                 Ticket.tenant_id == current_tenant.id,
-,
                 SLABreachAlert.acknowledged == False
             )
         )
@@ -902,11 +901,10 @@ async def get_customer_sla_compliance_history(
             and_(
                 Ticket.customer_id == customer_id,
                 Ticket.tenant_id == current_tenant.id,
-,
-                SLAComplianceRecord.recorded_at >= start_dt,
-                SLAComplianceRecord.recorded_at <= end_dt
+                SLAComplianceRecord.created_at >= start_dt,
+                SLAComplianceRecord.created_at <= end_dt
             )
-        ).order_by(SLAComplianceRecord.recorded_at.desc())
+        ).order_by(SLAComplianceRecord.created_at.desc())
         
         compliance_result = await db.execute(compliance_stmt)
         compliance_records = compliance_result.scalars().all()
@@ -914,20 +912,28 @@ async def get_customer_sla_compliance_history(
         # Group by date
         daily_compliance = {}
         for record in compliance_records:
-            record_date = record.recorded_at.date().isoformat()
+            record_date = record.created_at.date().isoformat()
             if record_date not in daily_compliance:
                 daily_compliance[record_date] = {
                     'date': record_date,
-                    'total_checks': 0,
-                    'compliant': 0,
-                    'breached': 0
+                    'total_tickets': 0,
+                    'first_response_compliance_rate': 0.0,
+                    'resolution_compliance_rate': 0.0
                 }
             
-            daily_compliance[record_date]['total_checks'] += 1
-            if record.compliant:
-                daily_compliance[record_date]['compliant'] += 1
-            else:
-                daily_compliance[record_date]['breached'] += 1
+            daily_compliance[record_date]['total_tickets'] += 1
+            # Calculate compliance rates based on met/breached flags
+            if record.first_response_met:
+                daily_compliance[record_date]['first_response_compliance_rate'] += 1
+            if record.resolution_met:
+                daily_compliance[record_date]['resolution_compliance_rate'] += 1
+        
+        # Convert counts to percentages
+        for date_key, data in daily_compliance.items():
+            total = data['total_tickets']
+            if total > 0:
+                data['first_response_compliance_rate'] = (data['first_response_compliance_rate'] / total) * 100
+                data['resolution_compliance_rate'] = (data['resolution_compliance_rate'] / total) * 100
         
         history = list(daily_compliance.values())
         history.sort(key=lambda x: x['date'], reverse=True)
