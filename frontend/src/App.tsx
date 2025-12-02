@@ -53,7 +53,10 @@ const ContractDetail = lazy(() => import('./pages/ContractDetail'));
 const SLAManagement = lazy(() => import('./pages/SLAManagement'));
 const SLADashboard = lazy(() => import('./pages/SLADashboard'));
 const SLAReportBuilder = lazy(() => import('./pages/SLAReportBuilder'));
-const SupportContracts = lazy(() => import('./pages/SupportContracts'));
+const CustomerSLAReport = lazy(() => import('./pages/CustomerSLAReport'));
+const HelpdeskPerformance = lazy(() => import('./pages/HelpdeskPerformance'));
+const NPADashboard = lazy(() => import('./components/NPADashboard'));
+const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -359,16 +362,8 @@ function App() {
             element={<ProtectedRoute><SLAReportBuilder /></ProtectedRoute>}
           />
           <Route
-            path="/support-contracts"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Suspense fallback={<LoadingFallback />}>
-                    <SupportContracts />
-                  </Suspense>
-                </Layout>
-              </ProtectedRoute>
-            }
+            path="/sla/customers/:customerId/report"
+            element={<ProtectedRoute><CustomerSLAReport /></ProtectedRoute>}
           />
           <Route
             path="/users"
@@ -415,6 +410,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <Helpdesk />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/performance"
+            element={
+              <ProtectedRoute>
+                <HelpdeskPerformance />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/npa-dashboard"
+            element={
+              <ProtectedRoute>
+                <NPADashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/knowledge-base"
+            element={
+              <ProtectedRoute>
+                <KnowledgeBase />
               </ProtectedRoute>
             }
           />

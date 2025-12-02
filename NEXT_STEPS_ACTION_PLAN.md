@@ -1,221 +1,378 @@
-# Next Steps Action Plan
+# What's Next - Action Plan
 
-## 🎯 Immediate Actions Required
-
-### 1. Database Migrations ⚠️ **CRITICAL**
-**Status:** Migrations created but not run
-
-**Required Migrations:**
-- ✅ `add_supplier_tables.sql` - Supplier management tables
-- ✅ `add_ai_prompts_tables.sql` - AI prompt management tables
-- ✅ `enhance_quotes_table.sql` - Quote table enhancements (if needed)
-
-**Action:**
-```sql
--- Run these migrations in order:
--- 1. backend/migrations/add_ai_prompts_tables.sql
--- 2. backend/migrations/add_supplier_tables.sql
--- 3. backend/migrations/enhance_quotes_table.sql (if not already run)
-```
-
-**How to Run:**
-- Connect to PostgreSQL database
-- Execute each SQL file in order
-- Verify tables created: `ai_prompts`, `ai_prompt_versions`, `supplier_categories`, `suppliers`, `supplier_pricing`
+**Date:** 2025-11-24  
+**Status:** High-Priority Features Complete  
+**Next Phase:** Testing, Refinement & Additional Features
 
 ---
 
-### 2. Seed AI Prompts ⚠️ **CRITICAL**
-**Status:** Seed script ready but not executed
+## 🎯 **IMMEDIATE PRIORITIES (Week 1-2)**
 
-**Action:**
-```bash
-cd backend
-python scripts/seed_ai_prompts.py
-```
+### 1. Testing & Validation ✅ **HIGH PRIORITY**
 
-**What it does:**
-- Seeds all 12 AI prompt categories with system prompts
-- Creates default prompts for quote analysis, product search, building analysis, etc.
-- Ensures fallback prompts are not needed
+#### Backend Testing
+- [ ] **Unit Tests**
+  - Test quote generation service
+  - Test document versioning service
+  - Test contract-to-quote conversion
+  - Test email ticket ingestion
+  - Test WhatsApp service
+  - Test knowledge base service
+  - Test workflow service
+  - **Target:** 70% code coverage
 
-**Verify:**
-- Check `ai_prompts` table has 12+ system prompts
-- All categories should have at least one prompt
+- [ ] **Integration Tests**
+  - Test full quote generation flow
+  - Test document editing and versioning
+  - Test contract-to-quote workflow
+  - Test email-to-ticket workflow
+  - Test WhatsApp webhook flow
+  - **File:** `backend/tests/`
 
----
+- [ ] **API Endpoint Testing**
+  - Test all new endpoints with Postman/curl
+  - Verify error handling
+  - Test authentication/authorization
+  - Test rate limiting (if implemented)
 
-### 3. Test New Features ✅ **RECOMMENDED**
-**Status:** Features implemented but not tested
+#### Frontend Testing
+- [ ] **Component Testing**
+  - Test QuoteBuilderWizard flow
+  - Test QuoteDocumentEditor
+  - Test QuoteDocumentViewer
+  - Test Contract-to-Quote buttons
+  - **File:** `frontend/src/__tests__/`
 
-**Test Checklist:**
-- [ ] Supplier Management API endpoints
-- [ ] Product Search API (`/api/v1/products/search`)
-- [ ] Building Analysis API (`/api/v1/buildings/analyze`)
-- [ ] Quote Analysis with real pricing
-- [ ] Quote Consistency endpoint
-- [ ] Quote Workflow endpoints (approve, reject, versioning)
+- [ ] **E2E Testing**
+  - Full quote generation workflow
+  - Document editing workflow
+  - Contract-to-quote conversion
+  - **Tool:** Playwright or Cypress
 
-**Test Commands:**
-```bash
-# Start backend
-docker-compose up backend
+### 2. Bug Fixes & Improvements
 
-# Test endpoints (using curl or Postman)
-curl http://localhost:8000/api/v1/suppliers/categories
-curl http://localhost:8000/api/v1/products/search?query=wifi
-curl http://localhost:8000/api/v1/buildings/analyze?address=London
-```
+#### Code Cleanup
+- [ ] **Address TODOs**
+  - Implement intelligent auto-assignment (SLA service)
+  - Create message tracking table (WhatsApp)
+  - Store attachments for email tickets
+  - Get tenant settings for quote analysis
+  - **Files:** See grep results above
 
----
+- [ ] **Error Handling**
+  - Standardize error responses
+  - Add custom exception classes
+  - Implement global exception handler
+  - **File:** `backend/app/core/exceptions.py` (new)
 
-## 📋 Remaining Quote Module Features
+- [ ] **Code Quality**
+  - Run linters (ruff, mypy)
+  - Fix any warnings
+  - Improve docstrings
+  - **Command:** `ruff check .` and `mypy .`
 
-### 4. Document Generation 🔄 **OPTIONAL**
-**Status:** Not Started
+### 3. Missing Features (Quick Wins)
 
-**What's Needed:**
-- Word document generation (.docx)
-- PDF generation
-- Template-based formatting
-- Professional quote formatting
+#### PDF Generation
+- [ ] **Implement PDF Export**
+  - Use library like `reportlab` or `weasyprint`
+  - Generate PDFs for each document type
+  - Add download button in QuoteDocumentViewer
+  - **File:** `backend/app/services/pdf_generation_service.py` (new)
+  - **Endpoint:** `POST /api/v1/quotes/{id}/documents/{type}/pdf`
 
-**Priority:** Medium (can be done later)
+#### Email Functionality
+- [ ] **Quote Email Sending**
+  - Send quote via email
+  - Attach PDF documents
+  - Track email opens/clicks
+  - **File:** `backend/app/services/quote_email_service.py` (new)
+  - **Endpoint:** `POST /api/v1/quotes/{id}/send-email`
 
-**Estimated Effort:** 4-6 hours
-
----
-
-### 5. Pricing Import System 🔄 **OPTIONAL**
-**Status:** Not Started
-
-**What's Needed:**
-- Excel/CSV import
-- AI-powered extraction
-- Product standardization
-- Bulk import validation
-
-**Priority:** Low (can be done later)
-
-**Estimated Effort:** 6-8 hours
-
----
-
-## ✅ What's Already Complete
-
-### Quote Module ✅
-- ✅ Supplier management (CRUD, categories, pricing)
-- ✅ Quote analysis with AI (enhanced with real pricing)
-- ✅ Quote consistency checking
-- ✅ Quote workflows (clarifications, approval, versioning)
-- ✅ Multi-tenant support
-
-### AI Features ✅
-- ✅ All 12 AI prompt categories migrated
-- ✅ Database-driven prompts (100%)
-- ✅ Version control for prompts
-- ✅ Multi-tenant prompt support
-- ✅ Product Search feature
-- ✅ Building Analysis feature
-
-### Supplier Management ✅
-- ✅ All v1 features migrated
-- ✅ Enhanced with multi-tenant support
-- ✅ Real-time pricing scraping
-- ✅ Pricing caching (24-hour TTL)
+#### Document Regeneration
+- [ ] **Complete Regenerate Endpoint**
+  - Currently placeholder in quotes.py
+  - Implement full regeneration logic
+  - **File:** `backend/app/api/v1/endpoints/quotes.py`
 
 ---
 
-## 🚀 Recommended Order of Execution
+## 🚀 **SHORT-TERM PRIORITIES (Week 3-4)**
 
-### Phase 1: Database Setup (30 minutes)
-1. ✅ Run database migrations
-2. ✅ Seed AI prompts
-3. ✅ Verify database tables
+### 4. Performance Optimization
 
-### Phase 2: Testing (1-2 hours)
-1. ✅ Test supplier management endpoints
-2. ✅ Test AI features (product search, building analysis)
-3. ✅ Test quote analysis with real pricing
-4. ✅ Test quote workflows
+#### Caching
+- [ ] **Redis Caching**
+  - Cache Companies House data (24-hour TTL)
+  - Cache Google Maps data (7-day TTL)
+  - Cache customer analysis (30-day TTL)
+  - Cache product catalog (1-hour TTL)
+  - **File:** `backend/app/core/cache.py` (enhance)
 
-### Phase 3: Frontend Integration (if needed)
-1. ⏳ Update frontend to use new endpoints
-2. ⏳ Add UI for supplier management
-3. ⏳ Add UI for product search
-4. ⏳ Add UI for building analysis
+#### Database Optimization
+- [ ] **Query Optimization**
+  - Use `selectinload` for relationships
+  - Add pagination to list endpoints
+  - Optimize N+1 queries
+  - **Files:** All service files
 
-### Phase 4: Optional Features (later)
-1. ⏳ Document generation
-2. ⏳ Pricing import system
+#### API Optimization
+- [ ] **Response Compression**
+  - Enable gzip compression
+  - Compress large JSON responses
+  - **File:** `backend/app/main.py`
 
----
+- [ ] **Rate Limiting**
+  - Implement rate limiting per tenant
+  - Protect AI endpoints
+  - **File:** `backend/app/core/rate_limit.py` (new)
 
-## 📝 Quick Start Commands
+### 5. Frontend Enhancements
 
-### 1. Run Migrations
-```bash
-# Connect to PostgreSQL
-psql -U your_user -d your_database
+#### UI Improvements
+- [ ] **Document Editors Enhancement**
+  - Rich text editor for document content
+  - Drag-and-drop section reordering
+  - Preview mode
+  - **File:** `frontend/src/components/QuoteDocumentEditor.tsx`
 
-# Run migrations
-\i backend/migrations/add_ai_prompts_tables.sql
-\i backend/migrations/add_supplier_tables.sql
-```
+- [ ] **Knowledge Base UI**
+  - Article management interface
+  - Article editor
+  - Category management
+  - **File:** `frontend/src/pages/KnowledgeBase.tsx` (new)
 
-### 2. Seed Prompts
-```bash
-cd backend
-python scripts/seed_ai_prompts.py
-```
+- [ ] **Workflow Rules UI**
+  - Visual workflow builder
+  - Rule configuration interface
+  - **File:** `frontend/src/pages/WorkflowRules.tsx` (new)
 
-### 3. Rebuild Docker (if needed)
-```bash
-# Windows PowerShell
-.\rebuild-docker.ps1
+#### User Experience
+- [ ] **Loading States**
+  - Better loading indicators
+  - Skeleton screens
+  - Progress bars for long operations
 
-# Or manually
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-```
-
-### 4. Verify Backend Started
-```bash
-# Check logs
-docker-compose logs backend
-
-# Test health endpoint
-curl http://localhost:8000/api/v1/version
-```
+- [ ] **Error Messages**
+  - User-friendly error messages
+  - Toast notifications
+  - Error recovery suggestions
 
 ---
 
-## 🎯 Summary
+## 📊 **MEDIUM-TERM PRIORITIES (Month 2-3)**
 
-**Critical (Do First):**
-1. ✅ Run database migrations
-2. ✅ Seed AI prompts
-3. ✅ Test new features
+### 6. Advanced Features
 
-**Important (Do Soon):**
-4. ⏳ Frontend integration (if needed)
-5. ⏳ User acceptance testing
+#### SLA Intelligence Enhancements
+- [ ] **Predictive Analytics**
+  - Machine learning for breach prediction
+  - Historical pattern analysis
+  - **File:** `backend/app/services/sla_intelligence_service.py`
 
-**Optional (Do Later):**
-6. ⏳ Document generation
-7. ⏳ Pricing import system
+#### Workflow Automation
+- [ ] **Advanced Workflows**
+  - Multi-step workflows
+  - Conditional logic
+  - Integration with external systems
+  - **File:** `backend/app/services/workflow_service.py`
+
+#### Knowledge Base AI
+- [ ] **AI-Powered Suggestions**
+  - Better article matching
+  - Auto-categorization
+  - Content recommendations
+  - **File:** `backend/app/services/knowledge_base_service.py`
+
+### 7. Integrations
+
+#### External Services
+- [ ] **PSA/RMM Integration**
+  - Connect to ConnectWise, Autotask, etc.
+  - Sync tickets
+  - **File:** `backend/app/services/psa_integration_service.py` (new)
+
+- [ ] **Email Providers**
+  - Support more email providers
+  - OAuth2 authentication
+  - **File:** `backend/app/services/email_ticket_service.py`
+
+#### API Integrations
+- [ ] **Webhook System**
+  - Generic webhook support
+  - Event subscriptions
+  - **File:** `backend/app/services/webhook_service.py` (new)
 
 ---
 
-## ❓ Questions to Answer
+## 🔒 **SECURITY & COMPLIANCE**
 
-1. **Do you want to run migrations now?** (I can help with SQL commands)
-2. **Do you want to seed prompts now?** (I can run the script)
-3. **Do you want to test the new features?** (I can help test endpoints)
-4. **Do you want to proceed with document generation?** (Can start now)
-5. **Do you want to proceed with pricing import?** (Can start now)
+### 8. Security Enhancements
 
-**Current Status:** ✅ **90% Complete** - Just need to run migrations and seed prompts!
+- [ ] **Security Audit**
+  - Review authentication/authorization
+  - Check for SQL injection vulnerabilities
+  - Verify RLS policies
+  - **Tool:** OWASP ZAP or similar
 
+- [ ] **Data Encryption**
+  - Encrypt sensitive data at rest
+  - Encrypt data in transit (already done with HTTPS)
+  - **File:** `backend/app/core/encryption.py` (new)
 
+- [ ] **Audit Logging**
+  - Log all sensitive operations
+  - Track data access
+  - **File:** `backend/app/core/audit.py` (new)
+
+---
+
+## 📚 **DOCUMENTATION**
+
+### 9. Documentation Updates
+
+- [ ] **API Documentation**
+  - Complete OpenAPI/Swagger docs
+  - Add examples for all endpoints
+  - **File:** `backend/app/api/v1/endpoints/` (add docstrings)
+
+- [ ] **User Guides**
+  - Quote generation guide
+  - Contract-to-quote guide
+  - Helpdesk setup guide
+  - **File:** `docs/user-guides/` (new)
+
+- [ ] **Developer Documentation**
+  - Architecture overview
+  - Service documentation
+  - Database schema docs
+  - **File:** `docs/developer/` (new)
+
+---
+
+## 🎨 **UI/UX IMPROVEMENTS**
+
+### 10. Design Enhancements
+
+- [ ] **Design System**
+  - Consistent component library
+  - Theme customization
+  - **File:** `frontend/src/theme/` (enhance)
+
+- [ ] **Accessibility**
+  - ARIA labels
+  - Keyboard navigation
+  - Screen reader support
+  - **Tool:** axe DevTools
+
+- [ ] **Mobile Responsiveness**
+  - Test on mobile devices
+  - Optimize for tablets
+  - **File:** All frontend components
+
+---
+
+## 📈 **ANALYTICS & MONITORING**
+
+### 11. Monitoring & Observability
+
+- [ ] **Application Monitoring**
+  - Set up error tracking (Sentry)
+  - Performance monitoring
+  - **File:** `backend/app/core/monitoring.py` (new)
+
+- [ ] **Analytics Dashboard**
+  - Quote generation metrics
+  - Helpdesk performance
+  - User activity
+  - **File:** `frontend/src/pages/Analytics.tsx` (new)
+
+- [ ] **Logging**
+  - Structured logging
+  - Log aggregation
+  - **File:** `backend/app/core/logging.py` (enhance)
+
+---
+
+## 🚢 **DEPLOYMENT PREPARATION**
+
+### 12. Production Readiness
+
+- [ ] **Environment Setup**
+  - Production environment config
+  - CI/CD pipeline
+  - **File:** `.github/workflows/` or similar
+
+- [ ] **Database Migration Strategy**
+  - Migration testing
+  - Rollback procedures
+  - **File:** `backend/migrations/` (verify all)
+
+- [ ] **Backup & Recovery**
+  - Automated backups
+  - Recovery procedures
+  - **File:** `docs/deployment/backup.md` (new)
+
+---
+
+## 🎯 **RECOMMENDED ORDER OF EXECUTION**
+
+### Week 1-2: Testing & Bug Fixes
+1. Write unit tests for new services
+2. Fix TODOs in code
+3. Test all endpoints manually
+4. Fix any bugs found
+
+### Week 3-4: Quick Wins
+1. Implement PDF generation
+2. Implement email sending
+3. Complete regenerate endpoint
+4. Add caching for performance
+
+### Month 2: Enhancements
+1. Frontend UI improvements
+2. Knowledge Base UI
+3. Workflow Rules UI
+4. Performance optimization
+
+### Month 3: Advanced Features
+1. Advanced SLA analytics
+2. External integrations
+3. Security enhancements
+4. Documentation
+
+---
+
+## 📝 **DECISION POINTS**
+
+### What to Build Next?
+
+**Option A: Polish & Production Ready**
+- Focus on testing, bug fixes, and deployment
+- Best for: Getting to production quickly
+
+**Option B: Feature Complete**
+- Add PDF, email, and UI enhancements
+- Best for: Full feature set before launch
+
+**Option C: Advanced Features**
+- Focus on AI enhancements and integrations
+- Best for: Competitive differentiation
+
+**Recommendation:** Start with **Option A** (testing & bug fixes), then move to **Option B** (quick wins), then **Option C** (advanced features).
+
+---
+
+## ✅ **SUCCESS METRICS**
+
+- [ ] 70%+ code coverage
+- [ ] All endpoints tested
+- [ ] Zero critical bugs
+- [ ] PDF generation working
+- [ ] Email sending working
+- [ ] Performance: <2s API response times
+- [ ] All TODOs addressed
+
+---
+
+**Next Steps:** Choose your priority and let's start implementing! 🚀

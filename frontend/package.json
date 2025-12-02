@@ -1,6 +1,6 @@
 {
   "name": "ccs-quote-tool-v2-frontend",
-  "version": "3.1.0",
+  "version": "3.3.0",
   "description": "CCS Quote Tool v2 - Modern CRM & Quoting Platform Frontend",
   "private": true,
   "type": "module",
@@ -22,7 +22,7 @@
     "@mui/x-date-pickers": "^7.21.2",
     "axios": "^1.7.7",
     "chart.js": "^4.4.0",
-    "date-fns": "^3.6.0",
+    "date-fns": "^2.30.0",
     "i18next": "^23.7.6",
     "react": "^19.2.0",
     "react-chartjs-2": "^5.2.0",

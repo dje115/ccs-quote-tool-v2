@@ -3,7 +3,7 @@
 Quote management endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import or_, select, func, and_
 from typing import List, Optional, Dict, Any
@@ -13,6 +13,8 @@ import uuid
 import asyncio
 from datetime import datetime
 import logging
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, check_permission, get_current_tenant
@@ -341,19 +343,23 @@ async def list_quotes(
         current_page = (skip // limit) + 1 if limit > 0 else 1
         
         # Convert to response format
-        items = [
-            QuoteResponse(
-                id=quote.id,
-                customer_id=quote.customer_id,
-                quote_number=quote.quote_number,
-                title=quote.title,
-                status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
-                approval_state=quote.approval_state.value if hasattr(quote.approval_state, 'value') else str(quote.approval_state),
-                total_amount=float(quote.total_amount) if quote.total_amount else 0.0,
-                created_at=quote.created_at
-            )
-            for quote in quotes
-        ]
+        items = []
+        for quote in quotes:
+            try:
+                items.append(QuoteResponse(
+                    id=quote.id,
+                    customer_id=quote.customer_id,
+                    quote_number=quote.quote_number,
+                    title=quote.title,
+                    status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
+                    approval_state=quote.approval_state.value if hasattr(quote.approval_state, 'value') else str(quote.approval_state) if quote.approval_state else "not_required",
+                    total_amount=float(quote.total_amount) if quote.total_amount else 0.0,
+                    created_at=quote.created_at
+                ))
+            except Exception as e:
+                logger.error(f"Error converting quote {quote.id} to response: {e}", exc_info=True)
+                # Skip this quote and continue
+                continue
         
         return PaginatedQuoteResponse(
             items=items,
@@ -2489,3 +2495,252 @@ async def get_quote_workflow_log(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to load workflow log"
         ) from exc
+
+
+class QuoteGenerateRequest(BaseModel):
+    customer_request: str
+    quote_title: str
+    customer_id: Optional[str] = None
+    lead_id: Optional[str] = None
+    quote_type: Optional[str] = None
+    required_deadline: Optional[str] = None
+    location: Optional[str] = None
+    quantity: Optional[int] = None
+
+
+@router.post("/generate")
+async def generate_quote(
+    request: QuoteGenerateRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Generate a complete quote with all document types using AI"""
+    from app.core.database import SessionLocal
+    sync_db = SessionLocal()
+    try:
+        service = QuoteBuilderService(sync_db, str(current_tenant.id))
+        
+        result = await service.build_quote(
+            customer_request=request.customer_request,
+            quote_title=request.quote_title,
+            customer_id=request.customer_id,
+            lead_id=request.lead_id,
+            quote_type=request.quote_type,
+            required_deadline=request.required_deadline,
+            location=request.location,
+            quantity=request.quantity,
+            user_id=str(current_user.id)
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to generate quote")
+            )
+        
+        quote = result["quote"]
+        documents = result.get("documents", [])
+        
+        return {
+            "success": True,
+            "quote": {
+                "id": quote.id,
+                "quote_number": quote.quote_number,
+                "title": quote.title,
+                "tier_type": quote.tier_type,
+                "status": quote.status.value
+            },
+            "documents": [
+                {
+                    "id": doc.id,
+                    "document_type": doc.document_type,
+                    "version": doc.version
+                }
+                for doc in documents
+            ]
+        }
+    finally:
+        sync_db.close()
+
+
+@router.post("/{quote_id}/regenerate-document/{document_type}")
+async def regenerate_document(
+    quote_id: str,
+    document_type: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Regenerate a specific document type for a quote"""
+    # Verify quote exists
+    quote_result = await db.execute(
+        select(Quote).where(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_tenant.id
+        )
+    )
+    quote = quote_result.scalar_one_or_none()
+    
+    if not quote:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quote not found"
+        )
+    
+    # Validate document type
+    valid_types = [dt.value for dt in DocumentType]
+    if document_type not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid document type. Must be one of: {', '.join(valid_types)}"
+        )
+    
+    from app.core.database import SessionLocal
+    sync_db = SessionLocal()
+    try:
+        service = QuoteBuilderService(sync_db, str(current_tenant.id))
+        
+        # Get existing quote data
+        # For now, we'll need to regenerate from the original request
+        # In a full implementation, you'd store the original request or regenerate from existing data
+        
+        # This is a placeholder - full implementation would regenerate the specific document
+        # using the AI service and update the document
+        
+        return {
+            "success": True,
+            "message": f"Document {document_type} regeneration initiated",
+            "note": "Full regeneration logic to be implemented"
+        }
+    finally:
+        sync_db.close()
+
+
+class QuoteGenerateContractRequest(BaseModel):
+    template_id: Optional[str] = None
+
+
+@router.post("/{quote_id}/generate-contract")
+async def generate_contract_from_quote(
+    quote_id: str,
+    request: QuoteGenerateContractRequest = Body(...),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Generate a contract from an approved quote"""
+    from app.services.contract_generator_service import ContractGeneratorService
+    from app.core.database import SessionLocal
+    
+    # Verify quote exists
+    quote_result = await db.execute(
+        select(Quote).where(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_tenant.id
+        )
+    )
+    quote = quote_result.scalar_one_or_none()
+    
+    if not quote:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quote not found"
+        )
+    
+    sync_db = SessionLocal()
+    try:
+        service = ContractGeneratorService(sync_db, str(current_tenant.id))
+        result = await service.generate_contract_from_quote(
+            quote_id=quote_id,
+            template_id=request.template_id,
+            user_id=str(current_user.id)
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to generate contract")
+            )
+        
+        return {
+            "success": True,
+            "contract_id": result.get("contract_id"),
+            "contract_number": result.get("contract_number")
+        }
+    finally:
+        sync_db.close()
+
+
+@router.get("/{quote_id}/contract")
+async def get_quote_contract(
+    quote_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Get the associated contract for a quote"""
+    from app.models.contracts import Contract
+    from app.models.support_contract import SupportContract
+    
+    # Verify quote exists
+    quote_result = await db.execute(
+        select(Quote).where(
+            Quote.id == quote_id,
+            Quote.tenant_id == current_tenant.id
+        )
+    )
+    quote = quote_result.scalar_one_or_none()
+    
+    if not quote:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quote not found"
+        )
+    
+    # Check for regular contract
+    contract_result = await db.execute(
+        select(Contract).where(
+            Contract.quote_id == quote_id,
+            Contract.tenant_id == current_tenant.id
+        )
+    )
+    contract = contract_result.scalar_one_or_none()
+    
+    if contract:
+        return {
+            "success": True,
+            "contract": {
+                "id": contract.id,
+                "contract_number": contract.contract_number,
+                "contract_name": contract.contract_name,
+                "status": contract.status.value if hasattr(contract.status, 'value') else str(contract.status),
+                "type": "regular"
+            }
+        }
+    
+    # Check for support contract
+    support_contract_result = await db.execute(
+        select(SupportContract).where(
+            SupportContract.quote_id == quote_id,
+            SupportContract.tenant_id == current_tenant.id
+        )
+    )
+    support_contract = support_contract_result.scalar_one_or_none()
+    
+    if support_contract:
+        return {
+            "success": True,
+            "contract": {
+                "id": support_contract.id,
+                "contract_number": support_contract.contract_number,
+                "contract_name": support_contract.contract_name,
+                "status": support_contract.status.value if hasattr(support_contract.status, 'value') else str(support_contract.status),
+                "type": "support"
+            }
+        }
+    
+    return {
+        "success": False,
+        "message": "No associated contract found"
+    }

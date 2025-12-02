@@ -268,6 +268,7 @@ async def test_provider_key(
         )
 
 
+@router.post("/{provider_id}", status_code=status.HTTP_200_OK)
 @router.put("/{provider_id}", status_code=status.HTTP_200_OK)
 async def save_provider_key(
     provider_id: str,

@@ -98,11 +98,20 @@ async def init_db():
     
     # Create all tables
     async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        try:
+            await conn.run_sync(Base.metadata.create_all)
+        except Exception as e:
+            # Ignore errors about existing indexes/tables (migrations handle these)
+            if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
+                raise
+            print(f"⚠️  Some database objects already exist (this is normal): {str(e)[:100]}")
     
     # Create default tenant and super admin
     await create_default_tenant()
     await create_system_tenant()
+    
+    # Seed AI prompts (idempotent - safe to run multiple times)
+    await seed_ai_prompts_on_init()
     
     print("✅ Database initialized successfully")
 
@@ -262,6 +271,33 @@ async def create_system_tenant():
         
         await session.commit()
         print(f"✅ Created system tenant '{settings.SYSTEM_TENANT_SLUG}' for global configuration")
+
+
+async def seed_ai_prompts_on_init():
+    """Seed AI prompts during database initialization (idempotent)"""
+    try:
+        # Use the startup seed_data module which already handles this
+        from app.startup.seed_data import seed_ai_prompts
+        
+        # Use sync session wrapper for seed script
+        db = SessionLocal()
+        try:
+            await seed_ai_prompts(db)
+            db.commit()
+            print("✅ AI prompts seeded successfully")
+        except Exception as e:
+            db.rollback()
+            # Don't fail initialization if prompts already exist
+            if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
+                print(f"⚠️  AI prompts already exist (this is normal): {str(e)[:100]}")
+            else:
+                print(f"⚠️  Error seeding AI prompts: {e}")
+        finally:
+            db.close()
+    except ImportError as e:
+        print(f"⚠️  Could not import seed script (this is normal if running migrations separately): {e}")
+    except Exception as e:
+        print(f"⚠️  Error seeding AI prompts: {e}")
 
 
 def get_db():

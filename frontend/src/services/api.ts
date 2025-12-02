@@ -10,6 +10,7 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true,  // IMPORTANT: Required for HttpOnly cookies
+  timeout: 30000,  // 30 second timeout
 });
 
 // Track refresh token request to prevent infinite loops
@@ -245,6 +246,10 @@ export const contractAPI = {
   create: (data: any) => apiClient.post('/contracts/', data),
   update: (id: string, data: any) => apiClient.put(`/contracts/${id}`, data),
   delete: (id: string) => apiClient.delete(`/contracts/${id}`),
+  generateContract: (data: any) => apiClient.post('/contracts/generate', data),
+  // Contract-to-Quote integration
+  generateQuoteFromContract: (contractId: string) => apiClient.post(`/contracts/${contractId}/generate-quote`),
+  getAssociatedQuote: (contractId: string) => apiClient.get(`/contracts/${contractId}/quote`),
 };
 
 // Lead API
@@ -315,6 +320,11 @@ export const quoteAPI = {
   getPrompt: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/prompt`),
   regenerateWithPrompt: (quoteId: string, data: any) => apiClient.post(`/quotes/${quoteId}/prompt/regenerate`, data),
   getPromptHistory: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/prompt/history`),
+  // Quote-to-Contract integration
+  generateContractFromQuote: (quoteId: string) => apiClient.post(`/quotes/${quoteId}/generate-contract`),
+  getAssociatedContract: (quoteId: string) => apiClient.get(`/quotes/${quoteId}/contract`),
+  // Regenerate document
+  regenerateDocument: (quoteId: string, documentType: string) => apiClient.post(`/quotes/${quoteId}/regenerate-document/${documentType}`),
 };
 
 // User API
@@ -431,6 +441,59 @@ export const helpdeskAPI = {
     apiClient.post(`/helpdesk/tickets/${id}/ai/auto-response`, { response_type: responseType }),
   getKnowledgeBaseSuggestions: (id: string, limit: number = 5) => 
     apiClient.get(`/helpdesk/tickets/${id}/ai/knowledge-base`, { params: { limit } }),
+  generateAnswerFromKB: (id: string, articleId?: string) => 
+    apiClient.post(`/helpdesk/tickets/${id}/knowledge-base/generate-answer`, null, { params: { article_id: articleId } }),
+  generateQuickResponse: (id: string) => 
+    apiClient.post(`/helpdesk/tickets/${id}/knowledge-base/quick-response`),
+  // Knowledge Base Article management
+  listKnowledgeBaseArticles: (category?: string, publishedOnly: boolean = true) =>
+    apiClient.get('/helpdesk/knowledge-base/articles', { params: { category, published_only: publishedOnly } }),
+  getKnowledgeBaseArticle: (id: string) =>
+    apiClient.get(`/helpdesk/knowledge-base/articles/${id}`),
+  createKnowledgeBaseArticle: (data: any) =>
+    apiClient.post('/helpdesk/knowledge-base/articles', data),
+  updateKnowledgeBaseArticle: (id: string, data: any) =>
+    apiClient.put(`/helpdesk/knowledge-base/articles/${id}`, data),
+  deleteKnowledgeBaseArticle: (id: string) =>
+    apiClient.delete(`/helpdesk/knowledge-base/articles/${id}`),
+  // NPA (Next Point of Action) endpoints
+  getTicketNPA: (id: string) => apiClient.get(`/helpdesk/tickets/${id}/npa`),
+  updateTicketNPA: (id: string, data: {
+    npa: string;
+    due_date?: string;
+    assigned_to_id?: string;
+    npa_state?: string;
+    date_override?: boolean;
+    exclude_from_sla?: boolean;
+    trigger_ai_cleanup?: boolean;
+  }) => apiClient.put(`/helpdesk/tickets/${id}/npa`, data),
+  regenerateTicketNPA: (id: string) => apiClient.post(`/helpdesk/tickets/${id}/npa/regenerate`),
+  getNPAAISuggestions: (id: string) => apiClient.get(`/helpdesk/tickets/${id}/npa/ai-suggestions`),
+  getOverdueNPAs: () => apiClient.get('/helpdesk/tickets/npa/overdue'),
+  getTicketsWithoutNPA: () => apiClient.get('/helpdesk/tickets/npa/missing'),
+  ensureAllTicketsHaveNPA: () => apiClient.post('/helpdesk/tickets/npa/ensure-all'),
+  // NPA History endpoints
+  getTicketNPAHistory: (id: string) => apiClient.get(`/helpdesk/tickets/${id}/npa/history`),
+  updateNPAHistoryAnswers: (ticketId: string, npaHistoryId: string, answers: string, triggerCleanup: boolean = true) => 
+    apiClient.put(`/helpdesk/tickets/${ticketId}/npa/history/${npaHistoryId}/answers`, { answers, trigger_ai_cleanup: triggerCleanup }),
+  updateCurrentNPAAnswers: (ticketId: string, answers: string, triggerCleanup: boolean = true) => 
+    apiClient.put(`/helpdesk/tickets/${ticketId}/npa/answers`, { answers, trigger_ai_cleanup: triggerCleanup }),
+  // Analytics endpoints
+  getVolumeTrends: (startDate: string, endDate: string, interval: 'day' | 'week' | 'month' = 'day') =>
+    apiClient.get('/helpdesk/analytics/volume-trends', { params: { start_date: startDate, end_date: endDate, interval } }),
+  getResolutionTimeAnalytics: (startDate: string, endDate: string, groupBy: 'priority' | 'type' | 'status' = 'priority') =>
+    apiClient.get('/helpdesk/analytics/resolution-times', { params: { start_date: startDate, end_date: endDate, group_by: groupBy } }),
+  getDistributions: (startDate: string, endDate: string) =>
+    apiClient.get('/helpdesk/analytics/distributions', { params: { start_date: startDate, end_date: endDate } }),
+  getCustomerPerformance: (startDate: string, endDate: string, limit: number = 20) =>
+    apiClient.get('/helpdesk/analytics/customer-performance', { params: { start_date: startDate, end_date: endDate, limit } }),
+  getAgentWorkload: (startDate: string, endDate: string) =>
+    apiClient.get('/helpdesk/analytics/agent-workload', { params: { start_date: startDate, end_date: endDate } }),
+  exportAnalytics: (startDate: string, endDate: string, format: 'csv' | 'pdf' | 'excel', reportType: string) =>
+    apiClient.get('/helpdesk/analytics/export', { 
+      params: { start_date: startDate, end_date: endDate, format, report_type: reportType },
+      responseType: 'blob'
+    }),
 };
 
 // Customer Health API
@@ -497,6 +560,8 @@ export const supportContractAPI = {
   cancel: (id: string, reason: string) => apiClient.post(`/support-contracts/${id}/cancel`, null, { params: { cancellation_reason: reason } }),
   getRecurringRevenue: () => apiClient.get('/support-contracts/recurring-revenue/summary'),
   getExpiringSoon: (daysAhead?: number) => apiClient.get('/support-contracts/expiring-soon/list', { params: { days_ahead: daysAhead } }),
+  generateContract: (data: any) => apiClient.post('/support-contracts/generate', data),
+  generateTemplate: (data: any) => apiClient.post('/support-contracts/templates/generate', data),
 };
 
 // SLA API
@@ -529,6 +594,8 @@ export const slaAPI = {
   // Customer SLA
   getCustomerSummary: (customerId: string) => apiClient.get(`/sla/customers/${customerId}/summary`),
   getCustomerComplianceHistory: (customerId: string, params?: any) => apiClient.get(`/sla/customers/${customerId}/compliance-history`, { params }),
+  getCustomerReport: (customerId: string, startDate: string, endDate: string) => 
+    apiClient.get(`/sla/customers/${customerId}/report`, { params: { start_date: startDate, end_date: endDate } }),
   
   // Templates
   listTemplates: () => apiClient.get('/sla/templates'),

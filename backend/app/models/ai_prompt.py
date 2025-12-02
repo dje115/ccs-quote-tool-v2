@@ -32,6 +32,9 @@ class PromptCategory(str, enum.Enum):
     PRICING_ANALYSIS = "pricing_analysis"
     KNOWLEDGE_BASE_SEARCH = "knowledge_base_search"
     CUSTOMER_SERVICE = "customer_service"
+    HELPDESK_NPA_SUGGESTIONS = "helpdesk_npa_suggestions"  # NPA-specific suggestions (agent, diagnosis, troubleshooting)
+    HELPDESK_KB_ANSWER = "helpdesk_kb_answer"  # Generate answers from KB articles
+    HELPDESK_QUICK_RESPONSE = "helpdesk_quick_response"  # Generate quick customer responses
     DASHBOARD_ANALYTICS = "dashboard_analytics"
     # Smart Quoting Module prompts
     QUOTE_SCOPE_ANALYSIS = "quote_scope_analysis"

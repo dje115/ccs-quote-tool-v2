@@ -26,10 +26,11 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   TrendingUp as TrendingUpIcon,
-  AccessTime as AccessTimeIcon
+  AccessTime as AccessTimeIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { slaAPI } from '../services/api';
+import { slaAPI, helpdeskAPI } from '../services/api';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -103,12 +104,19 @@ const SLADashboard: React.FC = () => {
   const [trends, setTrends] = useState<any[]>([]);
   const [loadingTrends, setLoadingTrends] = useState(false);
   const [tabValue, setTabValue] = useState(0);
+  const [customerPerformance, setCustomerPerformance] = useState<any[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [volumeTrends, setVolumeTrends] = useState<any[]>([]);
+  const [loadingVolume, setLoadingVolume] = useState(false);
 
   useEffect(() => {
     loadData();
     loadAgentPerformance();
     if (tabValue === 1) {
       loadTrends();
+    } else if (tabValue === 2) {
+      loadCustomerPerformance();
+      loadVolumeTrends();
     }
   }, [startDate, endDate, tabValue]);
 
@@ -156,7 +164,31 @@ const SLADashboard: React.FC = () => {
     }
   };
 
-  const handleExportReport = async (format: 'csv' | 'pdf') => {
+  const loadCustomerPerformance = async () => {
+    try {
+      setLoadingCustomers(true);
+      const response = await helpdeskAPI.getCustomerPerformance(startDate, endDate, 20);
+      setCustomerPerformance(response.data?.customer_performance || []);
+    } catch (error) {
+      console.error('Error loading customer performance:', error);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
+
+  const loadVolumeTrends = async () => {
+    try {
+      setLoadingVolume(true);
+      const response = await helpdeskAPI.getVolumeTrends(startDate, endDate, 'day');
+      setVolumeTrends(response.data?.trends || []);
+    } catch (error) {
+      console.error('Error loading volume trends:', error);
+    } finally {
+      setLoadingVolume(false);
+    }
+  };
+
+  const handleExportReport = async (format: 'csv' | 'pdf' | 'excel') => {
     try {
       const response = await slaAPI.exportReport({
         start_date: startDate,
@@ -166,12 +198,15 @@ const SLADashboard: React.FC = () => {
       
       // Create download link
       const blob = new Blob([response.data], {
-        type: format === 'pdf' ? 'application/pdf' : 'text/csv'
+        type: format === 'pdf' ? 'application/pdf' : 
+              format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 
+              'text/csv'
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `sla_report_${startDate}_${endDate}.${format}`;
+      const extension = format === 'excel' ? 'xlsx' : format;
+      link.download = `sla_report_${startDate}_${endDate}.${extension}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -222,6 +257,27 @@ const SLADashboard: React.FC = () => {
           <AssessmentIcon /> SLA Dashboard
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={() => handleExportReport('csv')}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={() => handleExportReport('pdf')}
+          >
+            Export PDF
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={() => handleExportReport('excel')}
+          >
+            Export Excel
+          </Button>
           <Button
             variant="outlined"
             onClick={() => navigate('/sla/reports')}
@@ -336,6 +392,15 @@ const SLADashboard: React.FC = () => {
           </Grid>
         </Grid>
       )}
+
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
+          <Tab label="Overview" />
+          <Tab label="Historical Trends" />
+          <Tab label="Per-Customer" />
+        </Tabs>
+      </Paper>
 
       {/* Compliance Visualization */}
       {complianceData && tabValue === 0 && (
@@ -512,67 +577,290 @@ const SLADashboard: React.FC = () => {
         </Paper>
       )}
 
+      {/* Per-Customer View */}
+      {tabValue === 2 && (
+        <>
+          {/* Volume Trends Chart */}
+          {volumeTrends.length > 0 && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Ticket Volume Trends
+              </Typography>
+              {loadingVolume ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Box sx={{ height: 300, mt: 2 }}>
+                  <Line
+                    data={{
+                      labels: volumeTrends.map(t => new Date(t.period).toLocaleDateString()),
+                      datasets: [
+                        {
+                          label: 'Total Tickets',
+                          data: volumeTrends.map(t => t.total_tickets),
+                          borderColor: '#2196f3',
+                          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                          fill: true,
+                          tension: 0.4
+                        },
+                        {
+                          label: 'Open',
+                          data: volumeTrends.map(t => t.open),
+                          borderColor: '#f44336',
+                          backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                          fill: true,
+                          tension: 0.4
+                        },
+                        {
+                          label: 'Resolved',
+                          data: volumeTrends.map(t => t.resolved),
+                          borderColor: '#4caf50',
+                          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                          fill: true,
+                          tension: 0.4
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { position: 'top' },
+                        title: { display: false }
+                      },
+                      scales: {
+                        y: { beginAtZero: true }
+                      }
+                    }}
+                  />
+                </Box>
+              )}
+            </Paper>
+          )}
+
+          {/* Customer Performance Table */}
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Customer Performance by SLA Compliance
+            </Typography>
+            {loadingCustomers ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : customerPerformance.length > 0 ? (
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><strong>Customer</strong></TableCell>
+                      <TableCell align="right"><strong>Total Tickets</strong></TableCell>
+                      <TableCell align="right"><strong>Avg Resolution (hrs)</strong></TableCell>
+                      <TableCell align="right"><strong>Avg First Response (hrs)</strong></TableCell>
+                      <TableCell align="right"><strong>FR Breaches</strong></TableCell>
+                      <TableCell align="right"><strong>FR Compliance</strong></TableCell>
+                      <TableCell align="right"><strong>Res Breaches</strong></TableCell>
+                      <TableCell align="right"><strong>Res Compliance</strong></TableCell>
+                      <TableCell align="right"><strong>Actions</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {customerPerformance.map((customer: any) => (
+                      <TableRow key={customer.customer_id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {customer.customer_name}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">{customer.total_tickets}</TableCell>
+                        <TableCell align="right">{customer.avg_resolution_hours?.toFixed(1) || 'N/A'}</TableCell>
+                        <TableCell align="right">{customer.avg_first_response_hours?.toFixed(1) || 'N/A'}</TableCell>
+                        <TableCell align="right">
+                          <Chip
+                            label={customer.first_response_breaches}
+                            size="small"
+                            color={customer.first_response_breaches > 0 ? 'error' : 'success'}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography
+                            variant="body2"
+                            color={customer.first_response_compliance_rate >= 95 ? 'success.main' : 'warning.main'}
+                            fontWeight="medium"
+                          >
+                            {customer.first_response_compliance_rate.toFixed(1)}%
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Chip
+                            label={customer.resolution_breaches}
+                            size="small"
+                            color={customer.resolution_breaches > 0 ? 'error' : 'success'}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography
+                            variant="body2"
+                            color={customer.resolution_compliance_rate >= 95 ? 'success.main' : 'warning.main'}
+                            fontWeight="medium"
+                          >
+                            {customer.resolution_compliance_rate.toFixed(1)}%
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                            <Button
+                              size="small"
+                              onClick={() => navigate(`/customers/${customer.customer_id}?tab=11`)}
+                            >
+                              View History
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate(`/sla/customers/${customer.customer_id}/report`)}
+                            >
+                              Full Report
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 3, textAlign: 'center' }}>
+                No customer performance data available for the selected period.
+              </Typography>
+            )}
+          </Paper>
+        </>
+      )}
+
       {/* Trends View */}
       {tabValue === 1 && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            SLA Compliance Trends
-          </Typography>
-          {loadingTrends ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress />
-            </Box>
-          ) : trends.length > 0 ? (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell><strong>Period</strong></TableCell>
-                    <TableCell><strong>Total Tickets</strong></TableCell>
-                    <TableCell><strong>FR Compliance</strong></TableCell>
-                    <TableCell><strong>FR Breaches</strong></TableCell>
-                    <TableCell><strong>Res Compliance</strong></TableCell>
-                    <TableCell><strong>Res Breaches</strong></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {trends.map((trend, idx) => (
-                    <TableRow key={idx} hover>
-                      <TableCell>
-                        {new Date(trend.period).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>{trend.total_tickets}</TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          color={trend.first_response.compliance_rate >= 95 ? 'success.main' : 'warning.main'}
-                          fontWeight="medium"
-                        >
-                          {trend.first_response.compliance_rate.toFixed(1)}%
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{trend.first_response.breaches}</TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          color={trend.resolution.compliance_rate >= 95 ? 'success.main' : 'warning.main'}
-                          fontWeight="medium"
-                        >
-                          {trend.resolution.compliance_rate.toFixed(1)}%
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{trend.resolution.breaches}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          ) : (
-            <Typography variant="body2" color="text.secondary" sx={{ p: 3, textAlign: 'center' }}>
-              No trend data available for the selected period.
-            </Typography>
+        <>
+          {trends.length > 0 && (
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                SLA Compliance Trends Over Time
+              </Typography>
+              {loadingTrends ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Box sx={{ height: 400, mt: 2 }}>
+                  <Line
+                    data={{
+                      labels: trends.map(t => new Date(t.period).toLocaleDateString()),
+                      datasets: [
+                        {
+                          label: 'First Response Compliance Rate (%)',
+                          data: trends.map(t => t.first_response.compliance_rate),
+                          borderColor: '#2196f3',
+                          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                          fill: true,
+                          tension: 0.4,
+                          yAxisID: 'y'
+                        },
+                        {
+                          label: 'Resolution Compliance Rate (%)',
+                          data: trends.map(t => t.resolution.compliance_rate),
+                          borderColor: '#4caf50',
+                          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                          fill: true,
+                          tension: 0.4,
+                          yAxisID: 'y'
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { position: 'top' },
+                        title: { display: false }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: false,
+                          min: 0,
+                          max: 100,
+                          ticks: {
+                            callback: function(value) {
+                              return value + '%';
+                            }
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </Box>
+              )}
+            </Paper>
           )}
-        </Paper>
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Detailed Trend Data
+            </Typography>
+            {loadingTrends ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : trends.length > 0 ? (
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><strong>Period</strong></TableCell>
+                      <TableCell><strong>Total Tickets</strong></TableCell>
+                      <TableCell><strong>FR Compliance</strong></TableCell>
+                      <TableCell><strong>FR Breaches</strong></TableCell>
+                      <TableCell><strong>Res Compliance</strong></TableCell>
+                      <TableCell><strong>Res Breaches</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {trends.map((trend, idx) => (
+                      <TableRow key={idx} hover>
+                        <TableCell>
+                          {new Date(trend.period).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>{trend.total_tickets}</TableCell>
+                        <TableCell>
+                          <Typography
+                            variant="body2"
+                            color={trend.first_response.compliance_rate >= 95 ? 'success.main' : 'warning.main'}
+                            fontWeight="medium"
+                          >
+                            {trend.first_response.compliance_rate.toFixed(1)}%
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{trend.first_response.breaches}</TableCell>
+                        <TableCell>
+                          <Typography
+                            variant="body2"
+                            color={trend.resolution.compliance_rate >= 95 ? 'success.main' : 'warning.main'}
+                            fontWeight="medium"
+                          >
+                            {trend.resolution.compliance_rate.toFixed(1)}%
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{trend.resolution.breaches}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 3, textAlign: 'center' }}>
+                No trend data available for the selected period.
+              </Typography>
+            )}
+          </Paper>
+        </>
       )}
 
       {/* Breach Alerts Table */}

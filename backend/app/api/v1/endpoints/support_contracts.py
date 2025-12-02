@@ -14,6 +14,8 @@ from app.core.database import get_async_db, SessionLocal
 from app.core.dependencies import get_current_user, get_current_tenant
 from app.models.tenant import User, Tenant
 from app.services.support_contract_service import SupportContractService
+from app.services.contract_generator_service import ContractGeneratorService
+from app.services.contract_quote_service import ContractQuoteService
 from app.schemas.support_contract import (
     SupportContractCreate, SupportContractUpdate, SupportContractResponse,
     ContractRenewalCreate, ContractRenewalResponse,
@@ -21,8 +23,89 @@ from app.schemas.support_contract import (
     ContractTypeEnum, ContractStatusEnum
 )
 from app.models.support_contract import ContractType, ContractStatus
+from typing import Dict, Any
+from pydantic import BaseModel
 
 router = APIRouter()
+
+
+class GenerateQuoteFromContractRequest(BaseModel):
+    contract_id: str
+    generate_proposal: bool = True
+
+
+@router.post("/generate-quote", status_code=status.HTTP_201_CREATED)
+async def generate_quote_from_contract(
+    request: GenerateQuoteFromContractRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Generate a quote and proposal from an existing support contract
+    """
+    try:
+        from app.models.support_contract import SupportContract
+        
+        def _generate_quote():
+            sync_db = SessionLocal()
+            try:
+                # Get contract
+                contract = sync_db.query(SupportContract).filter(
+                    SupportContract.id == request.contract_id,
+                    SupportContract.tenant_id == current_tenant.id
+                ).first()
+                
+                if not contract:
+                    return {"success": False, "error": "Contract not found"}
+                
+                # Convert contract to dict
+                contract_dict = {
+                    'customer_id': contract.customer_id,
+                    'contract_name': contract.contract_name,
+                    'description': contract.description,
+                    'contract_type': contract.contract_type.value,
+                    'start_date': contract.start_date.isoformat() if contract.start_date else None,
+                    'end_date': contract.end_date.isoformat() if contract.end_date else None,
+                    'annual_value': float(contract.annual_value) if contract.annual_value else None,
+                    'monthly_value': float(contract.monthly_value) if contract.monthly_value else None,
+                    'setup_fee': float(contract.setup_fee) if contract.setup_fee else 0,
+                    'sla_level': contract.sla_level,
+                    'support_hours_included': contract.support_hours_included,
+                    'renewal_frequency': contract.renewal_frequency.value if contract.renewal_frequency else None,
+                    'auto_renew': contract.auto_renew,
+                    'terms': contract.terms
+                }
+                
+                # Generate quote
+                quote_service = ContractQuoteService(sync_db, current_tenant.id)
+                return quote_service.generate_quote_from_contract(
+                    contract_data=contract_dict,
+                    contract_type="support_contract",
+                    generate_proposal=request.generate_proposal,
+                    user_id=current_user.id
+                )
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _generate_quote)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to generate quote"))
+        
+        return {
+            "success": True,
+            "quote_id": result.get("quote_id"),
+            "quote_number": result.get("quote_number"),
+            "message": "Quote and proposal generated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating quote: {str(e)}")
 
 
 @router.get("/", response_model=List[SupportContractResponse])
@@ -207,6 +290,60 @@ async def create_contract(
         
         if not contract:
             raise HTTPException(status_code=400, detail="Invalid customer or contract creation failed")
+        
+        # Optionally generate quote and proposal
+        generated_quote_id = None
+        if contract_data.generate_quote:
+            try:
+                def _generate_quote():
+                    sync_db = SessionLocal()
+                    try:
+                        quote_service = ContractQuoteService(sync_db, current_tenant.id)
+                        # Convert contract to dict for quote generation
+                        contract_dict = {
+                            'customer_id': contract.customer_id,
+                            'contract_name': contract.contract_name,
+                            'description': contract.description,
+                            'contract_type': contract.contract_type.value,
+                            'start_date': contract.start_date.isoformat() if contract.start_date else None,
+                            'end_date': contract.end_date.isoformat() if contract.end_date else None,
+                            'annual_value': float(contract.annual_value) if contract.annual_value else None,
+                            'monthly_value': float(contract.monthly_value) if contract.monthly_value else None,
+                            'setup_fee': float(contract.setup_fee) if contract.setup_fee else 0,
+                            'sla_level': contract.sla_level,
+                            'support_hours_included': contract.support_hours_included,
+                            'renewal_frequency': contract.renewal_frequency.value if contract.renewal_frequency else None,
+                            'auto_renew': contract.auto_renew,
+                            'terms': contract.terms
+                        }
+                        return quote_service.generate_quote_from_contract(
+                            contract_data=contract_dict,
+                            contract_type="support_contract",
+                            generate_proposal=True,
+                            user_id=current_user.id
+                        )
+                    finally:
+                        sync_db.close()
+                
+                quote_result = await loop.run_in_executor(None, _generate_quote)
+                if quote_result.get("success") and quote_result.get("quote_id"):
+                    generated_quote_id = quote_result["quote_id"]
+                    # Update contract with quote_id
+                    def _update_contract_quote():
+                        sync_db = SessionLocal()
+                        try:
+                            contract.quote_id = generated_quote_id
+                            sync_db.add(contract)
+                            sync_db.commit()
+                            sync_db.refresh(contract)
+                        finally:
+                            sync_db.close()
+                    await loop.run_in_executor(None, _update_contract_quote)
+            except Exception as e:
+                # Log error but don't fail contract creation
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to generate quote from contract: {e}", exc_info=True)
         
         # Calculate computed fields
         days_until_renewal = None
@@ -627,4 +764,81 @@ async def get_expiring_contracts(
         ))
     
     return result
+
+
+# AI Generation Endpoints
+class AISupportContractGenerationRequest(BaseModel):
+    contract_type: str
+    description: str
+    requirements: Optional[Dict[str, Any]] = None
+
+
+@router.post("/generate", response_model=Dict[str, Any])
+async def generate_support_contract_ai(
+    request: AISupportContractGenerationRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Generate a support contract using AI"""
+    try:
+        def _generate():
+            sync_db = SessionLocal()
+            try:
+                generator = ContractGeneratorService(sync_db, current_tenant.id)
+                # Use asyncio.run to execute async method in sync context
+                import asyncio
+                return asyncio.run(generator.generate_support_contract_template(
+                    contract_type=request.contract_type,
+                    description=request.description,
+                    requirements=request.requirements or {},
+                    user_id=current_user.id
+                ))
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _generate)
+        
+        return result
+    except Exception as e:
+        print(f"Error generating support contract: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/templates/generate", response_model=Dict[str, Any])
+async def generate_support_contract_template_ai(
+    request: AISupportContractGenerationRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Generate a support contract template using AI"""
+    try:
+        def _generate():
+            sync_db = SessionLocal()
+            try:
+                generator = ContractGeneratorService(sync_db, current_tenant.id)
+                # Use asyncio.run to execute async method in sync context
+                import asyncio
+                return asyncio.run(generator.generate_support_contract_template(
+                    contract_type=request.contract_type,
+                    description=request.description,
+                    requirements=request.requirements or {},
+                    user_id=current_user.id
+                ))
+            finally:
+                sync_db.close()
+        
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _generate)
+        
+        return result
+    except Exception as e:
+        print(f"Error generating support contract template: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 

@@ -157,6 +157,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [aiQuery, setAiQuery] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -173,10 +174,51 @@ const Dashboard: React.FC = () => {
 
   const loadDashboard = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      console.log('Loading dashboard...');
       const response = await dashboardAPI.get('/');
+      console.log('Dashboard response:', response);
       setDashboardData(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load dashboard:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to load dashboard. Please check if the backend is running.';
+      setError(errorMessage);
+      // Set empty data structure to prevent infinite loading
+      setDashboardData({
+        stats: {
+          total_discovery: 0,
+          total_leads: 0,
+          total_prospects: 0,
+          total_opportunities: 0,
+          total_customers: 0,
+          total_cold_leads: 0,
+          total_inactive: 0,
+          total_quotes: 0,
+          quotes_pending: 0,
+          quotes_accepted: 0,
+          total_revenue: 0,
+          avg_deal_value: 0,
+          conversion_rate: 0,
+          active_opportunities: 0,
+          opportunities_qualified: 0,
+          opportunities_proposal_sent: 0,
+          opportunities_closed_won: 0,
+          opportunities_total_value: 0,
+          lifecycle_distribution: {},
+          sla_compliance_rate: 0,
+          sla_active_breaches: 0,
+          sla_tickets_at_risk: 0,
+          sla_total_tickets: 0
+        },
+        conversion_funnel: [],
+        pipeline_stages: [],
+        recent_activity: [],
+        monthly_trends: [],
+        ai_insights: [],
+        top_leads: []
+      });
     } finally {
       setLoading(false);
     }
@@ -233,11 +275,30 @@ const Dashboard: React.FC = () => {
     setSelectedLead(lead);
   };
 
-  if (loading || !dashboardData) {
+  if (loading && !dashboardData) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px" gap={2}>
+          <CircularProgress />
+          <Typography variant="body2" color="text.secondary">
+            Loading dashboard data...
+          </Typography>
+        </Box>
+      </Container>
+    );
+  }
+
+  if (error && !dashboardData) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Typography variant="h6" gutterBottom>Failed to Load Dashboard</Typography>
+          <Typography variant="body2">{error}</Typography>
+          <Button variant="contained" onClick={loadDashboard} sx={{ mt: 2 }}>
+            Retry
+          </Button>
+        </Alert>
+      </Container>
     );
   }
 

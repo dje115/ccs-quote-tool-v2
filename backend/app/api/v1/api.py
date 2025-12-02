@@ -5,7 +5,7 @@ Main API router for v1
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import, provider_keys, emails, storage, pricing_config, support_contracts, contract_renewals, dynamic_pricing, helpdesk, reporting, sla, revenue, customer_portal, customer_portal_access, trends, metrics, quote_prompts, opportunities, contracts
+from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import, provider_keys, emails, storage, pricing_config, support_contracts, contract_renewals, dynamic_pricing, helpdesk, reporting, sla, revenue, customer_portal, customer_portal_access, trends, metrics, quote_prompts, opportunities, contracts, quote_documents, whatsapp
 
 # Create main API router
 api_router = APIRouter()
@@ -22,6 +22,7 @@ api_router.include_router(campaigns.router, prefix="/campaigns", tags=["campaign
 api_router.include_router(sectors.router, prefix="/sectors", tags=["sectors"])
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])
 api_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
+api_router.include_router(quote_documents.router, tags=["quote-documents"])
 api_router.include_router(quote_prompts.router)
 api_router.include_router(opportunities.router, prefix="/opportunities", tags=["opportunities"])
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
@@ -42,6 +43,7 @@ api_router.include_router(storage.router, prefix="/storage", tags=["storage"])
 api_router.include_router(pricing_config.router, prefix="/pricing-config", tags=["pricing-config"])
 api_router.include_router(dynamic_pricing.router, tags=["dynamic-pricing"])
 api_router.include_router(helpdesk.router, tags=["helpdesk"])
+api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
 api_router.include_router(sla.router, tags=["sla"])
 api_router.include_router(reporting.router, tags=["reporting"])
 api_router.include_router(revenue.router, tags=["revenue"])

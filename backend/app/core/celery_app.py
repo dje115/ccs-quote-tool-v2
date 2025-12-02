@@ -25,7 +25,13 @@ celery_app = Celery(
         "app.tasks.sla_tasks",
         "app.tasks.quote_tasks",
         "app.tasks.lead_analysis_tasks",
-        "app.tasks.lifecycle_automation_tasks"
+        "app.tasks.lifecycle_automation_tasks",
+        "app.tasks.email_ticket_tasks",
+        "app.tasks.npa_tasks",
+        "app.tasks.ticket_description_tasks",
+        "app.tasks.ticket_ai_tasks",  # Ticket AI analysis tasks
+        "app.tasks.npa_answers_tasks",  # NPA answers AI cleanup tasks
+        "app.tasks.helpdesk_ai_tasks"  # Helpdesk AI operations (KB suggestions, answer generation, etc.)
     ]  # Import task modules
 )
 
@@ -92,6 +98,12 @@ celery_app.conf.update(
         'auto-escalate-sla-violations': {
             'task': 'auto_escalate_sla_violations',
             'schedule': 900.0,  # Every 15 minutes
+        },
+        'process-email-tickets': {
+            'task': 'app.tasks.email_ticket_tasks.process_email_tickets',
+            'schedule': 300.0,  # Every 5 minutes
+            # Note: This task requires tenant-specific email config
+            # Should be triggered per-tenant via API or separate scheduled task
         },
     }
 )

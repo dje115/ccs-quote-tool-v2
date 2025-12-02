@@ -7,7 +7,6 @@ import {
   Button,
   TextField,
   Box,
-  Grid,
   Paper,
   Typography,
   Chip,
@@ -25,7 +24,8 @@ import {
   CardContent,
   LinearProgress,
   Fade,
-  Zoom
+  Zoom,
+  Grid
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -256,25 +256,50 @@ const TicketComposer: React.FC<TicketComposerProps> = ({
         )}
 
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <FormControl fullWidth sx={{ minWidth: 250 }}>
               <InputLabel>Customer</InputLabel>
               <Select
                 value={customerId}
                 label="Customer"
                 onChange={(e) => setCustomerId(e.target.value)}
                 disabled={loadingCustomers}
+                sx={{
+                  '& .MuiSelect-select': {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    minWidth: '200px'
+                  }
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    style: {
+                      maxHeight: 300,
+                      width: 'auto',
+                      minWidth: 400
+                    }
+                  }
+                }}
               >
                 <MenuItem value="">None</MenuItem>
                 {customers.map((customer) => (
-                  <MenuItem key={customer.id} value={customer.id}>
+                  <MenuItem 
+                    key={customer.id} 
+                    value={customer.id}
+                    sx={{
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      maxWidth: '100%'
+                    }}
+                  >
                     {customer.company_name}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth>
               <InputLabel>Priority</InputLabel>
               <Select
@@ -289,7 +314,7 @@ const TicketComposer: React.FC<TicketComposerProps> = ({
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth>
               <InputLabel>Type</InputLabel>
               <Select
@@ -385,7 +410,7 @@ const TicketComposer: React.FC<TicketComposerProps> = ({
               </Box>
             </Box>
             <Grid container spacing={2} sx={{ flex: 1, minHeight: 0 }}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <Paper sx={{ p: 2, height: '100%', bgcolor: 'error.50', border: '1px solid', borderColor: 'error.200' }}>
                   <Typography variant="subtitle2" color="error.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CloseIcon fontSize="small" />
@@ -407,7 +432,7 @@ const TicketComposer: React.FC<TicketComposerProps> = ({
                   />
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <Paper sx={{ p: 2, height: '100%', bgcolor: 'success.50', border: '1px solid', borderColor: 'success.200' }}>
                   <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CheckCircleIcon fontSize="small" />

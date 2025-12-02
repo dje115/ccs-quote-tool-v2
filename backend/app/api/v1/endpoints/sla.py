@@ -6,7 +6,7 @@ SLA Management API Endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, update, func
+from sqlalchemy import select, and_, or_, update, func, Integer
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timezone, timedelta
@@ -238,6 +238,41 @@ async def create_sla_policy(
             ).values(is_default=False)
             await db.execute(stmt)
         
+        # Handle JSON fields - convert string "null" to None, and ensure lists are properly formatted
+        business_days = None
+        if policy_data.business_days is not None:
+            if isinstance(policy_data.business_days, str):
+                if policy_data.business_days.lower() in ('null', 'none', ''):
+                    business_days = None
+                else:
+                    # Try to parse as JSON
+                    try:
+                        import json
+                        business_days = json.loads(policy_data.business_days)
+                    except:
+                        business_days = None
+            elif isinstance(policy_data.business_days, list):
+                business_days = policy_data.business_days
+            else:
+                business_days = None
+        
+        customer_ids = None
+        if policy_data.customer_ids is not None:
+            if isinstance(policy_data.customer_ids, str):
+                if policy_data.customer_ids.lower() in ('null', 'none', ''):
+                    customer_ids = None
+                else:
+                    # Try to parse as JSON
+                    try:
+                        import json
+                        customer_ids = json.loads(policy_data.customer_ids)
+                    except:
+                        customer_ids = None
+            elif isinstance(policy_data.customer_ids, list):
+                customer_ids = policy_data.customer_ids
+            else:
+                customer_ids = None
+        
         policy = SLAPolicy(
             tenant_id=current_tenant.id,
             name=policy_data.name,
@@ -257,14 +292,14 @@ async def create_sla_policy(
             availability_hours=policy_data.availability_hours,
             business_hours_start=policy_data.business_hours_start,
             business_hours_end=policy_data.business_hours_end,
-            business_days=policy_data.business_days,
+            business_days=business_days,
             timezone=policy_data.timezone,
             escalation_warning_percent=policy_data.escalation_warning_percent,
             escalation_critical_percent=policy_data.escalation_critical_percent,
             auto_escalate_on_breach=policy_data.auto_escalate_on_breach,
             priority=TicketPriority(policy_data.priority) if policy_data.priority else None,
             ticket_type=TicketType(policy_data.ticket_type) if policy_data.ticket_type else None,
-            customer_ids=policy_data.customer_ids,
+            customer_ids=customer_ids,
             contract_type=policy_data.contract_type,
             is_active=policy_data.is_active,
             is_default=policy_data.is_default
@@ -275,8 +310,13 @@ async def create_sla_policy(
         await db.refresh(policy)
         
         return SLAPolicyResponse.model_validate(policy)
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating SLA policy: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -518,60 +558,86 @@ async def get_sla_performance_by_agent(
         end_dt = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
         
         # Query tickets with assigned users
-        stmt = select(
-            Ticket.assigned_to_id,
-            User.name.label('agent_name'),
-            User.email.label('agent_email'),
-            func.count(Ticket.id).label('total_tickets'),
-            func.sum(func.cast(Ticket.sla_first_response_breached, int)).label('fr_breaches'),
-            func.sum(func.cast(Ticket.sla_resolution_breached, int)).label('res_breaches'),
-            func.avg(
-                func.extract('epoch', Ticket.first_response_at - Ticket.created_at) / 3600
-            ).label('avg_fr_hours'),
-            func.avg(
-                func.extract('epoch', Ticket.resolved_at - Ticket.created_at) / 3600
-            ).label('avg_res_hours')
-        ).join(
-            User, Ticket.assigned_to_id == User.id, isouter=True
-        ).where(
+        # User model uses first_name and last_name, not name
+        # First, get all tickets in the date range
+        tickets_stmt = select(Ticket).where(
             and_(
                 Ticket.tenant_id == current_tenant.id,
                 Ticket.created_at >= start_dt,
                 Ticket.created_at <= end_dt,
                 Ticket.assigned_to_id.isnot(None)
             )
-        ).group_by(
-            Ticket.assigned_to_id,
-            User.name,
-            User.email
         )
+        tickets_result = await db.execute(tickets_stmt)
+        tickets = tickets_result.scalars().all()
         
-        result = await db.execute(stmt)
-        rows = result.all()
+        # Get user details for all assigned users
+        user_ids = list(set([t.assigned_to_id for t in tickets if t.assigned_to_id]))
+        users_stmt = select(User).where(User.id.in_(user_ids)) if user_ids else select(User).where(False)
+        users_result = await db.execute(users_stmt)
+        users = {u.id: u for u in users_result.scalars().all()}
         
+        # Group tickets by agent and calculate metrics
+        agent_stats = {}
+        for ticket in tickets:
+            agent_id = ticket.assigned_to_id
+            if agent_id not in agent_stats:
+                user = users.get(agent_id)
+                agent_stats[agent_id] = {
+                    'agent_id': agent_id,
+                    'agent_name': f"{user.first_name} {user.last_name}".strip() if user else 'Unassigned',
+                    'agent_email': user.email if user else None,
+                    'total_tickets': 0,
+                    'fr_breaches': 0,
+                    'res_breaches': 0,
+                    'fr_times': [],
+                    'res_times': []
+                }
+            
+            stats = agent_stats[agent_id]
+            stats['total_tickets'] += 1
+            if ticket.sla_first_response_breached:
+                stats['fr_breaches'] += 1
+            if ticket.sla_resolution_breached:
+                stats['res_breaches'] += 1
+            
+            # Calculate first response time
+            if ticket.first_response_at and ticket.created_at:
+                fr_hours = (ticket.first_response_at - ticket.created_at).total_seconds() / 3600
+                stats['fr_times'].append(fr_hours)
+            
+            # Calculate resolution time
+            if ticket.resolved_at and ticket.created_at:
+                res_hours = (ticket.resolved_at - ticket.created_at).total_seconds() / 3600
+                stats['res_times'].append(res_hours)
+        
+        # Build performance data
         performance_data = []
-        for row in rows:
-            total = row.total_tickets or 0
-            fr_breaches = row.fr_breaches or 0
-            res_breaches = row.res_breaches or 0
+        for agent_id, stats in agent_stats.items():
+            total = stats['total_tickets']
+            fr_breaches = stats['fr_breaches']
+            res_breaches = stats['res_breaches']
             
             fr_compliance = ((total - fr_breaches) / total * 100) if total > 0 else 0
             res_compliance = ((total - res_breaches) / total * 100) if total > 0 else 0
             
+            avg_fr_hours = sum(stats['fr_times']) / len(stats['fr_times']) if stats['fr_times'] else 0
+            avg_res_hours = sum(stats['res_times']) / len(stats['res_times']) if stats['res_times'] else 0
+            
             performance_data.append({
-                'agent_id': row.assigned_to_id,
-                'agent_name': row.agent_name or 'Unassigned',
-                'agent_email': row.agent_email,
+                'agent_id': agent_id,
+                'agent_name': stats['agent_name'],
+                'agent_email': stats['agent_email'],
                 'total_tickets': total,
                 'first_response': {
                     'breaches': fr_breaches,
                     'compliance_rate': round(fr_compliance, 2),
-                    'average_hours': round(row.avg_fr_hours or 0, 2)
+                    'average_hours': round(avg_fr_hours, 2)
                 },
                 'resolution': {
                     'breaches': res_breaches,
                     'compliance_rate': round(res_compliance, 2),
-                    'average_hours': round(row.avg_res_hours or 0, 2)
+                    'average_hours': round(avg_res_hours, 2)
                 }
             })
         
@@ -583,6 +649,101 @@ async def get_sla_performance_by_agent(
             'performance_by_agent': performance_data
         }
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting SLA performance by agent: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trends")
+async def get_sla_trends(
+    start_date: date = Query(..., description="Start date for trends"),
+    end_date: date = Query(..., description="End date for trends"),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get SLA compliance trends over time"""
+    try:
+        from sqlalchemy import extract
+        from app.models.helpdesk import TicketStatus
+        
+        start_dt = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        end_dt = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+        
+        # Get tickets in date range
+        tickets_stmt = select(Ticket).where(
+            and_(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.created_at >= start_dt,
+                Ticket.created_at <= end_dt
+            )
+        )
+        tickets_result = await db.execute(tickets_stmt)
+        tickets = tickets_result.scalars().all()
+        
+        # Group by date and calculate metrics
+        trends_by_date = {}
+        for ticket in tickets:
+            date_key = ticket.created_at.date().isoformat()
+            if date_key not in trends_by_date:
+                trends_by_date[date_key] = {
+                    'date': date_key,
+                    'total_tickets': 0,
+                    'fr_breaches': 0,
+                    'res_breaches': 0,
+                    'fr_compliant': 0,
+                    'res_compliant': 0
+                }
+            
+            stats = trends_by_date[date_key]
+            stats['total_tickets'] += 1
+            
+            if ticket.sla_first_response_breached:
+                stats['fr_breaches'] += 1
+            elif ticket.first_response_at:
+                stats['fr_compliant'] += 1
+            
+            if ticket.sla_resolution_breached:
+                stats['res_breaches'] += 1
+            elif ticket.resolved_at:
+                stats['res_compliant'] += 1
+        
+        # Convert to list and calculate percentages
+        trends = []
+        for date_key in sorted(trends_by_date.keys()):
+            stats = trends_by_date[date_key]
+            total = stats['total_tickets']
+            
+            fr_compliance = ((stats['fr_compliant'] / total) * 100) if total > 0 else 0
+            res_compliance = ((stats['res_compliant'] / total) * 100) if total > 0 else 0
+            
+            trends.append({
+                'date': stats['date'],
+                'total_tickets': total,
+                'first_response': {
+                    'compliant': stats['fr_compliant'],
+                    'breached': stats['fr_breaches'],
+                    'compliance_rate': round(fr_compliance, 2)
+                },
+                'resolution': {
+                    'compliant': stats['res_compliant'],
+                    'breached': stats['res_breaches'],
+                    'compliance_rate': round(res_compliance, 2)
+                }
+            })
+        
+        return {
+            'period': {
+                'start': start_date.isoformat(),
+                'end': end_date.isoformat()
+            },
+            'trends': trends
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting SLA trends: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -952,3 +1113,374 @@ async def get_customer_sla_compliance_history(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/customers/{customer_id}/report")
+async def get_customer_sla_report(
+    customer_id: str,
+    start_date: date = Query(..., description="Start date"),
+    end_date: date = Query(..., description="End date"),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get comprehensive SLA report for a customer including all metrics"""
+    try:
+        from app.models.crm import Customer
+        from sqlalchemy import func, extract, case
+        
+        # Verify customer exists
+        customer_stmt = select(Customer).where(
+            and_(
+                Customer.id == customer_id,
+                Customer.tenant_id == current_tenant.id,
+                Customer.is_deleted == False
+            )
+        )
+        customer_result = await db.execute(customer_stmt)
+        customer = customer_result.scalar_one_or_none()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        start_dt = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        end_dt = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+        
+        # Get all tickets for this customer in the period
+        tickets_stmt = select(Ticket).where(
+            and_(
+                Ticket.customer_id == customer_id,
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.created_at >= start_dt,
+                Ticket.created_at <= end_dt
+            )
+        )
+        tickets_result = await db.execute(tickets_stmt)
+        tickets = tickets_result.scalars().all()
+        
+        # Calculate comprehensive metrics
+        total_tickets = len(tickets)
+        tickets_with_sla = len([t for t in tickets if t.sla_policy_id])
+        
+        # Resolution time analytics
+        resolved_tickets = [t for t in tickets if t.resolved_at]
+        avg_resolution_hours = None
+        if resolved_tickets:
+            total_hours = sum([
+                (t.resolved_at - t.created_at).total_seconds() / 3600
+                for t in resolved_tickets
+            ])
+            avg_resolution_hours = round(total_hours / len(resolved_tickets), 2)
+        
+        # First response time analytics
+        responded_tickets = [t for t in tickets if t.first_response_at]
+        avg_first_response_hours = None
+        if responded_tickets:
+            total_hours = sum([
+                (t.first_response_at - t.created_at).total_seconds() / 3600
+                for t in responded_tickets
+            ])
+            avg_first_response_hours = round(total_hours / len(responded_tickets), 2)
+        
+        # SLA compliance metrics
+        fr_breaches = len([t for t in tickets if t.sla_first_response_breached])
+        res_breaches = len([t for t in tickets if t.sla_resolution_breached])
+        
+        fr_compliance_rate = ((tickets_with_sla - fr_breaches) / tickets_with_sla * 100) if tickets_with_sla > 0 else 100.0
+        res_compliance_rate = ((tickets_with_sla - res_breaches) / tickets_with_sla * 100) if tickets_with_sla > 0 else 100.0
+        
+        # Get active breach alerts
+        breach_alerts_stmt = select(SLABreachAlert).join(
+            Ticket, SLABreachAlert.ticket_id == Ticket.id
+        ).where(
+            and_(
+                Ticket.customer_id == customer_id,
+                Ticket.tenant_id == current_tenant.id,
+                SLABreachAlert.acknowledged == False
+            )
+        )
+        breach_result = await db.execute(breach_alerts_stmt)
+        breach_alerts = breach_result.scalars().all()
+        
+        # Priority distribution
+        priority_dist = {}
+        for ticket in tickets:
+            priority = ticket.priority.value if hasattr(ticket.priority, 'value') else str(ticket.priority)
+            priority_dist[priority] = priority_dist.get(priority, 0) + 1
+        
+        # Status distribution
+        status_dist = {}
+        for ticket in tickets:
+            status = ticket.status.value if hasattr(ticket.status, 'value') else str(ticket.status)
+            status_dist[status] = status_dist.get(status, 0) + 1
+        
+        # Type distribution
+        type_dist = {}
+        for ticket in tickets:
+            ticket_type = ticket.ticket_type.value if hasattr(ticket.ticket_type, 'value') else str(ticket.ticket_type)
+            type_dist[ticket_type] = type_dist.get(ticket_type, 0) + 1
+        
+        # Recent tickets with details
+        recent_tickets = []
+        for ticket in sorted(tickets, key=lambda t: t.created_at, reverse=True)[:20]:
+            ticket_breaches = [a for a in breach_alerts if a.ticket_id == ticket.id]
+            recent_tickets.append({
+                'id': ticket.id,
+                'ticket_number': ticket.ticket_number,
+                'subject': ticket.subject,
+                'status': ticket.status.value if hasattr(ticket.status, 'value') else str(ticket.status),
+                'priority': ticket.priority.value if hasattr(ticket.priority, 'value') else str(ticket.priority),
+                'type': ticket.ticket_type.value if hasattr(ticket.ticket_type, 'value') else str(ticket.ticket_type),
+                'created_at': ticket.created_at.isoformat() if ticket.created_at else None,
+                'resolved_at': ticket.resolved_at.isoformat() if ticket.resolved_at else None,
+                'first_response_at': ticket.first_response_at.isoformat() if ticket.first_response_at else None,
+                'sla_policy_id': ticket.sla_policy_id,
+                'sla_first_response_breached': ticket.sla_first_response_breached,
+                'sla_resolution_breached': ticket.sla_resolution_breached,
+                'active_breaches': len(ticket_breaches),
+                'critical_breaches': len([a for a in ticket_breaches if a.alert_level == 'critical'])
+            })
+        
+        return {
+            'customer_id': customer_id,
+            'customer_name': customer.company_name,
+            'period': {
+                'start': start_date.isoformat(),
+                'end': end_date.isoformat()
+            },
+            'summary': {
+                'total_tickets': total_tickets,
+                'tickets_with_sla': tickets_with_sla,
+                'resolved_tickets': len(resolved_tickets),
+                'responded_tickets': len(responded_tickets),
+                'avg_resolution_hours': avg_resolution_hours,
+                'avg_first_response_hours': avg_first_response_hours
+            },
+            'sla_metrics': {
+                'first_response_breaches': fr_breaches,
+                'resolution_breaches': res_breaches,
+                'first_response_compliance_rate': round(fr_compliance_rate, 2),
+                'resolution_compliance_rate': round(res_compliance_rate, 2),
+                'active_breach_alerts': len(breach_alerts),
+                'critical_breaches': len([a for a in breach_alerts if a.alert_level == 'critical']),
+                'warning_breaches': len([a for a in breach_alerts if a.alert_level == 'warning'])
+            },
+            'distributions': {
+                'priority': priority_dist,
+                'status': status_dist,
+                'type': type_dist
+            },
+            'recent_tickets': recent_tickets
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting customer SLA report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/historical-patterns")
+async def get_historical_patterns(
+    days_back: int = Query(90, ge=7, le=365),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get historical SLA patterns and insights"""
+    from app.core.database import SessionLocal
+    from app.services.sla_intelligence_service import SLAIntelligenceService
+    
+    sync_db = SessionLocal()
+    try:
+        sla_service = SLAIntelligenceService(sync_db, current_tenant.id)
+        patterns = await sla_service.analyze_historical_patterns(days_back=days_back)
+        
+        return patterns
+    finally:
+        sync_db.close()
+
+
+@router.post("/analytics/predict-breach-ml")
+async def predict_breach_with_ml(
+    ticket_id: str = Body(...),
+    use_historical: bool = Body(True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Predict SLA breach using ML-based approach"""
+    from app.core.database import SessionLocal
+    from app.services.sla_intelligence_service import SLAIntelligenceService
+    from app.models.helpdesk import Ticket
+    
+    sync_db = SessionLocal()
+    try:
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        sla_service = SLAIntelligenceService(sync_db, current_tenant.id)
+        prediction = await sla_service.predict_breach_with_ml(ticket, use_historical=use_historical)
+        
+        return prediction
+    finally:
+        sync_db.close()
+
+
+@router.get("/reports/export")
+async def export_sla_report(
+    start_date: date = Query(..., description="Start date for report"),
+    end_date: date = Query(..., description="End date for report"),
+    report_type: str = Query("compliance", description="Report type: compliance, breach, performance"),
+    format: str = Query("csv", regex="^(csv|pdf|excel)$", description="Export format"),
+    include_metrics: Optional[str] = Query(None, description="Comma-separated list of metrics to include"),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Export SLA report in CSV, PDF, or Excel format"""
+    try:
+        from fastapi.responses import Response
+        import csv
+        import io
+        from datetime import timezone
+        
+        start_dt = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        end_dt = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+        
+        # Get compliance data - fetch tickets and calculate in Python to avoid SQLAlchemy type issues
+        tickets_stmt = select(Ticket).where(
+            and_(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.created_at >= start_dt,
+                Ticket.created_at <= end_dt
+            )
+        )
+        tickets_result = await db.execute(tickets_stmt)
+        tickets = tickets_result.scalars().all()
+        
+        total_tickets = len(tickets)
+        fr_breaches = sum(1 for t in tickets if t.sla_first_response_breached)
+        res_breaches = sum(1 for t in tickets if t.sla_resolution_breached)
+        
+        # Calculate average times
+        fr_times = []
+        res_times = []
+        for ticket in tickets:
+            if ticket.first_response_at and ticket.created_at:
+                fr_hours = (ticket.first_response_at - ticket.created_at).total_seconds() / 3600
+                fr_times.append(fr_hours)
+            if ticket.resolved_at and ticket.created_at:
+                res_hours = (ticket.resolved_at - ticket.created_at).total_seconds() / 3600
+                res_times.append(res_hours)
+        
+        avg_fr_hours = sum(fr_times) / len(fr_times) if fr_times else 0
+        avg_res_hours = sum(res_times) / len(res_times) if res_times else 0
+        
+        fr_compliance = ((total_tickets - fr_breaches) / total_tickets * 100) if total_tickets > 0 else 0
+        res_compliance = ((total_tickets - res_breaches) / total_tickets * 100) if total_tickets > 0 else 0
+        
+        # Generate CSV
+        if format == "csv":
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Header
+            writer.writerow(["SLA Compliance Report"])
+            writer.writerow([f"Period: {start_date} to {end_date}"])
+            writer.writerow([f"Report Type: {report_type}"])
+            writer.writerow([])
+            
+            # Summary
+            writer.writerow(["Summary"])
+            writer.writerow(["Metric", "Value"])
+            writer.writerow(["Total Tickets", total_tickets])
+            writer.writerow(["First Response Compliance", f"{fr_compliance:.2f}%"])
+            writer.writerow(["Resolution Compliance", f"{res_compliance:.2f}%"])
+            writer.writerow(["Total Breaches", fr_breaches + res_breaches])
+            writer.writerow(["Average First Response Time (hours)", f"{avg_fr_hours:.2f}"])
+            writer.writerow(["Average Resolution Time (hours)", f"{avg_res_hours:.2f}"])
+            writer.writerow([])
+            
+            # Detailed metrics if requested
+            if include_metrics:
+                metrics_list = [m.strip() for m in include_metrics.split(",")]
+                if "breach_count" in metrics_list:
+                    writer.writerow(["Breach Details"])
+                    writer.writerow(["Type", "Count"])
+                    writer.writerow(["First Response Breaches", fr_breaches])
+                    writer.writerow(["Resolution Breaches", res_breaches])
+                    writer.writerow([])
+            
+            csv_content = output.getvalue()
+            return Response(
+                content=csv_content,
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=sla_report_{start_date}_{end_date}.csv"}
+            )
+        
+        # For PDF and Excel, return JSON for now (can be enhanced later)
+        else:
+            return {
+                "message": f"{format.upper()} export not yet implemented. Please use CSV format.",
+                "data": {
+                    "total_tickets": total_tickets,
+                    "first_response_compliance": round(fr_compliance, 2),
+                    "resolution_compliance": round(res_compliance, 2),
+                    "total_breaches": fr_breaches + res_breaches,
+                    "avg_first_response_hours": round(avg_fr_hours, 2),
+                    "avg_resolution_hours": round(avg_res_hours, 2)
+                }
+            }
+    
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error exporting SLA report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/advanced")
+async def get_advanced_analytics(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    group_by: str = Query("day", regex="^(day|week|month)$"),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get comprehensive SLA analytics with historical patterns"""
+    from app.core.database import SessionLocal
+    from app.services.sla_intelligence_service import SLAIntelligenceService
+    from datetime import datetime, timezone
+    
+    sync_db = SessionLocal()
+    try:
+        sla_service = SLAIntelligenceService(sync_db, current_tenant.id)
+        
+        start = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc) if start_date else None
+        end = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc) if end_date else None
+        
+        analytics = await sla_service.get_sla_analytics(
+            start_date=start,
+            end_date=end,
+            group_by=group_by
+        )
+        
+        # Add historical patterns
+        patterns = await sla_service.analyze_historical_patterns(days_back=90)
+        
+        return {
+            "analytics": analytics,
+            "historical_patterns": patterns,
+            "insights": patterns.get("insights", [])
+        }
+    finally:
+        sync_db.close()
+

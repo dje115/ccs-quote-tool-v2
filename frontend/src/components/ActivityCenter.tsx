@@ -483,11 +483,13 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
             </Typography>
           </Box>
         ) : suggestions ? (
-          <Grid container spacing={2}>
+          <Grid container spacing={3}>
             <Grid
               size={{
                 xs: 12,
-                md: 4
+                sm: 12,
+                md: 4,
+                lg: 4
               }}>
               <ActionBanner
                 title="Call Suggestion"
@@ -500,7 +502,9 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
             <Grid
               size={{
                 xs: 12,
-                md: 4
+                sm: 12,
+                md: 4,
+                lg: 4
               }}>
               <ActionBanner
                 title="Email Suggestion"
@@ -513,7 +517,9 @@ const ActivityCenter: React.FC<Props> = ({ customerId }) => {
             <Grid
               size={{
                 xs: 12,
-                md: 4
+                sm: 12,
+                md: 4,
+                lg: 4
               }}>
               <ActionBanner
                 title="Visit Suggestion"

@@ -118,3 +118,5 @@ def check_lifecycle_transitions_task(customer_id: str, tenant_id: str):
         logger.error(f"Error in check_lifecycle_transitions_task for customer {customer_id}: {e}", exc_info=True)
         raise
 
+
+

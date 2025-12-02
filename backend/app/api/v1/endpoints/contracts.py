@@ -271,8 +271,8 @@ async def create_template_version(
         # Get template
         stmt = select(EnhancedContractTemplate).where(
             and_(
-                ContractTemplate.id == template_id,
-                ContractTemplate.tenant_id == current_tenant.id
+                EnhancedContractTemplate.id == template_id,
+                EnhancedContractTemplate.tenant_id == current_tenant.id
             )
         )
         result = await db.execute(stmt)
@@ -339,10 +339,10 @@ async def get_template(
     try:
         stmt = select(EnhancedContractTemplate).where(
             and_(
-                ContractTemplate.id == template_id,
-                ContractTemplate.tenant_id == current_tenant.id
+                EnhancedContractTemplate.id == template_id,
+                EnhancedContractTemplate.tenant_id == current_tenant.id
             )
-        ).options(selectinload(ContractTemplate.versions))
+        ).options(selectinload(EnhancedContractTemplate.versions))
         result = await db.execute(stmt)
         template = result.scalar_one_or_none()
         
@@ -386,10 +386,10 @@ async def copy_template(
         # Get original template
         stmt = select(EnhancedContractTemplate).where(
             and_(
-                ContractTemplate.id == template_id,
-                ContractTemplate.tenant_id == current_tenant.id
+                EnhancedContractTemplate.id == template_id,
+                EnhancedContractTemplate.tenant_id == current_tenant.id
             )
-        ).options(selectinload(ContractTemplate.versions))
+        ).options(selectinload(EnhancedContractTemplate.versions))
         result = await db.execute(stmt)
         original = result.scalar_one_or_none()
         
@@ -397,7 +397,7 @@ async def copy_template(
             raise HTTPException(status_code=404, detail="Template not found")
         
         # Create new template
-        new_template = ContractTemplate(
+        new_template = EnhancedContractTemplate(
             tenant_id=current_tenant.id,
             name=new_name,
             description=original.description,
@@ -523,9 +523,9 @@ async def create_contract(
                 template_content = version.template_content
         elif contract_data.template_id:
             # Get current version of template
-            template_stmt = select(ContractTemplate).where(
-                ContractTemplate.id == contract_data.template_id
-            ).options(selectinload(ContractTemplate.versions))
+            template_stmt = select(EnhancedContractTemplate).where(
+                EnhancedContractTemplate.id == contract_data.template_id
+            ).options(selectinload(EnhancedContractTemplate.versions))
             template_result = await db.execute(template_stmt)
             template = template_result.scalar_one_or_none()
             if template and template.versions:
@@ -607,3 +607,161 @@ async def get_contract(
         print(f"Error getting contract: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.post("/generate", response_model=Dict[str, Any])
+async def generate_contract_ai(
+    request: AIContractGenerationRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Generate a contract using AI"""
+    try:
+        generator = ContractGeneratorService(db, current_tenant.id)
+        
+        result = await generator.generate_contract_from_description(
+            contract_type=request.contract_type,
+            description=request.description,
+            requirements=request.requirements,
+            is_support_contract=False,
+            user_id=current_user.id
+        )
+        
+        return result
+    except Exception as e:
+        print(f"Error generating contract: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ContractGenerateQuoteRequest(BaseModel):
+    generate_proposal: bool = True
+
+
+@router.post("/{contract_id}/generate-quote")
+async def generate_quote_from_contract(
+    contract_id: str,
+    request: ContractGenerateQuoteRequest = Body(...),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Generate a quote from a contract"""
+    from app.services.contract_quote_service import ContractQuoteService
+    from app.core.database import SessionLocal
+    
+    # Get contract
+    contract_result = await db.execute(
+        select(Contract).where(
+            Contract.id == contract_id,
+            Contract.tenant_id == current_tenant.id
+        )
+    )
+    contract = contract_result.scalar_one_or_none()
+    
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    # Convert contract to dict
+    contract_data = {
+        "customer_id": contract.customer_id,
+        "contract_name": contract.contract_name,
+        "description": contract.description,
+        "contract_type": contract.contract_type.value if hasattr(contract.contract_type, 'value') else str(contract.contract_type),
+        "monthly_value": float(contract.monthly_value) if contract.monthly_value else None,
+        "annual_value": float(contract.annual_value) if contract.annual_value else None,
+        "setup_fee": float(contract.setup_fee) if contract.setup_fee else 0,
+        "sla_level": contract.sla_level,
+        "terms": contract.terms,
+        "included_services": contract.included_services,
+        "start_date": contract.start_date.isoformat() if contract.start_date else None,
+        "end_date": contract.end_date.isoformat() if contract.end_date else None
+    }
+    
+    sync_db = SessionLocal()
+    try:
+        service = ContractQuoteService(sync_db, str(current_tenant.id))
+        result = await service.generate_quote_from_contract(
+            contract_data=contract_data,
+            contract_type="regular_contract",
+            generate_proposal=request.generate_proposal,
+            user_id=str(current_user.id)
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to generate quote")
+            )
+        
+        return {
+            "success": True,
+            "quote_id": result.get("quote_id"),
+            "quote_number": result.get("quote_number"),
+            "documents": [
+                {
+                    "id": doc.id,
+                    "document_type": doc.document_type,
+                    "version": doc.version
+                }
+                for doc in result.get("documents", [])
+            ]
+        }
+    finally:
+        sync_db.close()
+
+
+@router.get("/{contract_id}/quote")
+async def get_contract_quote(
+    contract_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant)
+):
+    """Get the associated quote for a contract"""
+    from app.models.quotes import Quote
+    
+    # Get contract
+    contract_result = await db.execute(
+        select(Contract).where(
+            Contract.id == contract_id,
+            Contract.tenant_id == current_tenant.id
+        )
+    )
+    contract = contract_result.scalar_one_or_none()
+    
+    if not contract:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract not found"
+        )
+    
+    # Get quote if linked
+    if contract.quote_id:
+        quote_result = await db.execute(
+            select(Quote).where(
+                Quote.id == contract.quote_id,
+                Quote.tenant_id == current_tenant.id
+            )
+        )
+        quote = quote_result.scalar_one_or_none()
+        
+        if quote:
+            return {
+                "success": True,
+                "quote": {
+                    "id": quote.id,
+                    "quote_number": quote.quote_number,
+                    "title": quote.title,
+                    "status": quote.status.value if hasattr(quote.status, 'value') else str(quote.status)
+                }
+            }
+    
+    return {
+        "success": False,
+        "message": "No associated quote found"
+    }

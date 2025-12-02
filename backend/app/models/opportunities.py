@@ -67,3 +67,5 @@ class Opportunity(BaseModel):
     def __repr__(self):
         return f"<Opportunity {self.title} - {self.stage.value}>"
 
+
+

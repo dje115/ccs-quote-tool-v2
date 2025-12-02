@@ -389,6 +389,48 @@ class EventPublisher:
             "ticket_id": ticket_id,
             "compliance": compliance_data
         })
+    
+    # Ticket Events
+    async def publish_ticket_created(self, tenant_id: str, ticket_id: str, ticket_data: Dict[str, Any]):
+        """Publish ticket.created event"""
+        await self._publish(tenant_id, "ticket.created", {
+            "ticket_id": ticket_id,
+            "ticket": ticket_data
+        })
+    
+    async def publish_ticket_updated(self, tenant_id: str, ticket_id: str, ticket_data: Dict[str, Any]):
+        """Publish ticket.updated event"""
+        await self._publish(tenant_id, "ticket.updated", {
+            "ticket_id": ticket_id,
+            "ticket": ticket_data
+        })
+    
+    async def publish_ticket_status_changed(self, tenant_id: str, ticket_id: str, old_status: str, new_status: str, ticket_number: str):
+        """Publish ticket.status_changed event"""
+        await self._publish(tenant_id, "ticket.status_changed", {
+            "ticket_id": ticket_id,
+            "ticket_number": ticket_number,
+            "old_status": old_status,
+            "new_status": new_status
+        })
+    
+    async def publish_ticket_assigned(self, tenant_id: str, ticket_id: str, ticket_number: str, assigned_to_id: str, assigned_to_name: str):
+        """Publish ticket.assigned event"""
+        await self._publish(tenant_id, "ticket.assigned", {
+            "ticket_id": ticket_id,
+            "ticket_number": ticket_number,
+            "assigned_to_id": assigned_to_id,
+            "assigned_to_name": assigned_to_name
+        })
+    
+    async def publish_ticket_priority_changed(self, tenant_id: str, ticket_id: str, ticket_number: str, old_priority: str, new_priority: str):
+        """Publish ticket.priority_changed event"""
+        await self._publish(tenant_id, "ticket.priority_changed", {
+            "ticket_id": ticket_id,
+            "ticket_number": ticket_number,
+            "old_priority": old_priority,
+            "new_priority": new_priority
+        })
 
 
 # Global event publisher instance

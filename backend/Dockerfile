@@ -2,7 +2,7 @@
 FROM python:3.12-slim as base
 
 # Accept build arguments
-ARG APP_VERSION=3.0.2
+ARG APP_VERSION=3.3.0
 ARG BUILD_DATE
 ARG BUILD_HASH
 

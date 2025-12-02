@@ -4,6 +4,7 @@ Helpdesk models for ticket management and customer service
 """
 
 from sqlalchemy import Column, String, Boolean, Text, ForeignKey, DateTime, Integer, Enum, JSON, Index
+from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -39,6 +40,19 @@ class TicketType(str, enum.Enum):
     GENERAL = "general"
 
 
+class NPAState(str, enum.Enum):
+    """Next Point of Action state enumeration"""
+    INVESTIGATION = "investigation"
+    WAITING_CUSTOMER = "waiting_customer"
+    WAITING_VENDOR = "waiting_vendor"
+    WAITING_PARTS = "waiting_parts"
+    SOLUTION = "solution"
+    IMPLEMENTATION = "implementation"
+    TESTING = "testing"
+    DOCUMENTATION = "documentation"
+    OTHER = "other"
+
+
 class Ticket(Base, TimestampMixin):
     """Helpdesk ticket model"""
     __tablename__ = "tickets"
@@ -58,7 +72,10 @@ class Ticket(Base, TimestampMixin):
     subject = Column(String(500), nullable=False)
     description = Column(Text, nullable=False)  # This will be the improved version shown in portal
     original_description = Column(Text, nullable=True)  # Original description typed by agent
-    improved_description = Column(Text, nullable=True)  # AI-improved description (shown in portal)
+    improved_description = Column(Text, nullable=True)  # AI-improved description (deprecated - use cleaned_description)
+    cleaned_description = Column(Text, nullable=True)  # AI-cleaned professional version (customer-facing)
+    description_ai_cleanup_status = Column(String(50), default="pending", nullable=True)  # AI cleanup status: pending, processing, completed, failed, skipped
+    description_ai_cleanup_task_id = Column(String(100), nullable=True)  # Celery task ID for description AI cleanup
     ai_suggestions = Column(JSON, nullable=True)  # AI suggestions: {"next_actions": [], "questions": [], "solutions": []}
     ai_analysis_date = Column(DateTime(timezone=True), nullable=True)  # When AI analysis was performed
     ticket_type = Column(Enum(TicketType), default=TicketType.SUPPORT, nullable=False, index=True)
@@ -98,18 +115,45 @@ class Ticket(Base, TimestampMixin):
     customer_satisfaction_rating = Column(Integer, nullable=True)  # 1-5
     customer_feedback = Column(Text, nullable=True)
     
+    # Next Point of Action (NPA) - Every ticket must have an NPA unless closed/resolved
+    next_point_of_action = Column(Text, nullable=True)  # What needs to happen next (deprecated - use npa_cleaned_text)
+    next_point_of_action_due_date = Column(DateTime(timezone=True), nullable=True)  # When NPA is due
+    next_point_of_action_assigned_to_id = Column(String(36), ForeignKey("users.id"), nullable=True)  # Who should complete NPA
+    npa_last_updated_at = Column(DateTime(timezone=True), nullable=True)  # When NPA was last updated
+    
+    # Enhanced NPA fields
+    npa_state = Column(
+        PG_ENUM('investigation', 'waiting_customer', 'waiting_vendor', 'waiting_parts', 'solution', 'implementation', 'testing', 'documentation', 'other', name='npastate', create_type=False),
+        default='investigation',
+        nullable=True
+    )  # State of the NPA
+    npa_original_text = Column(Text, nullable=True)  # Original text as typed by agent
+    npa_cleaned_text = Column(Text, nullable=True)  # AI-cleaned professional version (customer-facing)
+    npa_date_override = Column(Boolean, default=False, nullable=False)  # Whether date was manually overridden
+    npa_exclude_from_sla = Column(Boolean, default=False, nullable=False)  # Exclude from SLA calculations
+    npa_ai_cleanup_status = Column(String(50), default="pending", nullable=True)  # AI cleanup status: pending, processing, completed, failed, skipped
+    npa_ai_cleanup_task_id = Column(String(100), nullable=True)  # Celery task ID for AI cleanup
+    
+    # NPA Answers AI cleanup (for answers to questions)
+    npa_answers_original_text = Column(Text, nullable=True)  # Original answers text as typed by agent
+    npa_answers_cleaned_text = Column(Text, nullable=True)  # AI-cleaned professional version
+    npa_answers_ai_cleanup_status = Column(String(50), default="pending", nullable=True)  # AI cleanup status
+    npa_answers_ai_cleanup_task_id = Column(String(100), nullable=True)  # Celery task ID for answers AI cleanup
+    
     # Relationships
     tenant = relationship("Tenant")
     customer = relationship("Customer")
     contact = relationship("Contact")
     assigned_to = relationship("User", foreign_keys=[assigned_to_id])
     created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    npa_assigned_to = relationship("User", foreign_keys=[next_point_of_action_assigned_to_id])
     related_quote = relationship("Quote", foreign_keys=[related_quote_id])
     related_contract = relationship("SupportContract", foreign_keys=[related_contract_id])
     sla_policy = relationship("SLAPolicy", foreign_keys=[sla_policy_id])
     comments = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComment.created_at")
     attachments = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
     history = relationship("TicketHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketHistory.created_at")
+    npa_history = relationship("NPAHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="NPAHistory.created_at")
     
     def __repr__(self):
         return f"<Ticket {self.ticket_number} - {self.subject}>"
@@ -197,45 +241,49 @@ class TicketHistory(Base, TimestampMixin):
         return f"<TicketHistory {self.field_name} on {self.ticket_id}>"
 
 
-class KnowledgeBaseArticle(Base, TimestampMixin):
-    """Knowledge base article model"""
-    __tablename__ = "knowledge_base_articles"
+class NPAHistory(Base, TimestampMixin):
+    """NPA History - Complete history of all NPAs for a ticket (call history)"""
+    __tablename__ = "npa_history"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ticket_id = Column(String(36), ForeignKey("tickets.id"), nullable=False, index=True)
     tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
     
-    # Article details
-    title = Column(String(500), nullable=False)
-    content = Column(Text, nullable=False)
-    summary = Column(Text, nullable=True)
+    # NPA content
+    npa_original_text = Column(Text, nullable=False)
+    npa_cleaned_text = Column(Text, nullable=True)
+    npa_state = Column(String(50), nullable=False, index=True)  # investigation, waiting_customer, solution, etc.
     
-    # Categorization
-    category = Column(String(100), nullable=True, index=True)
-    tags = Column(JSON, nullable=True)  # Array of tag strings
+    # Assignment and dates
+    assigned_to_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    date_override = Column(Boolean, default=False, nullable=False)
     
-    # Visibility
-    is_published = Column(Boolean, default=False, nullable=False, index=True)
-    is_featured = Column(Boolean, default=False, nullable=False)
+    # SLA exclusion
+    exclude_from_sla = Column(Boolean, default=False, nullable=False)
     
-    # Author
-    author_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    # AI cleanup status
+    ai_cleanup_status = Column(String(50), default="pending", nullable=True)
+    ai_cleanup_task_id = Column(String(100), nullable=True)
     
-    # Metrics
-    view_count = Column(Integer, default=0, nullable=False)
-    helpful_count = Column(Integer, default=0, nullable=False)
-    not_helpful_count = Column(Integer, default=0, nullable=False)
+    # Answers to questions in this NPA
+    answers_to_questions = Column(Text, nullable=True)  # Answers provided to questions asked in this NPA (original as typed)
+    answers_cleaned_text = Column(Text, nullable=True)  # AI-cleaned professional version of answers
+    answers_ai_cleanup_status = Column(String(50), default="pending", nullable=True)  # AI cleanup status: pending, processing, completed, failed, skipped
+    answers_ai_cleanup_task_id = Column(String(100), nullable=True)  # Celery task ID for answers AI cleanup
+    
+    # Completion tracking
+    completed_at = Column(DateTime(timezone=True), nullable=True, index=True)  # When this NPA was completed
+    completed_by_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    completion_notes = Column(Text, nullable=True)  # Notes on how/why it was completed
     
     # Relationships
-    tenant = relationship("Tenant")
-    author = relationship("User", foreign_keys=[author_id])
+    ticket = relationship("Ticket", back_populates="npa_history")
+    assigned_to = relationship("User", foreign_keys=[assigned_to_id])
+    completed_by = relationship("User", foreign_keys=[completed_by_id])
     
     def __repr__(self):
-        return f"<KnowledgeBaseArticle {self.title}>"
-    
-    __table_args__ = (
-        Index('idx_kb_tenant_published', 'tenant_id', 'is_published'),
-        Index('idx_kb_category', 'tenant_id', 'category', 'is_published'),
-    )
+        return f"<NPAHistory {self.npa_state} for ticket {self.ticket_id}>"
 
 
 class SLAPolicy(Base, TimestampMixin):

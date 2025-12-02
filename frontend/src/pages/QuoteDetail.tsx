@@ -39,10 +39,11 @@ import {
   Send as SendIcon,
   Work as WorkIcon,
   Link as LinkIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { quoteAPI, opportunityAPI, customerAPI } from '../services/api';
+import { quoteAPI, opportunityAPI, customerAPI, contractAPI } from '../services/api';
 import QuoteAICopilot from '../components/QuoteAICopilot';
 import QuoteDocumentViewer from '../components/QuoteDocumentViewer';
 import QuoteDocumentEditor from '../components/QuoteDocumentEditor';
@@ -69,6 +70,8 @@ const QuoteDetail: React.FC = () => {
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string>('');
   const [linkOpportunityLoading, setLinkOpportunityLoading] = useState(false);
   const [linkOpportunityError, setLinkOpportunityError] = useState<string | null>(null);
+  const [generatingContract, setGeneratingContract] = useState(false);
+  const [associatedContract, setAssociatedContract] = useState<any>(null);
   const TAB_INDEX = {
     OVERVIEW: 0,
     LINE_ITEMS: 1,
@@ -96,6 +99,7 @@ const QuoteDetail: React.FC = () => {
   useEffect(() => {
     if (id) {
       loadQuote();
+      checkAssociatedContract();
       
       // Check URL params for tab and edit document
       const tabParam = searchParams.get('tab');
@@ -121,6 +125,42 @@ const QuoteDetail: React.FC = () => {
       }
     }
   }, [id, searchParams]);
+
+  const checkAssociatedContract = async () => {
+    if (!id) return;
+    try {
+      const response = await quoteAPI.getAssociatedContract(id);
+      if (response.data?.contract) {
+        setAssociatedContract(response.data.contract);
+      }
+    } catch (error) {
+      // No associated contract - that's fine
+      console.log('No associated contract found');
+    }
+  };
+
+  const handleGenerateContract = async () => {
+    if (!id) return;
+    if (!window.confirm('Generate a contract from this quote? This will create a new contract with all quote details.')) {
+      return;
+    }
+
+    setGeneratingContract(true);
+    try {
+      const response = await quoteAPI.generateContractFromQuote(id);
+      if (response.data?.contract_id) {
+        alert('Contract generated successfully!');
+        navigate(`/contracts/${response.data.contract_id}`);
+      } else {
+        throw new Error('Failed to generate contract');
+      }
+    } catch (error: any) {
+      console.error('Error generating contract:', error);
+      alert(error.response?.data?.detail || 'Failed to generate contract from quote');
+    } finally {
+      setGeneratingContract(false);
+    }
+  };
 
   const loadQuote = async () => {
     try {
@@ -402,7 +442,7 @@ const QuoteDetail: React.FC = () => {
 
             <Divider sx={{ my: 3 }} />
 
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Button variant="outlined" startIcon={<EditIcon />}>
                 Edit Quote
               </Button>
@@ -412,6 +452,28 @@ const QuoteDetail: React.FC = () => {
               <Button variant="outlined" startIcon={<SendIcon />}>
                 Send Quote
               </Button>
+              {quote.status === 'accepted' && (
+                associatedContract ? (
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={<DescriptionIcon />}
+                    onClick={() => navigate(`/contracts/${associatedContract.id}`)}
+                  >
+                    View Contract
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<DescriptionIcon />}
+                    onClick={handleGenerateContract}
+                    disabled={generatingContract}
+                  >
+                    {generatingContract ? 'Generating...' : 'Generate Contract'}
+                  </Button>
+                )
+              )}
             </Box>
           </Box>
         )}

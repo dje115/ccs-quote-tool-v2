@@ -12,10 +12,11 @@ import logging
 import uuid
 
 from app.models.helpdesk import (
-    Ticket, TicketComment, TicketAttachment, TicketHistory,
-    KnowledgeBaseArticle, SLAPolicy,
+    Ticket, TicketComment, TicketAttachment, TicketHistory, NPAHistory,
+    SLAPolicy,
     TicketStatus, TicketPriority, TicketType
 )
+from app.models.knowledge_base import KnowledgeBaseArticle
 from app.models.tenant import User
 from app.models.crm import Customer
 from app.services.ai_provider_service import AIProviderService
@@ -70,6 +71,8 @@ class HelpdeskService:
         # Get SLA policy
         sla_policy = self._get_sla_policy(priority, ticket_type, customer_id)
         sla_target_hours = sla_policy.resolution_hours if sla_policy else None
+        sla_first_response_hours = sla_policy.first_response_hours if sla_policy else None
+        sla_policy_id = sla_policy.id if sla_policy else None
         
         # Store original description
         original_description = description
@@ -109,11 +112,17 @@ class HelpdeskService:
             ticket_type=ticket_type,
             status=TicketStatus.OPEN,
             priority=priority,
+            sla_policy_id=sla_policy_id,
             sla_target_hours=sla_target_hours,
+            sla_first_response_hours=sla_first_response_hours,
             related_quote_id=related_quote_id,
             related_contract_id=related_contract_id,
             tags=tags or []
         )
+        
+        # Store original description
+        if not original_description and description:
+            ticket.original_description = description
         
         self.db.add(ticket)
         self.db.commit()
@@ -121,6 +130,31 @@ class HelpdeskService:
         
         # Create history entry
         self._add_history(ticket, "status", None, TicketStatus.OPEN.value, created_by_user_id)
+        
+        # Trigger AI cleanup for description (background task)
+        if description:
+            try:
+                from app.tasks.ticket_description_tasks import cleanup_ticket_description_task
+                ticket.description_ai_cleanup_status = "pending"
+                task = cleanup_ticket_description_task.delay(
+                    ticket_id=ticket.id,
+                    tenant_id=self.tenant_id,
+                    original_description=description
+                )
+                ticket.description_ai_cleanup_task_id = task.id
+                self.db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to queue description cleanup for ticket {ticket_number}: {e}")
+        
+        # Generate Next Point of Action (NPA)
+        try:
+            from app.services.ticket_npa_service import TicketNPAService
+            npa_service = TicketNPAService(self.db, self.tenant_id)
+            await npa_service.ensure_npa_exists(ticket)
+            self.db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to generate NPA for ticket {ticket_number}: {e}")
+            # Continue without NPA - will be generated later
         
         logger.info(f"Created ticket {ticket_number} for tenant {self.tenant_id}")
         
@@ -180,7 +214,9 @@ class HelpdeskService:
             ticket.first_response_at = datetime.now(timezone.utc)
         
         # Update status if changed
+        old_status_obj = None
         if status_change:
+            old_status_obj = ticket.status  # Capture old status before change
             old_status = ticket.status.value
             ticket.status = TicketStatus[status_change.upper()]
             self._add_history(ticket, "status", old_status, status_change, author_id)
@@ -192,6 +228,25 @@ class HelpdeskService:
         
         self.db.commit()
         self.db.refresh(comment_obj)
+        
+        # Update NPA if status changed
+        if status_change and old_status_obj:
+            try:
+                from app.services.ticket_npa_service import TicketNPAService
+                npa_service = TicketNPAService(self.db, self.tenant_id)
+                await npa_service.auto_update_npa_on_status_change(ticket, old_status_obj, ticket.status)
+                self.db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to update NPA on status change: {e}")
+        
+        # Ensure NPA exists (if status didn't change or update failed)
+        try:
+            from app.services.ticket_npa_service import TicketNPAService
+            npa_service = TicketNPAService(self.db, self.tenant_id)
+            await npa_service.ensure_npa_exists(ticket)
+            self.db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to ensure NPA exists: {e}")
         
         # Trigger AI analysis with full ticket history after comment is added
         try:
@@ -329,15 +384,26 @@ class HelpdeskService:
                     'category': article.category
                 })
             
-            # Use database-driven AI prompt for knowledge base search
-            prompt_result = await self.ai_service.generate_with_rendered_prompts(
-                category=PromptCategory.KNOWLEDGE_BASE_SEARCH,
-                variables={
-                    'query': query,
-                    'articles': str(articles_context),
-                    'limit': str(limit)
-                }
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.KNOWLEDGE_BASE_SEARCH.value,
+                tenant_id=self.tenant_id
             )
+            
+            # For now, skip AI search if no prompt (fallback to keyword search)
+            if not prompt_obj:
+                prompt_result = None
+            else:
+                prompt_result = await self.ai_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        'query': query,
+                        'articles': str(articles_context),
+                        'limit': str(limit)
+                    }
+                )
             
             # Parse AI response to get ranked articles
             # For now, return articles sorted by view count (fallback)
@@ -472,41 +538,34 @@ class HelpdeskService:
             Dictionary with ticket statistics including SLA metrics
         """
         total = self.db.query(func.count(Ticket.id)).filter(
-            and_(
-                Ticket.tenant_id == self.tenant_id,
-                Ticket.is_deleted == False
-            )
+            Ticket.tenant_id == self.tenant_id
         ).scalar() or 0
         
         open_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.OPEN,
-                Ticket.is_deleted == False
+                Ticket.status == TicketStatus.OPEN
             )
         ).scalar() or 0
         
         in_progress_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.IN_PROGRESS,
-                Ticket.is_deleted == False
+                Ticket.status == TicketStatus.IN_PROGRESS
             )
         ).scalar() or 0
         
         resolved_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.RESOLVED,
-                Ticket.is_deleted == False
+                Ticket.status == TicketStatus.RESOLVED
             )
         ).scalar() or 0
         
         closed_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.status == TicketStatus.CLOSED,
-                Ticket.is_deleted == False
+                Ticket.status == TicketStatus.CLOSED
             )
         ).scalar() or 0
         
@@ -516,15 +575,13 @@ class HelpdeskService:
         tickets_with_sla = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.sla_policy_id.isnot(None),
-                Ticket.is_deleted == False
+                Ticket.sla_policy_id.isnot(None)
             )
         ).scalar() or 0
         
         sla_breached_count = self.db.query(func.count(Ticket.id)).filter(
             and_(
                 Ticket.tenant_id == self.tenant_id,
-                Ticket.is_deleted == False,
                 or_(
                     Ticket.sla_first_response_breached == True,
                     Ticket.sla_resolution_breached == True
@@ -581,16 +638,23 @@ class HelpdeskService:
         ).all()
         
         # Find matching policy (priority, type, customer)
+        # Priority: NULL means match any priority
+        # Type: NULL means match any type
+        # Customer: NULL means match any customer
         for policy in policies:
-            if policy.priority and policy.priority != priority:
+            # Skip if priority is specified and doesn't match
+            if policy.priority is not None and policy.priority != priority:
                 continue
-            if policy.ticket_type and policy.ticket_type != ticket_type:
+            # Skip if ticket_type is specified and doesn't match
+            if policy.ticket_type is not None and policy.ticket_type != ticket_type:
                 continue
-            if policy.customer_ids and customer_id not in policy.customer_ids:
+            # Skip if customer_ids is specified and customer not in list
+            if policy.customer_ids and customer_id and customer_id not in policy.customer_ids:
                 continue
             
             return policy
         
+        # If no matching policy found, return None (no default fallback)
         return None
     
     def _add_history(
@@ -670,26 +734,76 @@ Provide your response in JSON format:
     }}
 }}"""
 
-            # Use database-driven AI prompt if available, otherwise use fallback
-            result = await self.ai_service.generate_with_rendered_prompts(
-                category=PromptCategory.CUSTOMER_SERVICE,
-                variables={
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.CUSTOMER_SERVICE.value,
+                tenant_id=self.tenant_id
+            )
+            
+            # Render prompt with variables
+            if prompt_obj:
+                rendered = prompt_service.render_prompt(prompt_obj, {
                     "ticket_subject": subject,
                     "ticket_description": description,
                     "customer_context": customer_context,
                     "ticket_history": ""  # No history on initial creation
-                },
-                fallback_prompt=prompt,
-                model_preference=None,
-                temperature=0.7,
-                max_tokens=1000
-            )
+                })
+                system_prompt = rendered.get('system_prompt', '')
+                user_prompt = rendered.get('user_prompt', prompt)
+            else:
+                # Fallback to hardcoded prompt if no database prompt
+                system_prompt = ''
+                user_prompt = prompt
             
-            if result and result.get("content"):
+            # Generate with AI provider service
+            if prompt_obj:
+                result = await self.ai_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        "ticket_subject": subject,
+                        "ticket_description": description,
+                        "customer_context": customer_context,
+                        "ticket_history": ""
+                    },
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+            else:
+                # Fallback: use hardcoded prompt with system default provider
+                # Create a minimal prompt object for fallback
+                from app.models.ai_prompt import AIPrompt
+                fallback_prompt = AIPrompt(
+                    id="fallback",
+                    category=PromptCategory.CUSTOMER_SERVICE.value,
+                    system_prompt="",
+                    user_prompt_template=prompt,
+                    model="gpt-4",
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                result = await self.ai_service.generate_with_rendered_prompts(
+                    prompt=fallback_prompt,
+                    system_prompt="",
+                    user_prompt=prompt,
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+            
+            # Handle result - it could be AIProviderResponse or dict
+            content = None
+            if result:
+                if hasattr(result, 'content'):
+                    content = result.content
+                elif isinstance(result, dict):
+                    content = result.get("content")
+            
+            if content:
                 import json
                 try:
                     # Try to parse JSON response
-                    content = result["content"].strip()
+                    content = content.strip()
                     # Remove markdown code blocks if present
                     if content.startswith("```"):
                         content = content.split("```")[1]
@@ -704,7 +818,7 @@ Provide your response in JSON format:
                     }
                 except json.JSONDecodeError:
                     # If not JSON, try to extract improved description from text
-                    lines = result["content"].split("\n")
+                    lines = content.split("\n")
                     improved = description
                     for line in lines:
                         if "improved" in line.lower() or "description" in line.lower():
@@ -766,6 +880,45 @@ Provide your response in JSON format:
                         internal_note = " [INTERNAL]" if comment.is_internal else ""
                         ticket_history += f"- {comment.created_at.strftime('%Y-%m-%d %H:%M')} by {author}{internal_note}: {comment.comment[:200]}\n"
             
+            # Get NPA history (call history - this is critical for AI analysis)
+            npa_history = self.db.query(NPAHistory).filter(
+                NPAHistory.ticket_id == ticket.id
+            ).order_by(NPAHistory.created_at).all()
+            
+            # Build NPA history context (call history - this is the complete action history)
+            npa_history_text = ""
+            if npa_history:
+                npa_history_text = "\n\n=== NEXT POINT OF ACTION (NPA) HISTORY (CALL HISTORY) ===\n"
+                npa_history_text += "This is the complete history of all actions taken on this ticket. Each NPA represents a step in resolving the issue.\n\n"
+                for idx, npa in enumerate(npa_history, 1):
+                    state_label = npa.npa_state.replace('_', ' ').title()
+                    completed_label = f" (COMPLETED: {npa.completed_at.strftime('%Y-%m-%d %H:%M')})" if npa.completed_at else " (ACTIVE)"
+                    npa_history_text += f"\n--- NPA #{idx} - {state_label}{completed_label} ---\n"
+                    npa_history_text += f"Created: {npa.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+                    if npa.assigned_to:
+                        npa_history_text += f"Assigned to: {npa.assigned_to.first_name} {npa.assigned_to.last_name}\n"
+                    if npa.due_date:
+                        npa_history_text += f"Due: {npa.due_date.strftime('%Y-%m-%d %H:%M')}\n"
+                    npa_history_text += f"Original Text: {npa.npa_original_text}\n"
+                    if npa.npa_cleaned_text and npa.npa_cleaned_text != npa.npa_original_text:
+                        npa_history_text += f"Cleaned Text (Customer-Facing): {npa.npa_cleaned_text}\n"
+                    if npa.answers_to_questions:
+                        npa_history_text += f"Answers to Questions: {npa.answers_to_questions}\n"
+                    if npa.completion_notes:
+                        npa_history_text += f"Completion Notes: {npa.completion_notes}\n"
+                    npa_history_text += "\n"
+            
+            # Add current NPA if it exists
+            if ticket.npa_original_text:
+                npa_history_text += "\n--- CURRENT NPA (ACTIVE) ---\n"
+                npa_history_text += f"State: {ticket.npa_state.replace('_', ' ').title() if ticket.npa_state else 'Investigation'}\n"
+                npa_history_text += f"Original Text: {ticket.npa_original_text}\n"
+                if ticket.npa_cleaned_text and ticket.npa_cleaned_text != ticket.npa_original_text:
+                    npa_history_text += f"Cleaned Text (Customer-Facing): {ticket.npa_cleaned_text}\n"
+                if ticket.next_point_of_action_due_date:
+                    npa_history_text += f"Due: {ticket.next_point_of_action_due_date.strftime('%Y-%m-%d %H:%M')}\n"
+                npa_history_text += "\n"
+            
             # Get customer context if available
             customer_context = ""
             if ticket.customer_id:
@@ -795,9 +948,15 @@ Current Status: {ticket.status.value}
 Priority: {ticket.priority.value}
 {customer_context}
 {ticket_history}
+{npa_history_text}
 
 IMPORTANT:
-- Analyze the COMPLETE ticket history to understand what has been tried, what information has been gathered, and what the current state is
+- Analyze the COMPLETE ticket history AND NPA history (call history) to understand:
+  * What actions have been taken (from NPA history)
+  * What information has been gathered
+  * What questions were asked and answered
+  * What the current state is
+  * What worked and what didn't work
 - Provide NEXT ACTIONS based on what needs to happen next given the current state
 - If solutions have been attempted (mentioned in comments), suggest alternative solutions
 - If the ticket is progressing well, suggest next steps to resolution
@@ -823,26 +982,77 @@ Provide your response in JSON format:
     }}
 }}"""
 
-            # Use database-driven AI prompt if available, otherwise use fallback
-            result = await self.ai_service.generate_with_rendered_prompts(
-                category=PromptCategory.CUSTOMER_SERVICE,
-                variables={
+            # Get prompt from database
+            from app.services.ai_prompt_service import AIPromptService
+            prompt_service = AIPromptService(self.db, tenant_id=self.tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.CUSTOMER_SERVICE.value,
+                tenant_id=self.tenant_id
+            )
+            
+            # Render prompt with variables
+            if prompt_obj:
+                rendered = prompt_service.render_prompt(prompt_obj, {
                     "ticket_subject": ticket.subject,
                     "ticket_description": ticket.original_description or ticket.description,
                     "customer_context": customer_context,
-                    "ticket_history": ticket_history
-                },
-                fallback_prompt=prompt,
-                model_preference=None,
-                temperature=0.7,
-                max_tokens=2000
-            )
+                    "ticket_history": ticket_history,
+                    "npa_history": npa_history_text
+                })
+                system_prompt = rendered.get('system_prompt', '')
+                user_prompt = rendered.get('user_prompt', prompt)
+            else:
+                # Fallback to hardcoded prompt if no database prompt
+                system_prompt = ''
+                user_prompt = prompt
             
-            if result and result.get("content"):
+            # Generate with AI provider service
+            if prompt_obj:
+                result = await self.ai_service.generate(
+                    prompt=prompt_obj,
+                    variables={
+                        "ticket_subject": ticket.subject,
+                        "ticket_description": ticket.original_description or ticket.description,
+                        "customer_context": customer_context,
+                        "ticket_history": ticket_history,
+                        "npa_history": npa_history_text
+                    },
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+            else:
+                # Fallback: use hardcoded prompt
+                from app.models.ai_prompt import AIPrompt
+                fallback_prompt = AIPrompt(
+                    id="fallback",
+                    category=PromptCategory.CUSTOMER_SERVICE.value,
+                    system_prompt="",
+                    user_prompt_template=prompt,
+                    model="gpt-4",
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                result = await self.ai_service.generate_with_rendered_prompts(
+                    prompt=fallback_prompt,
+                    system_prompt="",
+                    user_prompt=prompt,
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+            
+            # Handle result - it could be AIProviderResponse or dict
+            content = None
+            if result:
+                if hasattr(result, 'content'):
+                    content = result.content
+                elif isinstance(result, dict):
+                    content = result.get("content")
+            
+            if content:
                 import json
                 try:
                     # Try to parse JSON response
-                    content = result["content"].strip()
+                    content = content.strip()
                     # Remove markdown code blocks if present
                     if content.startswith("```"):
                         content = content.split("```")[1]

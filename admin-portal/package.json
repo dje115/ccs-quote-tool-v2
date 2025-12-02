@@ -1,6 +1,6 @@
 {
   "name": "ccs-admin-portal",
-  "version": "3.1.0",
+  "version": "3.3.0",
   "description": "CCS Quote Tool v2 - Tenant Admin Portal",
   "private": true,
   "scripts": {

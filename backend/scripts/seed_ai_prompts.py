@@ -2603,6 +2603,307 @@ Return a JSON object with the following structure:
         else:
             print("⏭️  quote_generation prompt already exists")
     
+    # 22. Contract Generation Prompt
+    contract_generation_system = """You are a legal contract expert specializing in creating professional contract templates for business services.
+
+Your role is to generate comprehensive, legally sound contract templates and contract data for both regular service contracts and support contracts.
+
+RULES:
+- Generate contracts suitable for UK legal compliance
+- For regular contracts: Create contract templates with JSON placeholders for dynamic content
+- For support contracts: Generate structured contract data including SLA integration, renewal terms, and pricing
+- Use professional business language appropriate to the contract type
+- Include standard contract sections: parties, services, terms, payment, termination, etc.
+- For support contracts: Include SLA levels, renewal frequency, auto-renewal settings, support hours, and notice periods
+- Be precise, practical, and commercially realistic
+- Output must be suitable for direct use in business contracts
+
+OUTPUT FORMAT:
+For Regular Contracts (Templates):
+- Contract template with JSON placeholders in format {{placeholder_name}} or {{placeholder_name|default_value}}
+- Placeholder schema with types and descriptions
+- Default values for placeholders
+
+For Support Contracts (Structured Data):
+- JSON object with fields: contract_name, description, contract_type, monthly_value, annual_value, setup_fee, renewal_frequency, auto_renew, sla_level, support_hours_included, renewal_notice_days, cancellation_notice_days, terms
+
+Never mention internal logic or that you are inferring anything.
+You are a senior legal contract specialist."""
+    
+    contract_generation_prompt = """Generate a {contract_type} contract based on the following requirements.
+
+**Tenant Context:**
+{tenant_context}
+
+**Contract Description:**
+{description}
+
+**Requirements:**
+{requirements}
+
+**Contract Type:** {contract_type}
+**Is Support Contract:** {is_support_contract}
+
+----
+
+YOUR TASKS:
+
+1. **Understand the Contract Context**
+   - Analyze the tenant's business context and services
+   - Understand the contract type and requirements
+   - Determine if this is a regular contract (template) or support contract (structured data)
+
+2. **For Regular Contracts (Templates):**
+   - Create a comprehensive contract template with JSON placeholders
+   - Use format {{placeholder_name}} for required fields
+   - Use format {{placeholder_name|default_value}} for optional fields with defaults
+   - Include placeholders for: customer name, dates, pricing, service details, etc.
+   - Generate placeholder schema with types (string, number, date) and descriptions
+   - Generate default values for all placeholders
+
+3. **For Support Contracts (Structured Data):**
+   - Generate a complete JSON object with all contract fields
+   - Include SLA requirements if specified: {sla_requirements}
+   - Include renewal preferences if specified: {renewal_preferences}
+   - Set appropriate renewal frequency, auto-renewal, and notice periods
+   - Include pricing structure (monthly/annual value, setup fee)
+   - Generate comprehensive terms and conditions
+
+4. **Ensure Legal Compliance**
+   - Use UK legal terminology and structure
+   - Include standard contract clauses
+   - Ensure terms are fair and enforceable
+
+5. **Output Format**
+   - For templates: Return template content with placeholders, schema, and defaults
+   - For support contracts: Return structured JSON with all required fields
+
+Generate the contract now:"""
+    
+    existing_contract_generation = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.CONTRACT_GENERATION.value,
+        AIPrompt.is_system == True
+    ).first()
+    
+    if not existing_contract_generation:
+        service.create_prompt(
+            name="Contract Generation",
+            category=PromptCategory.CONTRACT_GENERATION.value,
+            system_prompt=contract_generation_system,
+            user_prompt_template=contract_generation_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=8000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "tenant_context": "Tenant company information: name, description, products/services",
+                "contract_type": "Type of contract (managed_services, software_license, saas_subscription, maintenance, support_hours, consulting, warranty)",
+                "description": "Description of what the contract should cover",
+                "requirements": "JSON object with specific requirements (SLA levels, pricing structure, renewal preferences, etc.)",
+                "is_support_contract": "Whether this is a support contract (true/false)",
+                "sla_requirements": "SLA requirements for support contracts (e.g., 24/7, 4-hour response time)",
+                "renewal_preferences": "Renewal preferences for support contracts (e.g., annual renewal, auto-renew enabled)"
+            },
+            description="AI contract template and support contract generation with SLA integration and renewal terms"
+        )
+        print("✅ Created contract_generation prompt")
+    else:
+        print("⏭️  contract_generation prompt already exists")
+    
+    # 35. Helpdesk NPA Suggestions Prompt
+    npa_suggestions_prompt = """You are a helpdesk AI assistant specializing in providing actionable suggestions for support tickets.
+
+Based on the following ticket information, provide AI-powered suggestions:
+
+Ticket Information:
+- Subject: {ticket_subject}
+- Description: {ticket_description}
+- Type: {ticket_type}
+- Priority: {ticket_priority}
+- Status: {ticket_status}
+- Customer: {customer_context}
+
+Please provide a JSON response with the following structure:
+{{
+    "suggested_agent": {{
+        "reason": "Brief explanation of why this agent type/skill is recommended",
+        "skills_needed": ["skill1", "skill2"],
+        "agent_type": "network_specialist" or "general_support" or "technical" etc.
+    }},
+    "issue_diagnosis": {{
+        "likely_cause": "What is the most likely cause of this issue?",
+        "confidence": 0.85,
+        "alternative_causes": ["alternative1", "alternative2"],
+        "complexity": "simple" or "moderate" or "complex"
+    }},
+    "troubleshooting_steps": [
+        {{
+            "step": 1,
+            "action": "First action to take",
+            "expected_result": "What to expect",
+            "if_fails": "What to do if this doesn't work"
+        }},
+        {{
+            "step": 2,
+            "action": "Second action",
+            "expected_result": "What to expect",
+            "if_fails": "What to do if this doesn't work"
+        }}
+    ]
+}}
+
+Return ONLY valid JSON, no markdown formatting."""
+
+    npa_suggestions_system = """You are a helpdesk AI assistant specializing in analyzing support tickets and providing actionable suggestions for agent assignment, issue diagnosis, and troubleshooting steps. Always respond with valid JSON matching the required format."""
+
+    existing_npa_suggestions = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.HELPDESK_NPA_SUGGESTIONS.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_npa_suggestions:
+        service.create_prompt(
+            name="Helpdesk NPA Suggestions",
+            category=PromptCategory.HELPDESK_NPA_SUGGESTIONS.value,
+            system_prompt=npa_suggestions_system,
+            user_prompt_template=npa_suggestions_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=1000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "ticket_subject": "Ticket subject line",
+                "ticket_description": "Full ticket description",
+                "ticket_type": "Type of ticket (support, technical, etc.)",
+                "ticket_priority": "Ticket priority (low, medium, high, urgent)",
+                "ticket_status": "Current ticket status",
+                "customer_context": "Customer information and context"
+            },
+            description="AI-powered suggestions for Next Point of Action: agent assignment, issue diagnosis, and troubleshooting steps"
+        )
+        print("✅ Created helpdesk_npa_suggestions prompt")
+    else:
+        print("⏭️  helpdesk_npa_suggestions prompt already exists")
+
+    # 36. Helpdesk KB Answer Generation Prompt
+    kb_answer_prompt = """You are a helpdesk AI assistant. Generate a comprehensive answer to the customer's issue based on the following knowledge base articles and ticket information.
+
+Ticket Information:
+- Subject: {ticket_subject}
+- Description: {ticket_description}
+- Type: {ticket_type}
+- Priority: {ticket_priority}
+
+Knowledge Base Articles:
+{knowledge_base_articles}
+
+If no relevant KB articles are provided, use your knowledge to generate a helpful answer based on the ticket information.
+
+Provide a professional, customer-friendly answer that:
+1. Addresses the customer's issue directly
+2. References relevant KB articles if applicable
+3. Provides step-by-step solutions when possible
+4. Suggests next steps if the issue requires further investigation
+
+Return a JSON response:
+{{
+    "answer": "The complete answer to the customer's issue",
+    "sources": ["KB article title 1", "KB article title 2"],
+    "confidence": 0.85,
+    "requires_escalation": false,
+    "next_steps": ["step1", "step2"]
+}}"""
+
+    kb_answer_system = """You are a helpdesk AI assistant specializing in generating comprehensive answers to customer support tickets using knowledge base articles. Always respond with valid JSON matching the required format."""
+
+    existing_kb_answer = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.HELPDESK_KB_ANSWER.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_kb_answer:
+        service.create_prompt(
+            name="Helpdesk KB Answer Generation",
+            category=PromptCategory.HELPDESK_KB_ANSWER.value,
+            system_prompt=kb_answer_system,
+            user_prompt_template=kb_answer_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=2000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "ticket_subject": "Ticket subject line",
+                "ticket_description": "Full ticket description",
+                "ticket_type": "Type of ticket",
+                "ticket_priority": "Ticket priority",
+                "knowledge_base_articles": "Relevant KB articles with titles and content"
+            },
+            description="Generate comprehensive answers to customer support tickets using knowledge base articles"
+        )
+        print("✅ Created helpdesk_kb_answer prompt")
+    else:
+        print("⏭️  helpdesk_kb_answer prompt already exists")
+
+    # 37. Helpdesk Quick Response Generation Prompt
+    quick_response_prompt = """You are a helpdesk AI assistant. Generate a quick, professional response to acknowledge the customer's ticket.
+
+Ticket Information:
+- Subject: {ticket_subject}
+- Description: {ticket_description}
+- Type: {ticket_type}
+- Priority: {ticket_priority}
+
+Generate a brief, professional acknowledgment response that:
+1. Acknowledges receipt of their ticket
+2. Shows understanding of their issue
+3. Sets expectations for response time
+4. Provides reassurance that we're working on it
+
+Keep it concise (2-3 sentences) and professional.
+
+Return a JSON response:
+{{
+    "response": "The quick acknowledgment response",
+    "tone": "professional" or "empathetic" or "technical"
+}}"""
+
+    quick_response_system = """You are a helpdesk AI assistant specializing in generating quick, professional acknowledgment responses for customer support tickets. Always respond with valid JSON matching the required format."""
+
+    existing_quick_response = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.HELPDESK_QUICK_RESPONSE.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_quick_response:
+        service.create_prompt(
+            name="Helpdesk Quick Response Generation",
+            category=PromptCategory.HELPDESK_QUICK_RESPONSE.value,
+            system_prompt=quick_response_system,
+            user_prompt_template=quick_response_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=500,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "ticket_subject": "Ticket subject line",
+                "ticket_description": "Full ticket description",
+                "ticket_type": "Type of ticket",
+                "ticket_priority": "Ticket priority"
+            },
+            description="Generate quick, professional acknowledgment responses for customer support tickets"
+        )
+        print("✅ Created helpdesk_quick_response prompt")
+    else:
+        print("⏭️  helpdesk_quick_response prompt already exists")
+
     print("✅ AI prompts seeding complete!")
 
 

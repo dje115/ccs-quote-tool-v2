@@ -33,7 +33,8 @@ import {
   Refresh as RefreshIcon,
   FilterList as FilterIcon,
   Search as SearchIcon,
-  Visibility as ViewIcon
+  Visibility as ViewIcon,
+  Assessment as AssessmentIcon
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { helpdeskAPI, customerAPI } from '../services/api';
@@ -241,7 +242,7 @@ const Helpdesk: React.FC = () => {
 
       {/* Stats Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -251,7 +252,7 @@ const Helpdesk: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -261,7 +262,7 @@ const Helpdesk: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -271,7 +272,7 @@ const Helpdesk: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -281,7 +282,7 @@ const Helpdesk: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -296,13 +297,13 @@ const Helpdesk: React.FC = () => {
       {/* SLA Metrics Cards */}
       {stats.sla && stats.sla.tickets_with_sla > 0 && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
               <AssessmentIcon color="primary" />
               SLA Metrics
             </Typography>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card sx={{ 
               background: stats.sla.compliance_rate >= 95 ? 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' :
                           stats.sla.compliance_rate >= 80 ? 'linear-gradient(135deg, #ffc107 0%, #ff9800 100%)' :
@@ -320,7 +321,7 @@ const Helpdesk: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card sx={{ 
               background: stats.sla.active_breach_alerts > 0 ? 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)' :
                           'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
@@ -337,7 +338,7 @@ const Helpdesk: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card>
               <CardContent>
                 <Typography color="textSecondary" gutterBottom>
@@ -352,7 +353,7 @@ const Helpdesk: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card>
               <CardContent>
                 <Typography color="textSecondary" gutterBottom>
@@ -375,7 +376,7 @@ const Helpdesk: React.FC = () => {
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               fullWidth
               placeholder="Search tickets..."
@@ -386,7 +387,7 @@ const Helpdesk: React.FC = () => {
               }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={2}>
+          <Grid size={{ xs: 12, sm: 6, md: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
               <Select
@@ -402,7 +403,7 @@ const Helpdesk: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6} md={2}>
+          <Grid size={{ xs: 12, sm: 6, md: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Priority</InputLabel>
               <Select
@@ -418,7 +419,7 @@ const Helpdesk: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
                 variant="outlined"

@@ -226,7 +226,7 @@ const CustomerTimeline: React.FC<CustomerTimelineProps> = ({
                       secondary={
                         <Box>
                           {item.description && (
-                            <Typography variant="body2" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+                            <Typography variant="body2" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
                               {item.description.length > 150
                                 ? `${item.description.substring(0, 150)}...`
                                 : item.description}

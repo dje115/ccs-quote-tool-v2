@@ -18,7 +18,7 @@ from app.models.crm import Customer, CustomerStatus, Contact
 from app.models.leads import Lead, LeadStatus
 from app.models.quotes import Quote, QuoteStatus
 from app.models.opportunities import Opportunity, OpportunityStage
-from app.models.helpdesk import Ticket
+from app.models.helpdesk import Ticket, TicketStatus
 from app.models.sla_compliance import SLAComplianceRecord, SLABreachAlert
 from app.services.ai_analysis_service import AIAnalysisService
 from app.core.api_keys import get_api_keys
@@ -136,113 +136,119 @@ async def get_dashboard(
         
         # Get customer counts by status
         # Note: "total_leads" in frontend refers to discoveries from Lead table, not Customer.LEAD status
-        # Execute all count queries in parallel for better performance
-        leads_result, prospects_result, opportunities_result, customers_result, cold_leads_result, inactive_result, quotes_result = await asyncio.gather(
-            db.execute(select(func.count(Customer.id)).where(
-                and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.LEAD,
-                    Customer.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Customer.id)).where(
-                and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.PROSPECT,
-                    Customer.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Customer.id)).where(
-                and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.OPPORTUNITY,
-                    Customer.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Customer.id)).where(
-                and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.CUSTOMER,
-                    Customer.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Customer.id)).where(
-                and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.status == CustomerStatus.COLD_LEAD,
-                    Customer.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Customer.id)).where(
-                and_(
-                    Customer.tenant_id == tenant_id,
-                    Customer.is_deleted == False,
-                    or_(
-                        Customer.status == CustomerStatus.INACTIVE,
-                        Customer.status == CustomerStatus.LOST
-                    )
-                )
-            )),
-            db.execute(select(func.count(Quote.id)).where(
-                and_(
-                    Quote.tenant_id == tenant_id,
-                    Quote.is_deleted == False
-                )
-            ))
-        )
-        
+        # Execute queries sequentially and fetch results immediately to avoid asyncpg connection conflicts
+        leads_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.status == CustomerStatus.LEAD,
+                Customer.is_deleted == False
+            )
+        ))
         leads_count = leads_result.scalar() or 0
+        
+        prospects_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.status == CustomerStatus.PROSPECT,
+                Customer.is_deleted == False
+            )
+        ))
         prospects_count = prospects_result.scalar() or 0
+        
+        opportunities_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.status == CustomerStatus.OPPORTUNITY,
+                Customer.is_deleted == False
+            )
+        ))
         opportunities_count = opportunities_result.scalar() or 0
+        
+        customers_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.status == CustomerStatus.CUSTOMER,
+                Customer.is_deleted == False
+            )
+        ))
         customers_count = customers_result.scalar() or 0
+        
+        cold_leads_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.status == CustomerStatus.COLD_LEAD,
+                Customer.is_deleted == False
+            )
+        ))
         cold_leads_count = cold_leads_result.scalar() or 0
+        
+        inactive_result = await db.execute(select(func.count(Customer.id)).where(
+            and_(
+                Customer.tenant_id == tenant_id,
+                Customer.is_deleted == False,
+                or_(
+                    Customer.status == CustomerStatus.INACTIVE,
+                    Customer.status == CustomerStatus.LOST
+                )
+            )
+        ))
         inactive_count = inactive_result.scalar() or 0
+        
+        quotes_result = await db.execute(select(func.count(Quote.id)).where(
+            and_(
+                Quote.tenant_id == tenant_id,
+                Quote.is_deleted == False
+            )
+        ))
         total_quotes = quotes_result.scalar() or 0
         
-        # Get opportunity metrics
-        opportunity_queries = await asyncio.gather(
-            db.execute(select(func.count(Opportunity.id)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.is_deleted == False,
-                    ~Opportunity.stage.in_([OpportunityStage.CLOSED_WON, OpportunityStage.CLOSED_LOST])
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.QUALIFIED,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.PROPOSAL_SENT,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.CLOSED_WON,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.sum(Opportunity.estimated_value)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.is_deleted == False,
-                    Opportunity.estimated_value.isnot(None)
-                )
-            ))
-        )
+        # Get opportunity metrics (execute sequentially to avoid asyncpg conflicts)
+        # Use string values for enum comparison to avoid SQLAlchemy enum serialization issues
+        # Fetch scalar immediately after each query to avoid connection conflicts
+        active_opp_result = await db.execute(select(func.count(Opportunity.id)).where(
+            and_(
+                Opportunity.tenant_id == tenant_id,
+                Opportunity.is_deleted == False,
+                ~Opportunity.stage.in_(["closed_won", "closed_lost"])
+            )
+        ))
+        active_opportunities = active_opp_result.scalar() or 0
         
-        active_opportunities = opportunity_queries[0].scalar() or 0
-        opportunities_qualified = opportunity_queries[1].scalar() or 0
-        opportunities_proposal_sent = opportunity_queries[2].scalar() or 0
-        opportunities_closed_won = opportunity_queries[3].scalar() or 0
-        opp_value = opportunity_queries[4].scalar()
+        qualified_result = await db.execute(select(func.count(Opportunity.id)).where(
+            and_(
+                Opportunity.tenant_id == tenant_id,
+                Opportunity.stage == "qualified",
+                Opportunity.is_deleted == False
+            )
+        ))
+        opportunities_qualified = qualified_result.scalar() or 0
+        
+        proposal_result = await db.execute(select(func.count(Opportunity.id)).where(
+            and_(
+                Opportunity.tenant_id == tenant_id,
+                Opportunity.stage == "proposal_sent",
+                Opportunity.is_deleted == False
+            )
+        ))
+        opportunities_proposal_sent = proposal_result.scalar() or 0
+        
+        closed_won_result = await db.execute(select(func.count(Opportunity.id)).where(
+            and_(
+                Opportunity.tenant_id == tenant_id,
+                Opportunity.stage == "closed_won",
+                Opportunity.is_deleted == False
+            )
+        ))
+        opportunities_closed_won = closed_won_result.scalar() or 0
+        
+        opp_value_result = await db.execute(select(func.sum(Opportunity.estimated_value)).where(
+            and_(
+                Opportunity.tenant_id == tenant_id,
+                Opportunity.is_deleted == False,
+                Opportunity.estimated_value.isnot(None)
+            )
+        ))
+        opp_value = opp_value_result.scalar()
         opportunities_total_value = float(opp_value) if opp_value else 0.0
         
         # Get lifecycle distribution (using existing statuses - INACTIVE for dormant, LOST for closed lost)
@@ -264,36 +270,37 @@ async def get_dashboard(
         ))
         lifecycle_distribution["LOST"] = lost_result.scalar() or 0
         
-        # Execute remaining quote queries in parallel
-        quotes_pending_result, quotes_accepted_result, revenue_result = await asyncio.gather(
-            db.execute(select(func.count(Quote.id)).where(
-                and_(
-                    Quote.tenant_id == tenant_id,
-                    Quote.is_deleted == False,
-                    or_(
-                        Quote.status == QuoteStatus.DRAFT,
-                        Quote.status == QuoteStatus.SENT
-                    )
+        # Execute remaining quote queries sequentially
+        # Use uppercase string literals to match database enum values
+        # Fetch scalar immediately after each query to avoid connection conflicts
+        quotes_pending_result = await db.execute(select(func.count(Quote.id)).where(
+            and_(
+                Quote.tenant_id == tenant_id,
+                Quote.is_deleted == False,
+                or_(
+                    Quote.status == "DRAFT",
+                    Quote.status == "SENT"
                 )
-            )),
-            db.execute(select(func.count(Quote.id)).where(
-                and_(
-                    Quote.tenant_id == tenant_id,
-                    Quote.status == QuoteStatus.ACCEPTED,
-                    Quote.is_deleted == False
-                )
-            )),
-            db.execute(select(func.sum(Quote.total_amount)).where(
-                and_(
-                    Quote.tenant_id == tenant_id,
-                    Quote.status == QuoteStatus.ACCEPTED,
-                    Quote.is_deleted == False
-                )
-            ))
-        )
-        
+            )
+        ))
         quotes_pending = quotes_pending_result.scalar() or 0
+        
+        quotes_accepted_result = await db.execute(select(func.count(Quote.id)).where(
+            and_(
+                Quote.tenant_id == tenant_id,
+                Quote.status == "ACCEPTED",
+                Quote.is_deleted == False
+            )
+        ))
         quotes_accepted = quotes_accepted_result.scalar() or 0
+        
+        revenue_result = await db.execute(select(func.sum(Quote.total_amount)).where(
+            and_(
+                Quote.tenant_id == tenant_id,
+                Quote.status == "ACCEPTED",
+                Quote.is_deleted == False
+            )
+        ))
         revenue_value = revenue_result.scalar()
         total_revenue = float(revenue_value) if revenue_value else 0.0
         
@@ -332,57 +339,31 @@ async def get_dashboard(
             )
         ]
         
-        # Opportunity pipeline stages
-        pipeline_stage_queries = await asyncio.gather(
-            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
+        # Opportunity pipeline stages (execute sequentially)
+        pipeline_stage_queries = []
+        stage_labels = ["Qualified", "Scoping", "Proposal Sent", "Negotiation", "Verbal Yes", "Closed Won"]
+        stages = [
+            OpportunityStage.QUALIFIED,
+            OpportunityStage.SCOPING,
+            OpportunityStage.PROPOSAL_SENT,
+            OpportunityStage.NEGOTIATION,
+            OpportunityStage.VERBAL_YES,
+            OpportunityStage.CLOSED_WON
+        ]
+        
+        pipeline_stages = []
+        total_pipeline_value = 0.0
+        
+        # Execute queries sequentially and fetch results immediately
+        for idx, stage in enumerate(stages):
+            result = await db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
                 and_(
                     Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.QUALIFIED,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.SCOPING,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.PROPOSAL_SENT,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.NEGOTIATION,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.VERBAL_YES,
-                    Opportunity.is_deleted == False
-                )
-            )),
-            db.execute(select(func.count(Opportunity.id), func.sum(Opportunity.estimated_value)).where(
-                and_(
-                    Opportunity.tenant_id == tenant_id,
-                    Opportunity.stage == OpportunityStage.CLOSED_WON,
+                    Opportunity.stage == stage.value,  # Use .value to get the string representation
                     Opportunity.is_deleted == False
                 )
             ))
-        )
-        
-        pipeline_stages = []
-        stage_labels = ["Qualified", "Scoping", "Proposal Sent", "Negotiation", "Verbal Yes", "Closed Won"]
-        total_pipeline_value = 0.0
-        
-        for idx, result in enumerate(pipeline_stage_queries):
+            # Fetch result immediately to avoid connection conflicts
             row = result.first()
             count = row[0] if row else 0
             value = float(row[1]) if row and row[1] else 0.0
@@ -434,46 +415,43 @@ async def get_dashboard(
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
             month_starts.append(month_start)
             
-            # Prepare queries for parallel execution (create coroutines)
-            month_queries.append([
-                db.execute(select(func.count(Lead.id)).where(
-                    and_(
-                        Lead.tenant_id == tenant_id,
-                        Lead.created_at >= month_start,
-                        Lead.created_at <= month_end,
-                        Lead.is_deleted == False
-                    )
-                )),
-                db.execute(select(func.count(Customer.id)).where(
-                    and_(
-                        Customer.tenant_id == tenant_id,
-                        Customer.status == CustomerStatus.CUSTOMER,
-                        Customer.is_deleted == False,
-                        Customer.created_at >= month_start,
-                        Customer.created_at <= month_end
-                    )
-                )),
-                db.execute(select(func.sum(Quote.total_amount)).where(
-                    and_(
-                        Quote.tenant_id == tenant_id,
-                        Quote.status == QuoteStatus.ACCEPTED,
-                        Quote.is_deleted == False,
-                        Quote.created_at >= month_start,
-                        Quote.created_at <= month_end
-                    )
-                ))
-            ])
-        
-        # Execute all monthly queries in parallel (flatten nested structure)
-        all_month_results = await asyncio.gather(*[asyncio.gather(*queries) for queries in month_queries])
-        
-        # Process results
-        for idx, (new_leads_result, converted_result, month_revenue_result) in enumerate(all_month_results):
+            # Execute queries sequentially for each month and fetch results immediately
+            new_leads_result = await db.execute(select(func.count(Lead.id)).where(
+                and_(
+                    Lead.tenant_id == tenant_id,
+                    Lead.created_at >= month_start,
+                    Lead.created_at <= month_end,
+                    Lead.is_deleted == False
+                )
+            ))
             new_leads = new_leads_result.scalar() or 0
-            converted = converted_result.scalar() or 0
-            revenue_value = month_revenue_result.scalar()
-            month_revenue = float(revenue_value) if revenue_value else 0.0
             
+            converted_result = await db.execute(select(func.count(Customer.id)).where(
+                and_(
+                    Customer.tenant_id == tenant_id,
+                    Customer.status == CustomerStatus.CUSTOMER,
+                    Customer.is_deleted == False,
+                    Customer.created_at >= month_start,
+                    Customer.created_at <= month_end
+                )
+            ))
+            converted = converted_result.scalar() or 0
+            
+            month_revenue_result = await db.execute(select(func.sum(Quote.total_amount)).where(
+                and_(
+                    Quote.tenant_id == tenant_id,
+                    Quote.status == "ACCEPTED",
+                    Quote.is_deleted == False,
+                    Quote.created_at >= month_start,
+                    Quote.created_at <= month_end
+                )
+            ))
+            month_revenue = float(month_revenue_result.scalar() or 0)
+            
+            month_queries.append((new_leads, converted, month_revenue))
+        
+        # Process results (already fetched as values)
+        for idx, (new_leads, converted, month_revenue) in enumerate(month_queries):
             monthly_trends.append(MonthlyTrend(
                 month=calendar.month_abbr[month_starts[idx].month],
                 new_leads=new_leads,
@@ -568,19 +546,21 @@ async def get_dashboard(
         ]
         
         # SLA Metrics
-        # Get total tickets with SLA policies
+        # Get total tickets with SLA policies - fetch scalar immediately
+        # Use string literals for status comparison since database uses VARCHAR, not enum
+        from sqlalchemy import cast, String
         total_tickets_result = await db.execute(
             select(func.count(Ticket.id)).where(
                 and_(
                     Ticket.tenant_id == tenant_id,
                     Ticket.sla_policy_id.isnot(None),
-                    Ticket.status.notin_(['closed', 'resolved'])
+                    cast(Ticket.status, String).notin_(['closed', 'resolved'])
                 )
             )
         )
         sla_total_tickets = total_tickets_result.scalar() or 0
         
-        # Get active breach alerts (unacknowledged)
+        # Get active breach alerts (unacknowledged) - fetch scalar immediately
         active_breaches_result = await db.execute(
             select(func.count(SLABreachAlert.id)).where(
                 and_(
@@ -591,14 +571,14 @@ async def get_dashboard(
         )
         sla_active_breaches = active_breaches_result.scalar() or 0
         
-        # Get tickets at risk (80%+ of SLA time used)
+        # Get tickets at risk (80%+ of SLA time used) - fetch scalar immediately
         # This is a simplified calculation - in production, you'd calculate based on actual SLA targets
         tickets_at_risk_result = await db.execute(
             select(func.count(Ticket.id)).where(
                 and_(
                     Ticket.tenant_id == tenant_id,
                     Ticket.sla_policy_id.isnot(None),
-                    Ticket.status.notin_(['closed', 'resolved'])
+                    cast(Ticket.status, String).notin_(['closed', 'resolved'])
                 )
             )
         )

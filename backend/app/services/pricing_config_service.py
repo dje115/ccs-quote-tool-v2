@@ -421,4 +421,43 @@ class PricingConfigService:
         except Exception as e:
             logger.error(f"Error getting day rate info: {e}")
             return "**Labour Rate:** £300 per pair of engineers per day (8-hour day)"
+    
+    def get_day_rates(
+        self,
+        role: Optional[str] = None,
+        skill_level: Optional[str] = None
+    ) -> List[TenantPricingConfig]:
+        """
+        Get day rate configurations
+        
+        Args:
+            role: Optional role filter (e.g., "engineer", "technician")
+            skill_level: Optional skill level filter
+        
+        Returns:
+            List of day rate configurations
+        """
+        configs = self.get_configs(
+            config_type=PricingConfigType.DAY_RATE.value,
+            include_inactive=False
+        )
+        
+        # Filter by role/skill if specified
+        if role or skill_level:
+            filtered = []
+            for config in configs:
+                config_data = config.config_data or {}
+                engineer_grades = config_data.get("engineer_grades", [])
+                
+                # Check role match (would need role field in config_data)
+                # For now, just check skill level
+                if skill_level:
+                    if skill_level.lower() in [g.lower() for g in engineer_grades]:
+                        filtered.append(config)
+                else:
+                    filtered.append(config)
+            
+            return filtered
+        
+        return configs
 

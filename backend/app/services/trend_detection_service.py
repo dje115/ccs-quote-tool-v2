@@ -151,11 +151,12 @@ class TrendDetectionService:
         start_date = datetime.now(timezone.utc) - timedelta(days=days_back)
         
         # Get rejected/stalled quotes
+        # Use string literals to match database enum case (uppercase)
         quotes = self.db.query(Quote).filter(
             and_(
                 Quote.tenant_id == self.tenant_id,
                 Quote.created_at >= start_date,
-                Quote.status.in_([QuoteStatus.REJECTED, QuoteStatus.SENT])  # Stalled or rejected
+                Quote.status.in_(["REJECTED", "SENT"])  # Stalled or rejected
             )
         ).all()
         
@@ -174,7 +175,8 @@ class TrendDetectionService:
                 })
         
         # Analyze time-to-rejection
-        rejected_quotes = [q for q in quotes if q.status == QuoteStatus.REJECTED]
+        # Filter by status - database enum uses uppercase, Python enum uses lowercase
+        rejected_quotes = [q for q in quotes if (hasattr(q.status, 'value') and q.status.value.upper() == "REJECTED") or str(q.status).upper() == "REJECTED"]
         if rejected_quotes:
             avg_time_to_rejection = sum(
                 [(q.updated_at - q.created_at).days for q in rejected_quotes if q.updated_at]
@@ -239,10 +241,11 @@ class TrendDetectionService:
                     })
             
             # Check for quote rejection spike
+            # Use string literal to match database enum case (uppercase)
             rejected_quotes = self.db.query(Quote).filter(
                 and_(
                     Quote.customer_id == customer.id,
-                    Quote.status == QuoteStatus.REJECTED,
+                    Quote.status == "REJECTED",
                     Quote.created_at >= start_date
                 )
             ).count()

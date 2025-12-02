@@ -63,6 +63,7 @@ class SupportContractCreate(BaseModel):
     opportunity_id: Optional[str] = None
     notes: Optional[str] = None
     contract_metadata: Optional[Dict[str, Any]] = None
+    generate_quote: bool = False  # Optionally generate a quote and proposal from this contract
 
 
 class SupportContractUpdate(BaseModel):

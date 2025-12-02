@@ -26,6 +26,9 @@ def refresh_customer_suggestions(self, customer_id: str, tenant_id: str) -> Dict
     This task runs asynchronously to avoid blocking the user interface
     while AI generates new suggestions.
     
+    Uses ActivityService.generate_action_suggestions() to ensure quote/ticket
+    context is properly included in the prompt.
+    
     Args:
         customer_id: Customer ID
         tenant_id: Tenant ID
@@ -55,162 +58,12 @@ def refresh_customer_suggestions(self, customer_id: str, tenant_id: str) -> Dict
         
         print(f"📊 Analyzing: {customer.company_name}")
         
-        # Get recent activities
-        activities = db.query(SalesActivity).filter(
-            SalesActivity.customer_id == customer_id,
-            SalesActivity.tenant_id == tenant_id
-        ).order_by(desc(SalesActivity.activity_date)).limit(10).all()
+        # Use ActivityService to generate suggestions (ensures quote/ticket context is included)
+        from app.services.activity_service import ActivityService
         
-        # Get tenant for API keys and context
-        from app.models.tenant import Tenant
-        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        activity_service = ActivityService(db, tenant_id=tenant_id)
         
-        if not tenant:
-            print(f"❌ Tenant not found: {tenant_id}")
-            return {'success': False, 'error': 'Tenant not found'}
-        
-        # Get API keys
-        api_keys = get_api_keys(db, tenant)
-        if not api_keys.openai:
-            print("❌ No OpenAI API key configured")
-            return {'success': False, 'error': 'No OpenAI API key configured'}
-        
-        # Build activity summary
-        activity_summary = ""
-        if activities:
-            activity_summary = f"Recent activity history ({len(activities)} interactions):\n"
-            for act in activities[:5]:
-                activity_summary += f" - {act.activity_date.strftime('%Y-%m-%d')}: {act.activity_type.value}"
-                if act.subject:
-                    activity_summary += f" - {act.subject}\n"
-                else:
-                    activity_summary += f" - {act.notes[:100]}...\n"
-        
-        days_since_contact = None
-        if activities:
-            days_since_contact = (datetime.now(timezone.utc) - activities[0].activity_date).days
-        
-        # Extract AI analysis data
-        needs_assessment = ""
-        business_opportunities = ""
-        how_we_can_help = ""
-        
-        if customer.ai_analysis_raw:
-            needs_assessment = customer.ai_analysis_raw.get('needs_assessment', '')
-            business_opportunities = customer.ai_analysis_raw.get('business_opportunities', '')
-            how_we_can_help = customer.ai_analysis_raw.get('how_we_can_help', '')
-            
-            # Fallback to older field names
-            if not needs_assessment:
-                tech_needs = customer.ai_analysis_raw.get('technology_needs', [])
-                if isinstance(tech_needs, list):
-                    needs_assessment = '\n'.join(f"- {need}" for need in tech_needs)
-            
-            if not business_opportunities:
-                opportunities = customer.ai_analysis_raw.get('opportunities', [])
-                if isinstance(opportunities, list):
-                    business_opportunities = '\n'.join(f"- {opp}" for opp in opportunities)
-        
-        # Build tenant context
-        tenant_context = f"""
-Your Company Information:
-- Company: {tenant.company_name or tenant.name}
-- Description: {tenant.company_description or 'Not provided'}
-
-Products & Services:
-{tenant.products_services or 'Not provided'}
-
-Unique Selling Points:
-{tenant.unique_selling_points or 'Not provided'}
-
-Target Markets:
-{tenant.target_markets or 'Not provided'}
-
-Partnership Opportunities (B2B):
-{tenant.partnership_opportunities or 'Not provided'}
-"""
-        
-        # Build comprehensive prompt
-        prompt = f"""You are a sales strategy AI helping {tenant.company_name or tenant.name} engage with their customer: {customer.company_name}.
-
-{tenant_context}
-
-Customer Information:
-- Company: {customer.company_name}
-- Status: {customer.status.value if customer.status else 'Unknown'}
-- Sector: {customer.business_sector.value if customer.business_sector else 'Unknown'}
-- Size: {customer.business_size.value if customer.business_size else 'Unknown'}
-- Website: {customer.website or 'Not provided'}
-- Days since last contact: {days_since_contact if days_since_contact else 'Never contacted'}
-
-Customer's Needs Assessment:
-{needs_assessment or 'Not yet analyzed'}
-
-Business Opportunities Identified:
-{business_opportunities or 'Not yet analyzed'}
-
-How We Can Help:
-{how_we_can_help or 'Not yet analyzed'}
-
-{activity_summary or 'No activity history yet'}
-
-Based on this information, generate THREE specific, actionable suggestions:
-
-1. **Call Suggestion**: When to call, what to discuss, and key talking points
-2. **Email Suggestion**: When to email, subject line, and key topics to cover
-3. **Visit Suggestion**: When to visit (if appropriate), objectives, and what to bring/demo
-
-For each suggestion:
-- Be specific and actionable
-- Reference the customer's actual needs and your company's solutions
-- Consider their stage in the sales cycle
-- Include timing recommendations
-- Make it relevant to their business sector and size
-
-Respond in this exact JSON format:
-{{
-    "call": {{
-        "priority": "high|medium|low",
-        "timing": "specific timing recommendation",
-        "objective": "what you want to achieve",
-        "talking_points": ["point 1", "point 2", "point 3"]
-    }},
-    "email": {{
-        "priority": "high|medium|low",
-        "timing": "specific timing recommendation",
-        "subject": "suggested email subject line",
-        "key_topics": ["topic 1", "topic 2", "topic 3"]
-    }},
-    "visit": {{
-        "priority": "high|medium|low",
-        "recommended": true/false,
-        "timing": "specific timing recommendation",
-        "objectives": ["objective 1", "objective 2"],
-        "what_to_bring": ["item 1", "item 2"]
-    }}
-}}"""
-        
-        print(f"🤖 Calling AI Provider Service (gpt-5-mini)...")
-        
-        # Use AIProviderService for proper model handling
-        async def generate_suggestions():
-            from app.services.ai_provider_service import AIProviderService
-            
-            provider_service = AIProviderService(db, tenant_id=tenant_id)
-            
-            response = await provider_service.generate_with_rendered_prompts(
-                prompt=None,
-                system_prompt="You are a sales strategy AI that provides actionable customer engagement suggestions. Always respond with valid JSON.",
-                user_prompt=prompt,
-                model="gpt-5-mini",
-                max_tokens=20000,
-                timeout=240.0,
-                response_format={"type": "json_object"}
-            )
-            
-            return response
-        
-        # Run async function in sync context
+        # Run async method in sync context
         import asyncio
         try:
             loop = asyncio.get_event_loop()
@@ -218,18 +71,16 @@ Respond in this exact JSON format:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
         
-        provider_response = loop.run_until_complete(generate_suggestions())
+        print(f"🤖 Calling ActivityService.generate_action_suggestions()...")
+        print(f"[ACTION PROMPT] Using ActivityService to ensure quote_summary and ticket_summary are included")
         
-        if provider_response and provider_response.content:
-            suggestions = json.loads(provider_response.content)
-            generated_at = datetime.now(timezone.utc)
-            
-            # Cache the suggestions in the database
-            customer.ai_suggestions = suggestions
-            customer.ai_suggestions_date = generated_at
-            db.commit()
-            
+        result = loop.run_until_complete(
+            activity_service.generate_action_suggestions(customer_id, force_refresh=True)
+        )
+        
+        if result.get('success'):
             print(f"✅ Successfully generated and cached suggestions for {customer.company_name}")
+            print(f"   Generated at: {result.get('generated_at')}")
             print(f"{'='*80}\n")
             
             # Publish suggestions updated event (sync wrapper for Celery)
@@ -244,10 +95,10 @@ Respond in this exact JSON format:
                 'success': True,
                 'customer_id': customer_id,
                 'customer_name': customer.company_name,
-                'generated_at': generated_at.isoformat()
+                'generated_at': result.get('generated_at')
             }
         else:
-            error_msg = f"OpenAI API error: {response.status_code}"
+            error_msg = result.get('error', 'Unknown error generating suggestions')
             print(f"❌ {error_msg}")
             return {'success': False, 'error': error_msg}
             

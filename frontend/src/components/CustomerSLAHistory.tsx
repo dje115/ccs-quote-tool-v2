@@ -16,15 +16,40 @@ import {
   LinearProgress,
   Chip,
   TextField,
-  Button
+  Button,
+  Grid
 } from '@mui/material';
 import {
   Assessment as AssessmentIcon,
   CalendarToday as CalendarIcon,
   TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon
+  TrendingDown as TrendingDownIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { slaAPI } from '../services/api';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 interface CustomerSLAHistoryProps {
   customerId: string;
@@ -38,6 +63,7 @@ const CustomerSLAHistory: React.FC<CustomerSLAHistoryProps> = ({ customerId }) =
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showChart, setShowChart] = useState(true);
 
   useEffect(() => {
     loadHistory();
@@ -122,6 +148,14 @@ const CustomerSLAHistory: React.FC<CustomerSLAHistoryProps> = ({ customerId }) =
             <Button variant="outlined" size="small" onClick={loadHistory}>
               Refresh
             </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<DownloadIcon />}
+              onClick={handleExport}
+            >
+              Export CSV
+            </Button>
           </Box>
         </Box>
 
@@ -133,6 +167,68 @@ const CustomerSLAHistory: React.FC<CustomerSLAHistoryProps> = ({ customerId }) =
             Total Records: {history.total_records}
           </Typography>
         </Box>
+
+        {/* Chart Visualization */}
+        {showChart && history.daily_compliance.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Compliance Rate Trends
+              </Typography>
+              <Box sx={{ height: 300, mt: 2 }}>
+                <Line
+                  data={{
+                    labels: history.daily_compliance.map((d: any) => new Date(d.date).toLocaleDateString()),
+                    datasets: [
+                      {
+                        label: 'First Response Compliance (%)',
+                        data: history.daily_compliance.map((d: any) => d.first_response_compliance_rate),
+                        borderColor: '#2196f3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                      },
+                      {
+                        label: 'Resolution Compliance (%)',
+                        data: history.daily_compliance.map((d: any) => d.resolution_compliance_rate),
+                        borderColor: '#4caf50',
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                      }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top' },
+                      tooltip: {
+                        callbacks: {
+                          label: (context: any) => {
+                            return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}%`;
+                          }
+                        }
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: false,
+                        min: 0,
+                        max: 100,
+                        ticks: {
+                          callback: function(value) {
+                            return value + '%';
+                          }
+                        }
+                      }
+                    }
+                  }}
+                />
+              </Box>
+            </Paper>
+          </Box>
+        )}
 
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
@@ -242,9 +338,38 @@ const CustomerSLAHistory: React.FC<CustomerSLAHistoryProps> = ({ customerId }) =
           </Table>
         </TableContainer>
       </CardContent>
-    </Card>
-  );
-};
+      </Card>
+    );
+  };
+
+  const handleExport = () => {
+    if (!history || !history.daily_compliance) return;
+    
+    // Create CSV content
+    const headers = ['Date', 'Total Tickets', 'First Response Compliance Rate (%)', 'Resolution Compliance Rate (%)'];
+    const rows = history.daily_compliance.map((day: any) => [
+      day.date,
+      day.total_tickets,
+      day.first_response_compliance_rate.toFixed(2),
+      day.resolution_compliance_rate.toFixed(2)
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row: any[]) => row.join(','))
+    ].join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sla_compliance_history_${customerId}_${startDate}_${endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
 
 export default CustomerSLAHistory;
 

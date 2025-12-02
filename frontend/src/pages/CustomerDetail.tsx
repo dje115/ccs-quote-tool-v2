@@ -94,6 +94,7 @@ import CustomerOverviewTab from '../components/CustomerOverviewTab';
 import ActivityCenter from '../components/ActivityCenter';
 import CustomerTimeline from '../components/CustomerTimeline';
 import ContactDialog from '../components/ContactDialog';
+import CustomerContractsTab from '../components/CustomerContractsTab';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -757,7 +758,7 @@ const CustomerDetail: React.FC = () => {
         
         {/* Second Row of Tabs - Activity & Documents */}
         <Tabs
-          value={currentTab >= 7 ? currentTab - 7 : false}
+          value={currentTab >= 7 && currentTab <= 11 ? currentTab - 7 : false}
           onChange={(e, newValue) => {
             const tabIndex = newValue + 7;
             setCurrentTab(tabIndex);
@@ -785,6 +786,7 @@ const CustomerDetail: React.FC = () => {
           <Tab icon={<DescriptionIcon />} iconPosition="start" label="Quotes" />
           <Tab icon={<WorkIcon />} iconPosition="start" label="Opportunities" />
           <Tab icon={<SupportIcon />} iconPosition="start" label="Tickets" />
+          <Tab icon={<DescriptionIcon />} iconPosition="start" label="Contracts" />
         </Tabs>
       </Paper>
       {/* Tab Panel 0: Overview - World-Class AI-Powered CRM */}
@@ -2178,7 +2180,9 @@ const CustomerDetail: React.FC = () => {
       {currentTab === 7 && customer && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <ActivityCenter customerId={customer.id} />
-          <CustomerTimeline customerId={customer.id} limit={30} />
+          <Box sx={{ width: '100%' }}>
+            <CustomerTimeline customerId={customer.id} limit={30} />
+          </Box>
         </Box>
       )}
       {/* Tab Panel 8: Quotes */}
@@ -2399,118 +2403,120 @@ const CustomerDetail: React.FC = () => {
       
       {/* Tab Panel 10: Tickets */}
       {currentTab === 10 && (
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SupportIcon /> Support Tickets
-            </Typography>
-            <Button 
-              variant="contained" 
-              startIcon={<AddIcon />}
-              onClick={() => setCreateTicketDialogOpen(true)}
-            >
-              Create New Ticket
-            </Button>
-          </Box>
-          
-          {tickets.length === 0 ? (
-            <Alert severity="info">
-              No tickets found for this customer. Create a new ticket to get started.
-            </Alert>
-          ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell><strong>Ticket #</strong></TableCell>
-                    <TableCell><strong>Subject</strong></TableCell>
-                    <TableCell><strong>Status</strong></TableCell>
-                    <TableCell><strong>Priority</strong></TableCell>
-                    <TableCell><strong>SLA Status</strong></TableCell>
-                    <TableCell><strong>Created</strong></TableCell>
-                    <TableCell><strong>Actions</strong></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {tickets.map((ticket: any) => {
-                    const hasSLA = ticket.sla_policy_id;
-                    const hasBreach = ticket.sla_first_response_breached || ticket.sla_resolution_breached;
-                    const slaStatus = hasSLA ? (hasBreach ? 'breached' : 'compliant') : 'no_sla';
-                    
-                    return (
-                      <TableRow key={ticket.id} hover>
-                        <TableCell>{ticket.ticket_number}</TableCell>
-                        <TableCell>{ticket.subject}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={ticket.status} 
-                            size="small"
-                            color={
-                              ticket.status === 'open' ? 'error' :
-                              ticket.status === 'in_progress' ? 'warning' :
-                              ticket.status === 'resolved' ? 'success' :
-                              ticket.status === 'closed' ? 'default' : 'default'
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={ticket.priority} 
-                            size="small"
-                            color={
-                              ticket.priority === 'urgent' ? 'error' :
-                              ticket.priority === 'high' ? 'warning' :
-                              ticket.priority === 'medium' ? 'info' : 'default'
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {hasSLA ? (
-                            <Tooltip title={
-                              hasBreach 
-                                ? `SLA Breached: ${ticket.sla_first_response_breached ? 'First Response' : ''}${ticket.sla_first_response_breached && ticket.sla_resolution_breached ? ' & ' : ''}${ticket.sla_resolution_breached ? 'Resolution' : ''}`
-                                : 'SLA Compliant'
-                            }>
-                              <Chip
-                                icon={hasBreach ? <ErrorIcon /> : <CheckCircleIcon />}
-                                label={hasBreach ? 'Breached' : 'Compliant'}
-                                size="small"
-                                color={hasBreach ? 'error' : 'success'}
-                              />
-                            </Tooltip>
-                          ) : (
-                            <Chip
-                              label="No SLA"
+        <Box>
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SupportIcon /> Support Tickets
+              </Typography>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />}
+                onClick={() => setCreateTicketDialogOpen(true)}
+              >
+                Create New Ticket
+              </Button>
+            </Box>
+            
+            {tickets.length === 0 ? (
+              <Alert severity="info">
+                No tickets found for this customer. Create a new ticket to get started.
+              </Alert>
+            ) : (
+              <TableContainer component={Paper} variant="outlined">
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><strong>Ticket #</strong></TableCell>
+                      <TableCell><strong>Subject</strong></TableCell>
+                      <TableCell><strong>Status</strong></TableCell>
+                      <TableCell><strong>Priority</strong></TableCell>
+                      <TableCell><strong>SLA Status</strong></TableCell>
+                      <TableCell><strong>Created</strong></TableCell>
+                      <TableCell><strong>Actions</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {tickets.map((ticket: any) => {
+                      const hasSLA = ticket.sla_policy_id;
+                      const hasBreach = ticket.sla_first_response_breached || ticket.sla_resolution_breached;
+                      const slaStatus = hasSLA ? (hasBreach ? 'breached' : 'compliant') : 'no_sla';
+                      
+                      return (
+                        <TableRow key={ticket.id} hover>
+                          <TableCell>{ticket.ticket_number}</TableCell>
+                          <TableCell>{ticket.subject}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={ticket.status} 
                               size="small"
-                              color="default"
-                              variant="outlined"
+                              color={
+                                ticket.status === 'open' ? 'error' :
+                                ticket.status === 'in_progress' ? 'warning' :
+                                ticket.status === 'resolved' ? 'success' :
+                                ticket.status === 'closed' ? 'default' : 'default'
+                              }
                             />
-                          )}
-                        </TableCell>
-                        <TableCell>{new Date(ticket.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Button
-                            size="small"
-                            onClick={() => navigate(`/helpdesk/${ticket.id}`)}
-                          >
-                            View
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Paper>
+                          </TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={ticket.priority} 
+                              size="small"
+                              color={
+                                ticket.priority === 'urgent' ? 'error' :
+                                ticket.priority === 'high' ? 'warning' :
+                                ticket.priority === 'medium' ? 'info' : 'default'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {hasSLA ? (
+                              <Tooltip title={
+                                hasBreach 
+                                  ? `SLA Breached: ${ticket.sla_first_response_breached ? 'First Response' : ''}${ticket.sla_first_response_breached && ticket.sla_resolution_breached ? ' & ' : ''}${ticket.sla_resolution_breached ? 'Resolution' : ''}`
+                                  : 'SLA Compliant'
+                              }>
+                                <Chip
+                                  icon={hasBreach ? <ErrorIcon /> : <CheckCircleIcon />}
+                                  label={hasBreach ? 'Breached' : 'Compliant'}
+                                  size="small"
+                                  color={hasBreach ? 'error' : 'success'}
+                                />
+                              </Tooltip>
+                            ) : (
+                              <Chip
+                                label="No SLA"
+                                size="small"
+                                color="default"
+                                variant="outlined"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>{new Date(ticket.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Button
+                              size="small"
+                              onClick={() => navigate(`/helpdesk/${ticket.id}`)}
+                            >
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Paper>
 
-        {/* SLA Compliance History */}
-        {customer?.id && (
-          <Box sx={{ mb: 3 }}>
-            <CustomerSLAHistory customerId={customer.id} />
-          </Box>
-        )}
+          {/* SLA Compliance History */}
+          {customer?.id && (
+            <Box sx={{ mb: 3 }}>
+              <CustomerSLAHistory customerId={customer.id} />
+            </Box>
+          )}
+        </Box>
       )}
       {/* Contact Dialog */}
       <ContactDialog
@@ -2588,6 +2594,11 @@ const CustomerDetail: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Tab Panel 11: Contracts */}
+      {currentTab === 11 && customer && (
+        <CustomerContractsTab customerId={customer.id} />
+      )}
     </Container>
   );
 };
