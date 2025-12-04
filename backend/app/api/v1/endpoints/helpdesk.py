@@ -2647,10 +2647,13 @@ async def agent_chat_with_ticket(
     except Exception as exc:
         import logging
         logger = logging.getLogger(__name__)
+        error_msg = str(exc)
         logger.error("Failed to start agent chat: %s", exc, exc_info=True)
+        # Include more detail in development, but keep generic in production
+        detail_msg = f"Failed to start agent chat: {error_msg}" if logger.level <= logging.DEBUG else "Failed to start agent chat"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start agent chat"
+            detail=detail_msg
         ) from exc
     finally:
         sync_db.close()
@@ -2666,6 +2669,8 @@ async def get_agent_chat_history(
     """Get chat history for a ticket"""
     from app.core.database import SessionLocal
     from app.models.helpdesk import Ticket, TicketAgentChat
+    from sqlalchemy.exc import ProgrammingError, OperationalError
+    from sqlalchemy import inspect
     
     sync_db = SessionLocal()
     try:
@@ -2677,6 +2682,17 @@ async def get_agent_chat_history(
         
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Check if table exists before querying
+        inspector = inspect(sync_db.bind)
+        table_exists = "ticket_agent_chat" in inspector.get_table_names()
+        
+        if not table_exists:
+            # Table doesn't exist yet - return empty array
+            return {
+                "ticket_id": ticket_id,
+                "messages": []
+            }
         
         # Get all chat messages
         messages = sync_db.query(TicketAgentChat).filter(
@@ -2694,6 +2710,7 @@ async def get_agent_chat_history(
                     "timestamp": msg.created_at.isoformat() if msg.created_at else None,
                     "ai_status": msg.ai_status,
                     "ai_model": msg.ai_model,
+                    "ai_task_id": msg.ai_task_id,  # Include task ID for frontend polling
                     "attachments": msg.attachments,
                     "log_files": msg.log_files,
                     "linked_to_npa_id": msg.linked_to_npa_id,
@@ -2702,6 +2719,17 @@ async def get_agent_chat_history(
                 }
                 for msg in messages
             ]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error loading chat history: {e}", exc_info=True)
+        # Return empty history on error
+        return {
+            "ticket_id": ticket_id,
+            "messages": []
         }
     finally:
         sync_db.close()
@@ -2744,6 +2772,7 @@ async def save_chat_to_npa(
     ticket_id: str,
     message_id: str,
     npa_id: Optional[str] = Body(None, embed=True),
+    create_new: Optional[bool] = Body(False, embed=True),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_async_db)
@@ -2773,22 +2802,12 @@ async def save_chat_to_npa(
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
         
-        # Get all messages in conversation up to this point
-        all_messages = sync_db.query(TicketAgentChat).filter(
-            TicketAgentChat.ticket_id == ticket_id,
-            TicketAgentChat.tenant_id == current_tenant.id,
-            TicketAgentChat.created_at <= message.created_at
-        ).order_by(TicketAgentChat.created_at).all()
+        # Only use the current message content (the AI answer), not the whole conversation
+        message_content = message.content
         
-        # Build conversation text
-        conversation_text = "\n\n".join([
-            f"{msg.role.upper()}: {msg.content}"
-            for msg in all_messages
-        ])
-        
+        # If create_new is True, skip to creating new NPA
         if create_new:
-            # Force create new NPA
-            pass  # Will fall through to create new NPA logic
+            pass  # Will fall through to create new NPA logic below
         elif npa_id:
             # Update existing NPA by ID
             npa = sync_db.query(NPAHistory).filter(
@@ -2800,15 +2819,14 @@ async def save_chat_to_npa(
             if not npa:
                 raise HTTPException(status_code=404, detail="NPA not found")
             
-            # Append conversation to answers
+            # Append current AI answer to answers
             if npa.answers_to_questions:
-                npa.answers_to_questions += f"\n\n--- Agent Chat Conversation ---\n{conversation_text}"
+                npa.answers_to_questions += f"\n\n--- AI Assistant Answer ---\n{message_content}"
             else:
-                npa.answers_to_questions = f"--- Agent Chat Conversation ---\n{conversation_text}"
+                npa.answers_to_questions = f"--- AI Assistant Answer ---\n{message_content}"
             
-            # Link messages to NPA
-            for msg in all_messages:
-                msg.linked_to_npa_id = npa_id
+            # Link this message to NPA
+            message.linked_to_npa_id = npa_id
             
             sync_db.commit()
             
@@ -2826,15 +2844,14 @@ async def save_chat_to_npa(
             ).order_by(NPAHistory.created_at.desc()).first()
             
             if current_npa:
-                # Append conversation to answers
+                # Append current AI answer to answers
                 if current_npa.answers_to_questions:
-                    current_npa.answers_to_questions += f"\n\n--- Agent Chat Conversation ---\n{conversation_text}"
+                    current_npa.answers_to_questions += f"\n\n--- AI Assistant Answer ---\n{message_content}"
                 else:
-                    current_npa.answers_to_questions = f"--- Agent Chat Conversation ---\n{conversation_text}"
+                    current_npa.answers_to_questions = f"--- AI Assistant Answer ---\n{message_content}"
                 
-                # Link messages to NPA
-                for msg in all_messages:
-                    msg.linked_to_npa_id = current_npa.id
+                # Link this message to NPA
+                message.linked_to_npa_id = current_npa.id
                 
                 sync_db.commit()
                 
@@ -2844,14 +2861,14 @@ async def save_chat_to_npa(
                     "message": "Chat saved to current NPA"
                 }
         
-        # Create new NPA (if create_new=True or no current NPA)
-        if True:
-            # Create new NPA and close current one if exists
-            npa_service = TicketNPAService(sync_db, current_tenant.id)
+        # Create new NPA (if create_new=True or no current NPA exists)
+        if create_new or not ticket.npa_original_text:
+            from datetime import datetime, timezone
+            import uuid
             
             # Close current NPA if exists
             if ticket.npa_original_text:
-                # Mark current NPA as completed
+                # Save current NPA to history and mark as completed
                 current_npa_history = sync_db.query(NPAHistory).filter(
                     NPAHistory.ticket_id == ticket_id,
                     NPAHistory.tenant_id == current_tenant.id,
@@ -2859,29 +2876,69 @@ async def save_chat_to_npa(
                 ).order_by(NPAHistory.created_at.desc()).first()
                 
                 if current_npa_history:
-                    current_npa_history.completed_at = func.now()
+                    # Mark existing history entry as completed
+                    current_npa_history.completed_at = datetime.now(timezone.utc)
                     current_npa_history.completed_by_id = current_user.id
                     current_npa_history.completion_notes = "Closed when creating new NPA from agent chat"
+                else:
+                    # Create history entry for current NPA before closing
+                    closed_npa_history = NPAHistory(
+                        id=str(uuid.uuid4()),
+                        ticket_id=ticket_id,
+                        tenant_id=current_tenant.id,
+                        npa_original_text=ticket.npa_original_text,
+                        npa_cleaned_text=ticket.npa_cleaned_text,
+                        npa_state=ticket.npa_state if isinstance(ticket.npa_state, str) else (ticket.npa_state.value if hasattr(ticket.npa_state, 'value') else str(ticket.npa_state)) if ticket.npa_state else 'investigation',
+                        assigned_to_id=ticket.next_point_of_action_assigned_to_id,
+                        due_date=ticket.next_point_of_action_due_date,
+                        date_override=ticket.npa_date_override,
+                        exclude_from_sla=ticket.npa_exclude_from_sla,
+                        answers_to_questions=ticket.npa_answers_original_text,
+                        answers_cleaned_text=ticket.npa_answers_cleaned_text,
+                        completed_at=datetime.now(timezone.utc),
+                        completed_by_id=current_user.id,
+                        completion_notes="Closed when creating new NPA from agent chat"
+                    )
+                    sync_db.add(closed_npa_history)
             
-            # Create new NPA from chat
-            result = await npa_service.update_npa(
+            # Create new NPA from AI answer
+            npa_service = TicketNPAService(sync_db, current_tenant.id)
+            result = npa_service.update_npa(
                 ticket=ticket,
-                npa=f"Agent Chat Conversation:\n{conversation_text}",
+                npa=message_content,  # Use only the current AI answer
                 trigger_ai_cleanup=True
             )
             
-            new_npa_id = result.get("npa_history_id")
+            # Create a history entry for the new NPA (update_npa saves old to history, but new is only on ticket)
+            new_npa_history = NPAHistory(
+                id=str(uuid.uuid4()),
+                ticket_id=ticket_id,
+                tenant_id=current_tenant.id,
+                npa_original_text=message_content,
+                npa_cleaned_text=result.get("npa"),  # AI-cleaned version if available
+                npa_state=ticket.npa_state if isinstance(ticket.npa_state, str) else (ticket.npa_state.value if hasattr(ticket.npa_state, 'value') else str(ticket.npa_state)) if ticket.npa_state else 'investigation',
+                assigned_to_id=ticket.next_point_of_action_assigned_to_id,
+                due_date=ticket.next_point_of_action_due_date,
+                date_override=ticket.npa_date_override,
+                exclude_from_sla=ticket.npa_exclude_from_sla,
+                answers_to_questions=message_content,  # Store the AI answer as answers
+                ai_cleanup_status=result.get("ai_cleanup_status", "pending"),
+                ai_cleanup_task_id=result.get("ai_cleanup_task_id")
+            )
+            sync_db.add(new_npa_history)
+            sync_db.flush()  # Flush to get the ID
             
-            # Link messages to new NPA
-            for msg in all_messages:
-                msg.linked_to_npa_id = new_npa_id
+            new_npa_id = new_npa_history.id
+            
+            # Link this message to new NPA
+            message.linked_to_npa_id = new_npa_id
             
             sync_db.commit()
             
             return {
                 "success": True,
                 "npa_id": new_npa_id,
-                "message": "New NPA created from chat and previous NPA closed"
+                "message": "New NPA created from AI answer and previous NPA closed"
             }
     finally:
         sync_db.close()

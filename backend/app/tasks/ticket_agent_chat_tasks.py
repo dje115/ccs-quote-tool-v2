@@ -5,6 +5,7 @@ Handles AI chat responses in the background
 """
 
 import logging
+import uuid
 from typing import Dict, Any, List, Optional
 from app.core.celery_app import celery_app
 from app.core.database import SessionLocal

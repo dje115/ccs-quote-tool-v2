@@ -49,6 +49,7 @@ type ChatMessage = {
   timestamp?: Date | string;
   ai_status?: string;
   ai_model?: string;
+  ai_task_id?: string;  // Celery task ID for tracking
   linked_to_npa_id?: string;
   is_solution?: boolean;
   solution_notes?: string;
@@ -115,32 +116,60 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
   const loadChatHistory = async () => {
     try {
       setLoadingHistory(true);
+      setError(null); // Clear any previous errors
       const response = await helpdeskAPI.getAgentChatHistory(ticketId);
-      if (response.data?.messages) {
-        const loadedMessages: ChatMessage[] = response.data.messages.map((msg: any) => ({
+      
+      // Always clear error on successful response
+      setError(null);
+      
+      // Handle response - messages might be undefined if table doesn't exist yet
+      const messagesArray = response.data?.messages || [];
+      
+      if (Array.isArray(messagesArray)) {
+        const loadedMessages: ChatMessage[] = messagesArray.map((msg: any) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content,
           timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
           ai_status: msg.ai_status,
           ai_model: msg.ai_model,
+          ai_task_id: msg.ai_task_id,  // Include task ID for polling
           linked_to_npa_id: msg.linked_to_npa_id,
           is_solution: msg.is_solution,
           solution_notes: msg.solution_notes
         }));
         setMessages(loadedMessages);
         
-        // Check if any message is still processing
-        const processingMessage = loadedMessages.find(m => m.ai_status === 'processing' || m.ai_status === 'pending');
-        if (processingMessage?.id) {
-          // Find the task ID from the message (we'll need to track this)
-          // For now, just reload after a delay
-          setTimeout(() => loadChatHistory(), 3000);
+        // Check if any message is still processing and resume polling
+        const processingMessage = loadedMessages.find(m => 
+          (m.ai_status === 'processing' || m.ai_status === 'pending') && m.ai_task_id
+        );
+        if (processingMessage?.ai_task_id) {
+          // Resume polling for this task
+          setPollingTaskId(processingMessage.ai_task_id);
         }
+      } else {
+        // No messages yet - this is fine, just set empty array
+        setMessages([]);
       }
     } catch (err: any) {
       console.error('Failed to load chat history:', err);
-      setError('Failed to load chat history');
+      // Only show error for actual failures, not for missing table (which returns empty array)
+      if (err.response?.status && err.response.status >= 400 && err.response.status !== 500) {
+        setError('Failed to load chat history');
+      } else if (err.response?.status === 500) {
+        // 500 might be table missing, but also might be real error
+        // Check error message
+        const errorDetail = err.response?.data?.detail || '';
+        if (!errorDetail.includes('table') && !errorDetail.includes('relation') && !errorDetail.includes('does not exist')) {
+          setError('Failed to load chat history');
+        }
+      } else if (!err.response) {
+        // Network error or other non-HTTP error
+        setError('Failed to load chat history');
+      }
+      // Set empty messages array so UI still works
+      setMessages([]);
     } finally {
       setLoadingHistory(false);
     }
@@ -151,12 +180,22 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
       const response = await helpdeskAPI.getAgentChatTaskStatus(ticketId, taskId);
       if (response.data?.status === 'completed') {
         setPollingTaskId(null);
-        await loadChatHistory(); // Reload to get the new message
+        // Reload chat history to get the completed AI response
+        // Use a flag to prevent scrolling during this reload
+        await loadChatHistory();
       } else if (response.data?.status === 'failed') {
         setPollingTaskId(null);
         setError(response.data?.error || 'AI response failed');
-        await loadChatHistory();
+        // Update the pending message to show error without full reload
+        setMessages((prev) => 
+          prev.map(msg => 
+            msg.ai_task_id === taskId && msg.ai_status === 'processing' 
+              ? { ...msg, ai_status: 'failed', content: 'Sorry, I encountered an error. Please try again.' }
+              : msg
+          )
+        );
       }
+      // If still processing, no action needed - will poll again
     } catch (err: any) {
       console.error('Failed to check task status:', err);
     }
@@ -167,8 +206,11 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Only scroll if we're not polling (to avoid jumps during polling)
+    if (!pollingTaskId) {
+      scrollToBottom();
+    }
+  }, [messages, pollingTaskId]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -249,12 +291,13 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
         // Start polling for task completion
         setPollingTaskId(response.data.task_id);
         
-        // Add placeholder for AI response
+        // Add placeholder for AI response with task ID for tracking
         const placeholderMessage: ChatMessage = {
           id: response.data.user_message_id,
           role: 'assistant',
           content: 'AI is thinking...',
           ai_status: 'processing',
+          ai_task_id: response.data.task_id,  // Store task ID for polling
           timestamp: new Date()
         };
         setMessages((prev) => [...prev, placeholderMessage]);

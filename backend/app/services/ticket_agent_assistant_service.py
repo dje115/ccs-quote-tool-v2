@@ -5,7 +5,7 @@ Allows agents to have conversations with AI about tickets, with support for atta
 """
 
 from typing import List, Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 from app.core.database import SessionLocal
 from app.models.helpdesk import Ticket, TicketComment, TicketAttachment
@@ -18,13 +18,14 @@ from app.services.ai_prompt_service import AIPromptService
 class TicketAgentAssistantService:
     """Service for agent chatbot conversations about tickets"""
 
-    def __init__(self, db: AsyncSession, tenant_id: str):
-        self.db = db
+    def __init__(self, db: Session, tenant_id: str):
+        # Note: db parameter is kept for compatibility but not used - each method creates its own session
         self.tenant_id = tenant_id
 
     async def _load_ticket_context(self, ticket_id: str) -> Dict[str, Any]:
         """Load full ticket context for the AI"""
-        from app.models.helpdesk import Ticket, TicketComment, TicketHistory, NPAHistory
+        from app.models.helpdesk import Ticket, TicketComment, TicketHistory, NPAHistory, TicketAttachment
+        from app.services.storage_service import get_storage_service
         
         sync_db = SessionLocal()
         try:
@@ -54,6 +55,12 @@ class TicketAgentAssistantService:
                 NPAHistory.ticket_id == ticket_id,
                 NPAHistory.tenant_id == self.tenant_id
             ).order_by(NPAHistory.created_at).all()
+            
+            # Get ticket attachments
+            ticket_attachments = sync_db.query(TicketAttachment).filter(
+                TicketAttachment.ticket_id == ticket_id,
+                TicketAttachment.comment_id.is_(None)  # Only ticket-level attachments, not comment attachments
+            ).all()
             
             # Build context
             context_parts = []
@@ -119,6 +126,41 @@ class TicketAgentAssistantService:
                     context_parts.append(f"Questions to Ask: {', '.join(suggestions['questions'])}")
                 if suggestions.get('solutions'):
                     context_parts.append(f"Potential Solutions: {', '.join(suggestions['solutions'])}")
+            
+            # Add ticket attachments
+            if ticket_attachments:
+                context_parts.append(f"\n=== TICKET ATTACHMENTS ===")
+                storage_service = get_storage_service()
+                
+                for att in ticket_attachments:
+                    context_parts.append(f"\nAttachment: {att.filename}")
+                    context_parts.append(f"Size: {att.file_size} bytes")
+                    if att.content_type:
+                        context_parts.append(f"Type: {att.content_type}")
+                    
+                    # Try to read text-based attachments for context
+                    try:
+                        # Only read text-based files (limit to reasonable size: 100KB)
+                        text_extensions = ['.txt', '.log', '.json', '.xml', '.csv', '.md', '.py', '.js', '.html', '.css', '.conf', '.config']
+                        if att.file_size < 100 * 1024 and any(att.filename.lower().endswith(ext) for ext in text_extensions):
+                            file_data = await storage_service.download_file(att.file_path)
+                            # Decode as text (try UTF-8, fallback to latin-1)
+                            try:
+                                file_content = file_data.decode('utf-8')
+                            except UnicodeDecodeError:
+                                file_content = file_data.decode('latin-1', errors='ignore')
+                            
+                            # Limit content size for context
+                            max_content_length = 5000
+                            if len(file_content) > max_content_length:
+                                file_content = file_content[:max_content_length] + f"\n... (truncated, total {len(file_content)} chars)"
+                            
+                            context_parts.append(f"Content:\n{file_content}")
+                        else:
+                            context_parts.append(f"(Binary file - {att.file_size} bytes)")
+                    except Exception as e:
+                        # If we can't read the file, just note it exists
+                        context_parts.append(f"(File exists but could not be read: {str(e)})")
             
             return {
                 "ticket": ticket,

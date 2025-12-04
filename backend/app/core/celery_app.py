@@ -31,7 +31,8 @@ celery_app = Celery(
         "app.tasks.ticket_description_tasks",
         "app.tasks.ticket_ai_tasks",  # Ticket AI analysis tasks
         "app.tasks.npa_answers_tasks",  # NPA answers AI cleanup tasks
-        "app.tasks.helpdesk_ai_tasks"  # Helpdesk AI operations (KB suggestions, answer generation, etc.)
+        "app.tasks.helpdesk_ai_tasks",  # Helpdesk AI operations (KB suggestions, answer generation, etc.)
+        "app.tasks.ticket_agent_chat_tasks"  # Ticket agent chatbot tasks
     ]  # Import task modules
 )
 

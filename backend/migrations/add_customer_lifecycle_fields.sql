@@ -26,3 +26,4 @@ UPDATE customers SET lifecycle_auto_managed = TRUE WHERE lifecycle_auto_managed 
 
 
 
+

@@ -1164,7 +1164,7 @@ const TicketNPA: React.FC<TicketNPAProps> = ({
       )}
 
       {/* Answers to Questions for Current NPA - Two Column Layout */}
-      {npa?.npa_original_text && (
+      {npa && (
         <Paper sx={{ p: 2, mt: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
             <ArticleIcon />
