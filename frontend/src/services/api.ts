@@ -478,6 +478,18 @@ export const helpdeskAPI = {
     apiClient.put(`/helpdesk/tickets/${ticketId}/npa/history/${npaHistoryId}/answers`, { answers, trigger_ai_cleanup: triggerCleanup }),
   updateCurrentNPAAnswers: (ticketId: string, answers: string, triggerCleanup: boolean = true) => 
     apiClient.put(`/helpdesk/tickets/${ticketId}/npa/answers`, { answers, trigger_ai_cleanup: triggerCleanup }),
+  // Agent Chat endpoints
+  agentChat: (ticketId: string, data: {
+    messages: Array<{ role: string; content: string }>;
+    attachments?: Array<{ filename: string; content: string; type?: string }>;
+    log_files?: string[];
+  }) => apiClient.post(`/helpdesk/tickets/${ticketId}/agent-chat`, data),
+  getAgentChatHistory: (ticketId: string) => apiClient.get(`/helpdesk/tickets/${ticketId}/agent-chat`),
+  getAgentChatTaskStatus: (ticketId: string, taskId: string) => apiClient.get(`/helpdesk/tickets/${ticketId}/agent-chat/task/${taskId}`),
+  saveChatToNPA: (ticketId: string, messageId: string, npaId?: string, createNew?: boolean) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/agent-chat/${messageId}/save-to-npa`, { npa_id: npaId, create_new: createNew }),
+  markChatAsSolution: (ticketId: string, messageId: string, notes?: string) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/agent-chat/${messageId}/mark-solution`, { notes }),
   // Analytics endpoints
   getVolumeTrends: (startDate: string, endDate: string, interval: 'day' | 'week' | 'month' = 'day') =>
     apiClient.get('/helpdesk/analytics/volume-trends', { params: { start_date: startDate, end_date: endDate, interval } }),

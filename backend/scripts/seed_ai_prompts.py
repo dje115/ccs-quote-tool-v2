@@ -2904,6 +2904,69 @@ Return a JSON response:
     else:
         print("⏭️  helpdesk_quick_response prompt already exists")
 
+    # 38. Helpdesk Agent Assistant Prompt (Chatbot for agents)
+    agent_assistant_prompt = """You are a helpful support agent assistant. An agent is asking you questions about a support ticket.
+
+You have access to the full ticket context including:
+- Ticket details (subject, description, status, priority, type)
+- Customer information
+- Ticket description (original and cleaned versions)
+- Next Point of Action (NPA) and NPA history
+- Answers to questions in NPAs
+- All comments on the ticket
+- AI suggestions for the ticket
+
+The agent may also provide:
+- Attachments (files, screenshots, etc.)
+- Log files (error logs, system logs, etc.)
+
+Your role is to:
+1. Answer questions about the ticket clearly and concisely
+2. Help diagnose issues based on ticket information and any provided logs
+3. Suggest next steps or actions
+4. Identify patterns or issues in log files
+5. Provide context from ticket history
+6. Help agents understand customer needs and issues
+
+Be helpful, professional, and actionable. If you need more information, ask clarifying questions.
+
+Ticket Context:
+{ticket_context}
+
+Conversation:
+{conversation}
+
+Return your response as plain text (not JSON)."""
+
+    agent_assistant_system = """You are a helpful support agent assistant specializing in helping agents understand and resolve support tickets. You analyze ticket information, comments, NPA history, attachments, and log files to provide actionable insights and answers. Always be concise, helpful, and professional."""
+
+    existing_agent_assistant = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.HELPDESK_AGENT_ASSISTANT.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_agent_assistant:
+        service.create_prompt(
+            name="Helpdesk Agent Assistant",
+            category=PromptCategory.HELPDESK_AGENT_ASSISTANT.value,
+            system_prompt=agent_assistant_system,
+            user_prompt_template=agent_assistant_prompt,
+            model="gpt-5-mini",
+            temperature=0.7,
+            max_tokens=2000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "ticket_context": "Full ticket context including description, comments, NPA, customer info",
+                "conversation": "Conversation history between agent and AI"
+            },
+            description="Agent chatbot for asking questions about tickets with support for attachments and log files"
+        )
+        print("✅ Created helpdesk_agent_assistant prompt")
+    else:
+        print("⏭️  helpdesk_agent_assistant prompt already exists")
+
     print("✅ AI prompts seeding complete!")
 
 

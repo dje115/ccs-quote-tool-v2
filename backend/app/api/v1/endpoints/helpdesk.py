@@ -6,7 +6,7 @@ Helpdesk API Endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Body
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from app.services.sla_tracking_service import SLATrackingService
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field
@@ -2564,6 +2564,379 @@ async def ensure_all_tickets_have_npa(
         sync_db.commit()
         
         return results
+    finally:
+        sync_db.close()
+
+
+class AgentChatMessage(BaseModel):
+    role: str  # 'user' or 'assistant'
+    content: str
+
+
+class AgentChatRequest(BaseModel):
+    messages: List[AgentChatMessage]
+    attachments: Optional[List[Dict[str, Any]]] = None  # [{filename, content, type}]
+    log_files: Optional[List[str]] = None  # Array of log file contents as strings
+
+
+@router.post("/tickets/{ticket_id}/agent-chat")
+async def agent_chat_with_ticket(
+    ticket_id: str,
+    request: AgentChatRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Agent chatbot - allows agents to ask questions about tickets with attachments and log files (uses Celery)"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketAgentChat
+    from app.tasks.ticket_agent_chat_tasks import agent_chat_task
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get last message (should be user message)
+        messages_list = [msg.model_dump() for msg in request.messages]
+        if not messages_list or messages_list[-1].get("role") != "user":
+            raise HTTPException(status_code=400, detail="Last message must be from user")
+        
+        # Save user message to database
+        user_message = TicketAgentChat(
+            id=str(uuid.uuid4()),
+            ticket_id=ticket_id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            role="user",
+            content=messages_list[-1]["content"],
+            attachments=request.attachments,
+            log_files=request.log_files,
+            ai_status="pending"
+        )
+        sync_db.add(user_message)
+        sync_db.commit()
+        sync_db.refresh(user_message)
+        
+        # Trigger Celery task for AI response
+        task = agent_chat_task.delay(
+            ticket_id=ticket_id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            user_message_id=user_message.id,
+            messages=messages_list,
+            attachments=request.attachments,
+            log_files=request.log_files
+        )
+        
+        return {
+            "success": True,
+            "user_message_id": user_message.id,
+            "task_id": task.id,
+            "status": "processing"
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to start agent chat: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start agent chat"
+        ) from exc
+    finally:
+        sync_db.close()
+
+
+@router.get("/tickets/{ticket_id}/agent-chat")
+async def get_agent_chat_history(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get chat history for a ticket"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketAgentChat
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get all chat messages
+        messages = sync_db.query(TicketAgentChat).filter(
+            TicketAgentChat.ticket_id == ticket_id,
+            TicketAgentChat.tenant_id == current_tenant.id
+        ).order_by(TicketAgentChat.created_at).all()
+        
+        return {
+            "ticket_id": ticket_id,
+            "messages": [
+                {
+                    "id": msg.id,
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.created_at.isoformat() if msg.created_at else None,
+                    "ai_status": msg.ai_status,
+                    "ai_model": msg.ai_model,
+                    "attachments": msg.attachments,
+                    "log_files": msg.log_files,
+                    "linked_to_npa_id": msg.linked_to_npa_id,
+                    "is_solution": msg.is_solution,
+                    "solution_notes": msg.solution_notes
+                }
+                for msg in messages
+            ]
+        }
+    finally:
+        sync_db.close()
+
+
+@router.get("/tickets/{ticket_id}/agent-chat/task/{task_id}")
+async def get_agent_chat_task_status(
+    ticket_id: str,
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get status of agent chat Celery task"""
+    from celery.result import AsyncResult
+    from app.core.celery_app import celery_app
+    
+    task_result = AsyncResult(task_id, app=celery_app)
+    
+    if task_result.ready():
+        if task_result.successful():
+            return {
+                "status": "completed",
+                "result": task_result.result
+            }
+        else:
+            return {
+                "status": "failed",
+                "error": str(task_result.result)
+            }
+    else:
+        return {
+            "status": "processing",
+            "task_id": task_id
+        }
+
+
+@router.post("/tickets/{ticket_id}/agent-chat/{message_id}/save-to-npa")
+async def save_chat_to_npa(
+    ticket_id: str,
+    message_id: str,
+    npa_id: Optional[str] = Body(None, embed=True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Save chat message(s) to an NPA (existing or new)"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketAgentChat, NPAHistory
+    from app.services.ticket_npa_service import TicketNPAService
+    
+    sync_db = SessionLocal()
+    try:
+        # Get ticket and message
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        message = sync_db.query(TicketAgentChat).filter(
+            TicketAgentChat.id == message_id,
+            TicketAgentChat.ticket_id == ticket_id,
+            TicketAgentChat.tenant_id == current_tenant.id
+        ).first()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        # Get all messages in conversation up to this point
+        all_messages = sync_db.query(TicketAgentChat).filter(
+            TicketAgentChat.ticket_id == ticket_id,
+            TicketAgentChat.tenant_id == current_tenant.id,
+            TicketAgentChat.created_at <= message.created_at
+        ).order_by(TicketAgentChat.created_at).all()
+        
+        # Build conversation text
+        conversation_text = "\n\n".join([
+            f"{msg.role.upper()}: {msg.content}"
+            for msg in all_messages
+        ])
+        
+        if create_new:
+            # Force create new NPA
+            pass  # Will fall through to create new NPA logic
+        elif npa_id:
+            # Update existing NPA by ID
+            npa = sync_db.query(NPAHistory).filter(
+                NPAHistory.id == npa_id,
+                NPAHistory.ticket_id == ticket_id,
+                NPAHistory.tenant_id == current_tenant.id
+            ).first()
+            
+            if not npa:
+                raise HTTPException(status_code=404, detail="NPA not found")
+            
+            # Append conversation to answers
+            if npa.answers_to_questions:
+                npa.answers_to_questions += f"\n\n--- Agent Chat Conversation ---\n{conversation_text}"
+            else:
+                npa.answers_to_questions = f"--- Agent Chat Conversation ---\n{conversation_text}"
+            
+            # Link messages to NPA
+            for msg in all_messages:
+                msg.linked_to_npa_id = npa_id
+            
+            sync_db.commit()
+            
+            return {
+                "success": True,
+                "npa_id": npa_id,
+                "message": "Chat saved to existing NPA"
+            }
+        elif ticket.npa_original_text:
+            # Save to current NPA (find the active NPA history entry)
+            current_npa = sync_db.query(NPAHistory).filter(
+                NPAHistory.ticket_id == ticket_id,
+                NPAHistory.tenant_id == current_tenant.id,
+                NPAHistory.completed_at.is_(None)
+            ).order_by(NPAHistory.created_at.desc()).first()
+            
+            if current_npa:
+                # Append conversation to answers
+                if current_npa.answers_to_questions:
+                    current_npa.answers_to_questions += f"\n\n--- Agent Chat Conversation ---\n{conversation_text}"
+                else:
+                    current_npa.answers_to_questions = f"--- Agent Chat Conversation ---\n{conversation_text}"
+                
+                # Link messages to NPA
+                for msg in all_messages:
+                    msg.linked_to_npa_id = current_npa.id
+                
+                sync_db.commit()
+                
+                return {
+                    "success": True,
+                    "npa_id": current_npa.id,
+                    "message": "Chat saved to current NPA"
+                }
+        
+        # Create new NPA (if create_new=True or no current NPA)
+        if True:
+            # Create new NPA and close current one if exists
+            npa_service = TicketNPAService(sync_db, current_tenant.id)
+            
+            # Close current NPA if exists
+            if ticket.npa_original_text:
+                # Mark current NPA as completed
+                current_npa_history = sync_db.query(NPAHistory).filter(
+                    NPAHistory.ticket_id == ticket_id,
+                    NPAHistory.tenant_id == current_tenant.id,
+                    NPAHistory.completed_at.is_(None)
+                ).order_by(NPAHistory.created_at.desc()).first()
+                
+                if current_npa_history:
+                    current_npa_history.completed_at = func.now()
+                    current_npa_history.completed_by_id = current_user.id
+                    current_npa_history.completion_notes = "Closed when creating new NPA from agent chat"
+            
+            # Create new NPA from chat
+            result = await npa_service.update_npa(
+                ticket=ticket,
+                npa=f"Agent Chat Conversation:\n{conversation_text}",
+                trigger_ai_cleanup=True
+            )
+            
+            new_npa_id = result.get("npa_history_id")
+            
+            # Link messages to new NPA
+            for msg in all_messages:
+                msg.linked_to_npa_id = new_npa_id
+            
+            sync_db.commit()
+            
+            return {
+                "success": True,
+                "npa_id": new_npa_id,
+                "message": "New NPA created from chat and previous NPA closed"
+            }
+    finally:
+        sync_db.close()
+
+
+@router.post("/tickets/{ticket_id}/agent-chat/{message_id}/mark-solution")
+async def mark_chat_as_solution(
+    ticket_id: str,
+    message_id: str,
+    notes: Optional[str] = Body(None, embed=True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Mark a chat message as the solution"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketAgentChat
+    
+    sync_db = SessionLocal()
+    try:
+        # Get ticket and message
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        message = sync_db.query(TicketAgentChat).filter(
+            TicketAgentChat.id == message_id,
+            TicketAgentChat.ticket_id == ticket_id,
+            TicketAgentChat.tenant_id == current_tenant.id
+        ).first()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        # Unmark other solutions
+        sync_db.query(TicketAgentChat).filter(
+            TicketAgentChat.ticket_id == ticket_id,
+            TicketAgentChat.is_solution == True
+        ).update({"is_solution": False})
+        
+        # Mark this as solution
+        message.is_solution = True
+        message.solution_notes = notes
+        
+        sync_db.commit()
+        
+        return {
+            "success": True,
+            "message_id": message_id,
+            "message": "Chat marked as solution"
+        }
     finally:
         sync_db.close()
 

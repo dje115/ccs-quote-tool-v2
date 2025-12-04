@@ -35,6 +35,7 @@ class PromptCategory(str, enum.Enum):
     HELPDESK_NPA_SUGGESTIONS = "helpdesk_npa_suggestions"  # NPA-specific suggestions (agent, diagnosis, troubleshooting)
     HELPDESK_KB_ANSWER = "helpdesk_kb_answer"  # Generate answers from KB articles
     HELPDESK_QUICK_RESPONSE = "helpdesk_quick_response"  # Generate quick customer responses
+    HELPDESK_AGENT_ASSISTANT = "helpdesk_agent_assistant"  # Agent chatbot for asking questions about tickets
     DASHBOARD_ANALYTICS = "dashboard_analytics"
     # Smart Quoting Module prompts
     QUOTE_SCOPE_ANALYSIS = "quote_scope_analysis"

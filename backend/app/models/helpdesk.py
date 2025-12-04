@@ -154,6 +154,7 @@ class Ticket(Base, TimestampMixin):
     attachments = relationship("TicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
     history = relationship("TicketHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketHistory.created_at")
     npa_history = relationship("NPAHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="NPAHistory.created_at")
+    agent_chat = relationship("TicketAgentChat", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketAgentChat.created_at")
     
     def __repr__(self):
         return f"<Ticket {self.ticket_number} - {self.subject}>"
@@ -284,6 +285,48 @@ class NPAHistory(Base, TimestampMixin):
     
     def __repr__(self):
         return f"<NPAHistory {self.npa_state} for ticket {self.ticket_id}>"
+
+
+class TicketAgentChat(Base, TimestampMixin):
+    """Agent chat messages for tickets - persistent chat history"""
+    __tablename__ = "ticket_agent_chat"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ticket_id = Column(String(36), ForeignKey("tickets.id"), nullable=False, index=True)
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)  # Agent who sent/received
+    
+    # Message details
+    role = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    
+    # AI task tracking
+    ai_task_id = Column(String(100), nullable=True)  # Celery task ID for AI response
+    ai_status = Column(String(50), default="pending", nullable=True)  # pending, processing, completed, failed
+    ai_model = Column(String(100), nullable=True)  # Model used for response
+    ai_usage = Column(JSON, nullable=True)  # Token usage info
+    
+    # Attachments and logs
+    attachments = Column(JSON, nullable=True)  # [{filename, content, type}]
+    log_files = Column(JSON, nullable=True)  # Array of log file contents
+    
+    # NPA and solution tracking
+    linked_to_npa_id = Column(String(36), ForeignKey("npa_history.id"), nullable=True)  # If saved to NPA
+    is_solution = Column(Boolean, default=False, nullable=False)  # If marked as solution
+    solution_notes = Column(Text, nullable=True)  # Notes when marked as solution
+    
+    # Relationships
+    ticket = relationship("Ticket", back_populates="agent_chat")
+    user = relationship("User", foreign_keys=[user_id])
+    linked_npa = relationship("NPAHistory", foreign_keys=[linked_to_npa_id])
+    
+    def __repr__(self):
+        return f"<TicketAgentChat {self.role} on {self.ticket_id}>"
+    
+    __table_args__ = (
+        Index('idx_chat_ticket_created', 'ticket_id', 'created_at'),
+        Index('idx_chat_user', 'user_id', 'created_at'),
+    )
 
 
 class SLAPolicy(Base, TimestampMixin):

@@ -69,6 +69,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { helpdeskAPI, slaAPI } from '../services/api';
 import TicketKBAnswer from '../components/TicketKBAnswer';
 import TicketNPA from '../components/TicketNPA';
+import TicketChatbot from '../components/TicketChatbot';
 
 const TicketDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -784,6 +785,7 @@ const TicketDetail: React.FC = () => {
         <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
           <Tab label="Description" />
           <Tab label="AI Analysis" icon={hasAISuggestions ? <SparkleIcon /> : undefined} />
+          <Tab label="Q&A" icon={<QuestionAnswerIcon />} />
           <Tab label="Comments" />
           <Tab label="History" />
         </Tabs>
@@ -1277,8 +1279,15 @@ const TicketDetail: React.FC = () => {
         </Paper>
       )}
 
-      {/* Tab Panel 2: Comments */}
+      {/* Tab Panel 2: Q&A - Agent Chatbot */}
       {currentTab === 2 && (
+        <Paper sx={{ p: 3, height: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column' }}>
+          <TicketChatbot ticketId={id!} />
+        </Paper>
+      )}
+
+      {/* Tab Panel 3: Comments */}
+      {currentTab === 3 && (
         <Paper sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
@@ -1334,8 +1343,8 @@ const TicketDetail: React.FC = () => {
         </Paper>
       )}
 
-      {/* Tab Panel 3: History */}
-      {currentTab === 3 && (
+      {/* Tab Panel 4: History */}
+      {currentTab === 4 && (
         <Box>
           {/* Ticket History */}
           <Paper sx={{ p: 3, mb: 3 }}>
