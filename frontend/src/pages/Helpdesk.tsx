@@ -39,6 +39,8 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { helpdeskAPI, customerAPI } from '../services/api';
 import TicketComposer from '../components/TicketComposer';
+import TicketBulkActions from '../components/TicketBulkActions';
+import Checkbox from '@mui/material/Checkbox';
 
 interface Ticket {
   id: string;
@@ -92,6 +94,7 @@ const Helpdesk: React.FC = () => {
       active_breach_alerts: 0
     }
   });
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadTickets();
@@ -217,6 +220,36 @@ const Helpdesk: React.FC = () => {
       default:
         return 'default';
     }
+  };
+
+  const handleSelectTicket = (ticketId: string) => {
+    setSelectedTicketIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ticketId)) {
+        newSet.delete(ticketId);
+      } else {
+        newSet.add(ticketId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTicketIds.size === tickets.length) {
+      setSelectedTicketIds(new Set());
+    } else {
+      setSelectedTicketIds(new Set(tickets.map(t => t.id)));
+    }
+  };
+
+  const handleBulkActionSuccess = () => {
+    setSelectedTicketIds(new Set());
+    loadTickets();
+    loadStats();
+  };
+
+  const handleBulkActionError = (error: string) => {
+    setError(error);
   };
 
   return (
@@ -433,11 +466,25 @@ const Helpdesk: React.FC = () => {
         </Grid>
       </Paper>
 
+      {/* Bulk Actions Toolbar */}
+      <TicketBulkActions
+        selectedTicketIds={Array.from(selectedTicketIds)}
+        onSuccess={handleBulkActionSuccess}
+        onError={handleBulkActionError}
+      />
+
       {/* Tickets Table */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  indeterminate={selectedTicketIds.size > 0 && selectedTicketIds.size < tickets.length}
+                  checked={tickets.length > 0 && selectedTicketIds.size === tickets.length}
+                  onChange={handleSelectAll}
+                />
+              </TableCell>
               <TableCell>Ticket #</TableCell>
               <TableCell>Subject</TableCell>
               <TableCell>Status</TableCell>
@@ -451,19 +498,25 @@ const Helpdesk: React.FC = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   Loading tickets...
                 </TableCell>
               </TableRow>
             ) : tickets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   No tickets found
                 </TableCell>
               </TableRow>
             ) : (
               tickets.map((ticket) => (
                 <TableRow key={ticket.id} hover>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedTicketIds.has(ticket.id)}
+                      onChange={() => handleSelectTicket(ticket.id)}
+                    />
+                  </TableCell>
                   <TableCell>{ticket.ticket_number}</TableCell>
                   <TableCell>{ticket.subject}</TableCell>
                   <TableCell>

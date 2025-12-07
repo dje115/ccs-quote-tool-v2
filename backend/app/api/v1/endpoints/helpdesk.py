@@ -59,6 +59,54 @@ class KnowledgeBaseArticleCreate(BaseModel):
     is_featured: bool = False
 
 
+class TicketTemplateCreate(BaseModel):
+    name: str
+    category: Optional[str] = None
+    subject_template: Optional[str] = None
+    description_template: Optional[str] = None
+    npa_template: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_active: bool = True
+
+
+class TicketTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    subject_template: Optional[str] = None
+    description_template: Optional[str] = None
+    npa_template: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+
+
+class QuickReplyTemplateCreate(BaseModel):
+    name: str
+    content: str
+    category: Optional[str] = None
+    is_shared: bool = False
+
+
+class QuickReplyTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    is_shared: Optional[bool] = None
+
+
+class TicketMacroCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    actions: List[Dict[str, Any]]  # Array of action objects
+    is_shared: bool = False
+
+
+class TicketMacroUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    actions: Optional[List[Dict[str, Any]]] = None
+    is_shared: Optional[bool] = None
+
+
 @router.post("/tickets", status_code=status.HTTP_201_CREATED)
 async def create_ticket(
     ticket_data: TicketCreate,
@@ -3105,6 +3153,1228 @@ async def mark_chat_as_solution(
             "kb_article_id": kb_article_id,
             "ticket_closed": close_ticket,
             "message": "Solution marked, NPA created, and actions completed"
+        }
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# TICKET TEMPLATES
+# ============================================================================
+
+@router.get("/templates")
+async def list_ticket_templates(
+    category: Optional[str] = Query(None),
+    active_only: bool = Query(True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """List ticket templates"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        query = sync_db.query(TicketTemplate).filter(
+            TicketTemplate.tenant_id == current_tenant.id
+        )
+        
+        if active_only:
+            query = query.filter(TicketTemplate.is_active == True)
+        
+        if category:
+            query = query.filter(TicketTemplate.category == category)
+        
+        templates = query.order_by(TicketTemplate.name).all()
+        
+        return templates
+    finally:
+        sync_db.close()
+
+
+@router.post("/templates", status_code=status.HTTP_201_CREATED)
+async def create_ticket_template(
+    template_data: TicketTemplateCreate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Create a new ticket template"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketTemplate
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        template = TicketTemplate(
+            id=str(uuid.uuid4()),
+            tenant_id=current_tenant.id,
+            name=template_data.name,
+            category=template_data.category,
+            subject_template=template_data.subject_template,
+            description_template=template_data.description_template,
+            npa_template=template_data.npa_template,
+            tags=template_data.tags or [],
+            is_active=template_data.is_active,
+            created_by_id=current_user.id
+        )
+        
+        sync_db.add(template)
+        sync_db.commit()
+        sync_db.refresh(template)
+        
+        return template
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating ticket template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.get("/templates/{template_id}")
+async def get_ticket_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get a ticket template by ID"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        template = sync_db.query(TicketTemplate).filter(
+            TicketTemplate.id == template_id,
+            TicketTemplate.tenant_id == current_tenant.id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        return template
+    finally:
+        sync_db.close()
+
+
+@router.put("/templates/{template_id}")
+async def update_ticket_template(
+    template_id: str,
+    template_data: TicketTemplateUpdate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Update a ticket template"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        template = sync_db.query(TicketTemplate).filter(
+            TicketTemplate.id == template_id,
+            TicketTemplate.tenant_id == current_tenant.id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Update fields
+        if template_data.name is not None:
+            template.name = template_data.name
+        if template_data.category is not None:
+            template.category = template_data.category
+        if template_data.subject_template is not None:
+            template.subject_template = template_data.subject_template
+        if template_data.description_template is not None:
+            template.description_template = template_data.description_template
+        if template_data.npa_template is not None:
+            template.npa_template = template_data.npa_template
+        if template_data.tags is not None:
+            template.tags = template_data.tags
+        if template_data.is_active is not None:
+            template.is_active = template_data.is_active
+        
+        sync_db.commit()
+        sync_db.refresh(template)
+        
+        return template
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating ticket template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.delete("/templates/{template_id}")
+async def delete_ticket_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Delete a ticket template"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        template = sync_db.query(TicketTemplate).filter(
+            TicketTemplate.id == template_id,
+            TicketTemplate.tenant_id == current_tenant.id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        sync_db.delete(template)
+        sync_db.commit()
+        
+        return {"success": True, "message": "Template deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error deleting ticket template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.post("/tickets/{ticket_id}/apply-template/{template_id}")
+async def apply_ticket_template(
+    ticket_id: str,
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Apply a template to a ticket"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        # Get ticket
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get template
+        template = sync_db.query(TicketTemplate).filter(
+            TicketTemplate.id == template_id,
+            TicketTemplate.tenant_id == current_tenant.id,
+            TicketTemplate.is_active == True
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Apply template with variable substitution
+        def substitute_variables(text: Optional[str]) -> Optional[str]:
+            if not text:
+                return None
+            # Replace common variables
+            result = text
+            result = result.replace("{{customer_name}}", ticket.customer.company_name if ticket.customer else "Customer")
+            result = result.replace("{{ticket_number}}", ticket.ticket_number)
+            result = result.replace("{{ticket_subject}}", ticket.subject)
+            return result
+        
+        # Apply template fields
+        if template.subject_template:
+            ticket.subject = substitute_variables(template.subject_template)
+        if template.description_template:
+            ticket.description = substitute_variables(template.description_template)
+        if template.npa_template:
+            ticket.npa_original_text = substitute_variables(template.npa_template)
+        
+        # Apply tags if template has them
+        if template.tags:
+            existing_tags = ticket.tags or []
+            # Merge tags, avoiding duplicates
+            merged_tags = list(set(existing_tags + template.tags))
+            ticket.tags = merged_tags
+        
+        sync_db.commit()
+        sync_db.refresh(ticket)
+        
+        return {
+            "success": True,
+            "ticket": ticket,
+            "message": "Template applied successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error applying template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error applying template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# QUICK REPLY TEMPLATES
+# ============================================================================
+
+@router.get("/quick-replies")
+async def list_quick_reply_templates(
+    category: Optional[str] = Query(None),
+    include_shared: bool = Query(True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """List quick reply templates"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import QuickReplyTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        query = sync_db.query(QuickReplyTemplate).filter(
+            QuickReplyTemplate.tenant_id == current_tenant.id
+        )
+        
+        # Filter by category if provided
+        if category:
+            query = query.filter(QuickReplyTemplate.category == category)
+        
+        # Filter by shared/personal
+        if include_shared:
+            # Show shared templates OR templates created by current user
+            query = query.filter(
+                (QuickReplyTemplate.is_shared == True) |
+                (QuickReplyTemplate.created_by_id == current_user.id)
+            )
+        else:
+            # Only show templates created by current user
+            query = query.filter(QuickReplyTemplate.created_by_id == current_user.id)
+        
+        templates = query.order_by(QuickReplyTemplate.name).all()
+        
+        return templates
+    finally:
+        sync_db.close()
+
+
+@router.post("/quick-replies", status_code=status.HTTP_201_CREATED)
+async def create_quick_reply_template(
+    template_data: QuickReplyTemplateCreate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Create a new quick reply template"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import QuickReplyTemplate
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        template = QuickReplyTemplate(
+            id=str(uuid.uuid4()),
+            tenant_id=current_tenant.id,
+            name=template_data.name,
+            content=template_data.content,
+            category=template_data.category,
+            is_shared=template_data.is_shared,
+            created_by_id=current_user.id
+        )
+        
+        sync_db.add(template)
+        sync_db.commit()
+        sync_db.refresh(template)
+        
+        return template
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating quick reply template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.get("/quick-replies/{template_id}")
+async def get_quick_reply_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get a quick reply template by ID"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import QuickReplyTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        template = sync_db.query(QuickReplyTemplate).filter(
+            QuickReplyTemplate.id == template_id,
+            QuickReplyTemplate.tenant_id == current_tenant.id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Check access: must be shared or created by current user
+        if not template.is_shared and template.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        return template
+    finally:
+        sync_db.close()
+
+
+@router.put("/quick-replies/{template_id}")
+async def update_quick_reply_template(
+    template_id: str,
+    template_data: QuickReplyTemplateUpdate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Update a quick reply template"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import QuickReplyTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        template = sync_db.query(QuickReplyTemplate).filter(
+            QuickReplyTemplate.id == template_id,
+            QuickReplyTemplate.tenant_id == current_tenant.id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Check access: must be created by current user (or admin)
+        if template.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only edit your own templates")
+        
+        # Update fields
+        if template_data.name is not None:
+            template.name = template_data.name
+        if template_data.content is not None:
+            template.content = template_data.content
+        if template_data.category is not None:
+            template.category = template_data.category
+        if template_data.is_shared is not None:
+            template.is_shared = template_data.is_shared
+        
+        sync_db.commit()
+        sync_db.refresh(template)
+        
+        return template
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating quick reply template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.delete("/quick-replies/{template_id}")
+async def delete_quick_reply_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Delete a quick reply template"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import QuickReplyTemplate
+    
+    sync_db = SessionLocal()
+    try:
+        template = sync_db.query(QuickReplyTemplate).filter(
+            QuickReplyTemplate.id == template_id,
+            QuickReplyTemplate.tenant_id == current_tenant.id
+        ).first()
+        
+        if not template:
+            raise HTTPException(status_code=404, detail="Template not found")
+        
+        # Check access: must be created by current user (or admin)
+        if template.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only delete your own templates")
+        
+        sync_db.delete(template)
+        sync_db.commit()
+        
+        return {"success": True, "message": "Template deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error deleting quick reply template: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting template: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# BULK OPERATIONS
+# ============================================================================
+
+class BulkOperationRequest(BaseModel):
+    ticket_ids: List[str]
+    action: str  # assign, update_status, update_priority, update_tags, close, resolve
+    user_id: Optional[str] = None  # For assign action
+    status: Optional[str] = None  # For update_status action
+    priority: Optional[str] = None  # For update_priority action
+    tags: Optional[List[str]] = None  # For update_tags action
+    add_tags: Optional[List[str]] = None  # Add tags (merge with existing)
+    remove_tags: Optional[List[str]] = None  # Remove tags
+
+
+@router.post("/tickets/bulk-assign")
+async def bulk_assign_tickets(
+    ticket_ids: List[str] = Body(...),
+    user_id: str = Body(...),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Bulk assign tickets to a user"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket
+    from datetime import datetime, timezone
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify all tickets belong to tenant
+        tickets = sync_db.query(Ticket).filter(
+            Ticket.id.in_(ticket_ids),
+            Ticket.tenant_id == current_tenant.id
+        ).all()
+        
+        if len(tickets) != len(ticket_ids):
+            raise HTTPException(status_code=404, detail="Some tickets not found")
+        
+        # Update all tickets
+        updated_count = 0
+        for ticket in tickets:
+            ticket.assigned_to_id = user_id
+            ticket.assigned_at = datetime.now(timezone.utc)
+            updated_count += 1
+        
+        sync_db.commit()
+        
+        return {
+            "success": True,
+            "updated_count": updated_count,
+            "message": f"Successfully assigned {updated_count} ticket(s)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error bulk assigning tickets: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error assigning tickets: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.post("/tickets/bulk-update")
+async def bulk_update_tickets(
+    request: BulkOperationRequest,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Bulk update tickets (status, priority, tags)"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketStatus, TicketPriority
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify all tickets belong to tenant
+        tickets = sync_db.query(Ticket).filter(
+            Ticket.id.in_(request.ticket_ids),
+            Ticket.tenant_id == current_tenant.id
+        ).all()
+        
+        if len(tickets) != len(request.ticket_ids):
+            raise HTTPException(status_code=404, detail="Some tickets not found")
+        
+        updated_count = 0
+        for ticket in tickets:
+            updated = False
+            
+            # Update status
+            if request.action == "update_status" and request.status:
+                try:
+                    ticket.status = TicketStatus[request.status.upper()]
+                    updated = True
+                except (KeyError, AttributeError):
+                    pass
+            
+            # Update priority
+            if request.action == "update_priority" and request.priority:
+                try:
+                    ticket.priority = TicketPriority[request.priority.upper()]
+                    updated = True
+                except (KeyError, AttributeError):
+                    pass
+            
+            # Update tags
+            if request.action == "update_tags":
+                if request.tags is not None:
+                    # Replace all tags
+                    ticket.tags = request.tags
+                    updated = True
+                elif request.add_tags:
+                    # Add tags (merge)
+                    existing_tags = ticket.tags or []
+                    merged_tags = list(set(existing_tags + request.add_tags))
+                    ticket.tags = merged_tags
+                    updated = True
+                elif request.remove_tags:
+                    # Remove tags
+                    existing_tags = ticket.tags or []
+                    ticket.tags = [tag for tag in existing_tags if tag not in request.remove_tags]
+                    updated = True
+            
+            if updated:
+                updated_count += 1
+        
+        sync_db.commit()
+        
+        return {
+            "success": True,
+            "updated_count": updated_count,
+            "message": f"Successfully updated {updated_count} ticket(s)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error bulk updating tickets: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating tickets: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.post("/tickets/bulk-close")
+async def bulk_close_tickets(
+    ticket_ids: List[str] = Body(...),
+    status: str = Body("closed", embed=True),  # closed or resolved
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Bulk close or resolve tickets"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketStatus
+    from datetime import datetime, timezone
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify all tickets belong to tenant
+        tickets = sync_db.query(Ticket).filter(
+            Ticket.id.in_(ticket_ids),
+            Ticket.tenant_id == current_tenant.id
+        ).all()
+        
+        if len(tickets) != len(ticket_ids):
+            raise HTTPException(status_code=404, detail="Some tickets not found")
+        
+        # Determine status
+        target_status = TicketStatus.CLOSED if status.lower() == "closed" else TicketStatus.RESOLVED
+        
+        updated_count = 0
+        for ticket in tickets:
+            ticket.status = target_status
+            ticket.closed_at = datetime.now(timezone.utc)
+            ticket.closed_by_id = current_user.id
+            updated_count += 1
+        
+        sync_db.commit()
+        
+        return {
+            "success": True,
+            "updated_count": updated_count,
+            "message": f"Successfully {status} {updated_count} ticket(s)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error bulk closing tickets: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error closing tickets: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# TICKET MACROS
+# ============================================================================
+
+@router.get("/macros")
+async def list_ticket_macros(
+    include_shared: bool = Query(True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """List ticket macros"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketMacro
+    
+    sync_db = SessionLocal()
+    try:
+        query = sync_db.query(TicketMacro).filter(
+            TicketMacro.tenant_id == current_tenant.id
+        )
+        
+        # Filter by shared/personal
+        if include_shared:
+            # Show shared macros OR macros created by current user
+            query = query.filter(
+                (TicketMacro.is_shared == True) |
+                (TicketMacro.created_by_id == current_user.id)
+            )
+        else:
+            # Only show macros created by current user
+            query = query.filter(TicketMacro.created_by_id == current_user.id)
+        
+        macros = query.order_by(TicketMacro.name).all()
+        
+        return macros
+    finally:
+        sync_db.close()
+
+
+@router.post("/macros", status_code=status.HTTP_201_CREATED)
+async def create_ticket_macro(
+    macro_data: TicketMacroCreate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Create a new ticket macro"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketMacro
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        macro = TicketMacro(
+            id=str(uuid.uuid4()),
+            tenant_id=current_tenant.id,
+            name=macro_data.name,
+            description=macro_data.description,
+            actions=macro_data.actions,
+            is_shared=macro_data.is_shared,
+            created_by_id=current_user.id
+        )
+        
+        sync_db.add(macro)
+        sync_db.commit()
+        sync_db.refresh(macro)
+        
+        return macro
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating ticket macro: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating macro: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.get("/macros/{macro_id}")
+async def get_ticket_macro(
+    macro_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get a ticket macro by ID"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketMacro
+    
+    sync_db = SessionLocal()
+    try:
+        macro = sync_db.query(TicketMacro).filter(
+            TicketMacro.id == macro_id,
+            TicketMacro.tenant_id == current_tenant.id
+        ).first()
+        
+        if not macro:
+            raise HTTPException(status_code=404, detail="Macro not found")
+        
+        # Check access: must be shared or created by current user
+        if not macro.is_shared and macro.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        return macro
+    finally:
+        sync_db.close()
+
+
+@router.put("/macros/{macro_id}")
+async def update_ticket_macro(
+    macro_id: str,
+    macro_data: TicketMacroUpdate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Update a ticket macro"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketMacro
+    
+    sync_db = SessionLocal()
+    try:
+        macro = sync_db.query(TicketMacro).filter(
+            TicketMacro.id == macro_id,
+            TicketMacro.tenant_id == current_tenant.id
+        ).first()
+        
+        if not macro:
+            raise HTTPException(status_code=404, detail="Macro not found")
+        
+        # Check access: must be created by current user (or admin)
+        if macro.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only edit your own macros")
+        
+        # Update fields
+        if macro_data.name is not None:
+            macro.name = macro_data.name
+        if macro_data.description is not None:
+            macro.description = macro_data.description
+        if macro_data.actions is not None:
+            macro.actions = macro_data.actions
+        if macro_data.is_shared is not None:
+            macro.is_shared = macro_data.is_shared
+        
+        sync_db.commit()
+        sync_db.refresh(macro)
+        
+        return macro
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating ticket macro: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating macro: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.delete("/macros/{macro_id}")
+async def delete_ticket_macro(
+    macro_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Delete a ticket macro"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import TicketMacro
+    
+    sync_db = SessionLocal()
+    try:
+        macro = sync_db.query(TicketMacro).filter(
+            TicketMacro.id == macro_id,
+            TicketMacro.tenant_id == current_tenant.id
+        ).first()
+        
+        if not macro:
+            raise HTTPException(status_code=404, detail="Macro not found")
+        
+        # Check access: must be created by current user (or admin)
+        if macro.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only delete your own macros")
+        
+        sync_db.delete(macro)
+        sync_db.commit()
+        
+        return {"success": True, "message": "Macro deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error deleting ticket macro: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting macro: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.post("/tickets/{ticket_id}/execute-macro/{macro_id}")
+async def execute_ticket_macro(
+    ticket_id: str,
+    macro_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Execute a macro on a ticket"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketMacro, TicketStatus, TicketPriority
+    from datetime import datetime, timezone
+    
+    sync_db = SessionLocal()
+    try:
+        # Get ticket
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get macro
+        macro = sync_db.query(TicketMacro).filter(
+            TicketMacro.id == macro_id,
+            TicketMacro.tenant_id == current_tenant.id
+        ).first()
+        
+        if not macro:
+            raise HTTPException(status_code=404, detail="Macro not found")
+        
+        # Check access: must be shared or created by current user
+        if not macro.is_shared and macro.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Execute actions
+        executed_actions = []
+        errors = []
+        
+        for action in macro.actions:
+            try:
+                action_type = action.get('type')
+                
+                if action_type == 'update_status':
+                    status_value = action.get('value')
+                    if status_value:
+                        ticket.status = TicketStatus[status_value.upper()]
+                        executed_actions.append(f"Status updated to {status_value}")
+                
+                elif action_type == 'update_priority':
+                    priority_value = action.get('value')
+                    if priority_value:
+                        ticket.priority = TicketPriority[priority_value.upper()]
+                        executed_actions.append(f"Priority updated to {priority_value}")
+                
+                elif action_type == 'assign':
+                    user_id = action.get('user_id')
+                    if user_id:
+                        ticket.assigned_to_id = user_id
+                        ticket.assigned_at = datetime.now(timezone.utc)
+                        executed_actions.append(f"Assigned to user {user_id}")
+                
+                elif action_type == 'add_tags':
+                    tags = action.get('tags', [])
+                    if tags:
+                        existing_tags = ticket.tags or []
+                        merged_tags = list(set(existing_tags + tags))
+                        ticket.tags = merged_tags
+                        executed_actions.append(f"Added tags: {', '.join(tags)}")
+                
+                elif action_type == 'add_comment':
+                    comment_text = action.get('text', '')
+                    if comment_text:
+                        from app.models.helpdesk import TicketComment
+                        import uuid
+                        comment = TicketComment(
+                            id=str(uuid.uuid4()),
+                            ticket_id=ticket_id,
+                            tenant_id=current_tenant.id,
+                            user_id=current_user.id,
+                            comment=comment_text,
+                            is_internal=action.get('is_internal', False)
+                        )
+                        sync_db.add(comment)
+                        executed_actions.append("Comment added")
+                
+                elif action_type == 'update_npa':
+                    npa_text = action.get('text', '')
+                    npa_state = action.get('state', 'investigation')
+                    if npa_text:
+                        ticket.npa_original_text = npa_text
+                        ticket.npa_state = npa_state
+                        executed_actions.append("NPA updated")
+                
+            except Exception as e:
+                errors.append(f"Error executing {action_type}: {str(e)}")
+        
+        sync_db.commit()
+        sync_db.refresh(ticket)
+        
+        return {
+            "success": True,
+            "ticket": ticket,
+            "executed_actions": executed_actions,
+            "errors": errors,
+            "message": f"Macro executed: {len(executed_actions)} action(s) completed"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error executing macro: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error executing macro: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# TICKET MERGING
+# ============================================================================
+
+@router.post("/tickets/{ticket_id}/merge")
+async def merge_ticket(
+    ticket_id: str,
+    target_ticket_id: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Merge a ticket into another ticket.
+    This will:
+    - Mark the source ticket as merged into the target
+    - Preserve all comments, attachments, and history
+    - Link the tickets together
+    """
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketComment, TicketHistory, TicketStatus
+    from datetime import datetime, timezone
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        # Get both tickets
+        source_ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        target_ticket = sync_db.query(Ticket).filter(
+            Ticket.id == target_ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not source_ticket:
+            raise HTTPException(status_code=404, detail="Source ticket not found")
+        
+        if not target_ticket:
+            raise HTTPException(status_code=404, detail="Target ticket not found")
+        
+        if source_ticket.id == target_ticket.id:
+            raise HTTPException(status_code=400, detail="Cannot merge ticket into itself")
+        
+        # Check for circular merges
+        if source_ticket.merged_into_ticket_id == target_ticket.id:
+            raise HTTPException(status_code=400, detail="Tickets are already merged")
+        
+        # Check if source is already merged
+        if source_ticket.merged_into_ticket_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ticket is already merged into ticket {source_ticket.merged_into_ticket_id}"
+            )
+        
+        # Check if target is merged (can't merge into a merged ticket)
+        if target_ticket.merged_into_ticket_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot merge into a ticket that has been merged into another ticket"
+            )
+        
+        # Merge the ticket
+        source_ticket.merged_into_ticket_id = target_ticket.id
+        source_ticket.status = TicketStatus.CLOSED
+        source_ticket.closed_at = datetime.now(timezone.utc)
+        source_ticket.closed_by_id = current_user.id
+        
+        # Add a comment to both tickets about the merge
+        # Comment on source ticket
+        source_comment = TicketComment(
+            id=str(uuid.uuid4()),
+            ticket_id=source_ticket.id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            comment=f"This ticket has been merged into ticket {target_ticket.ticket_number}",
+            is_internal=True
+        )
+        sync_db.add(source_comment)
+        
+        # Comment on target ticket
+        target_comment = TicketComment(
+            id=str(uuid.uuid4()),
+            ticket_id=target_ticket.id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            comment=f"Ticket {source_ticket.ticket_number} has been merged into this ticket",
+            is_internal=True
+        )
+        sync_db.add(target_comment)
+        
+        # Create history entries
+        source_history = TicketHistory(
+            id=str(uuid.uuid4()),
+            ticket_id=source_ticket.id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            action="merged",
+            old_value=None,
+            new_value=f"Merged into {target_ticket.ticket_number}",
+            description=f"Ticket merged into {target_ticket.ticket_number}"
+        )
+        sync_db.add(source_history)
+        
+        target_history = TicketHistory(
+            id=str(uuid.uuid4()),
+            ticket_id=target_ticket.id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            action="merge_received",
+            old_value=None,
+            new_value=source_ticket.ticket_number,
+            description=f"Received merge from ticket {source_ticket.ticket_number}"
+        )
+        sync_db.add(target_history)
+        
+        sync_db.commit()
+        sync_db.refresh(source_ticket)
+        sync_db.refresh(target_ticket)
+        
+        return {
+            "success": True,
+            "source_ticket": source_ticket,
+            "target_ticket": target_ticket,
+            "message": f"Ticket {source_ticket.ticket_number} merged into {target_ticket.ticket_number}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error merging ticket: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error merging ticket: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.get("/tickets/{ticket_id}/merged-tickets")
+async def get_merged_tickets(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get tickets that have been merged into this ticket"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists and belongs to tenant
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Find all tickets merged into this one
+        merged_tickets = sync_db.query(Ticket).filter(
+            Ticket.merged_into_ticket_id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).all()
+        
+        return {
+            "ticket_id": ticket_id,
+            "merged_tickets": merged_tickets
         }
     finally:
         sync_db.close()

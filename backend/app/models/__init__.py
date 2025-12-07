@@ -32,7 +32,7 @@ from .pricing_config import TenantPricingConfig, PricingBundleItem, PricingConfi
 from .support_contract import SupportContract, ContractRenewal, ContractTemplate as SupportContractTemplate, ContractType as SupportContractType, ContractStatus as SupportContractStatus, RenewalFrequency
 from .contracts import Contract, EnhancedContractTemplate, ContractTemplateVersion, ContractType, ContractStatus
 from .opportunities import Opportunity, OpportunityStage
-from .helpdesk import Ticket, TicketComment, TicketAttachment, TicketHistory, TicketAgentChat, NPAHistory, SLAPolicy, TicketStatus, TicketPriority, TicketType
+from .helpdesk import Ticket, TicketComment, TicketAttachment, TicketHistory, TicketAgentChat, NPAHistory, SLAPolicy, TicketTemplate, QuickReplyTemplate, TicketMacro, TicketStatus, TicketPriority, TicketType
 from .knowledge_base import KnowledgeBaseArticle
 from .sla_compliance import SLAComplianceRecord, SLABreachAlert
 
@@ -56,7 +56,7 @@ __all__ = [
     "SupportContract", "ContractRenewal", "SupportContractTemplate", "SupportContractType", "SupportContractStatus", "RenewalFrequency",
     "Contract", "EnhancedContractTemplate", "ContractTemplateVersion", "ContractType", "ContractStatus",
     "Opportunity", "OpportunityStage",
-    "Ticket", "TicketComment", "TicketAttachment", "TicketHistory", "TicketAgentChat", "NPAHistory", "SLAPolicy",
+    "Ticket", "TicketComment", "TicketAttachment", "TicketHistory", "TicketAgentChat", "NPAHistory", "SLAPolicy", "TicketTemplate", "QuickReplyTemplate", "TicketMacro",
     "TicketStatus", "TicketPriority", "TicketType",
     "SLAComplianceRecord", "SLABreachAlert",
     "KnowledgeBaseArticle"

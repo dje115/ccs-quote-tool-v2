@@ -105,6 +105,7 @@ class Ticket(Base, TimestampMixin):
     # Related entities
     related_quote_id = Column(String(36), ForeignKey("quotes.id"), nullable=True)
     related_contract_id = Column(String(36), ForeignKey("support_contracts.id"), nullable=True)
+    merged_into_ticket_id = Column(String(36), ForeignKey("tickets.id"), nullable=True, index=True)  # If this ticket was merged into another
     
     # Metadata
     tags = Column(JSON, nullable=True)  # Array of tag strings
@@ -389,5 +390,96 @@ class SLAPolicy(Base, TimestampMixin):
     __table_args__ = (
         Index('idx_sla_tenant_active', 'tenant_id', 'is_active'),
         Index('idx_sla_default', 'tenant_id', 'is_default'),
+    )
+
+
+class TicketTemplate(Base, TimestampMixin):
+    """Ticket template for common ticket types"""
+    __tablename__ = "ticket_templates"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    
+    # Template details
+    name = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=True, index=True)  # Support, Billing, Technical, etc.
+    
+    # Template content
+    subject_template = Column(Text, nullable=True)  # Subject line template
+    description_template = Column(Text, nullable=True)  # Description template
+    npa_template = Column(Text, nullable=True)  # Next Point of Action template
+    
+    # Metadata
+    tags = Column(JSON, nullable=True)  # Array of tag strings
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    created_by = relationship("User", foreign_keys="TicketTemplate.created_by_id")
+    created_by_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    def __repr__(self):
+        return f"<TicketTemplate {self.name}>"
+    
+    __table_args__ = (
+        Index('idx_template_tenant_active', 'tenant_id', 'is_active'),
+        Index('idx_template_category', 'category'),
+    )
+
+
+class QuickReplyTemplate(Base, TimestampMixin):
+    """Quick reply template for common responses"""
+    __tablename__ = "quick_reply_templates"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    
+    # Template details
+    name = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)  # The reply text
+    category = Column(String(100), nullable=True, index=True)  # Support, Billing, Technical, etc.
+    
+    # Sharing
+    is_shared = Column(Boolean, default=False, nullable=False)  # Shared with team or personal
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    created_by = relationship("User", foreign_keys="QuickReplyTemplate.created_by_id")
+    created_by_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    def __repr__(self):
+        return f"<QuickReplyTemplate {self.name}>"
+    
+    __table_args__ = (
+        Index('idx_quick_reply_tenant_shared', 'tenant_id', 'is_shared'),
+        Index('idx_quick_reply_category', 'category'),
+    )
+
+
+class TicketMacro(Base, TimestampMixin):
+    """Ticket macro for automating common workflows"""
+    __tablename__ = "ticket_macros"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    
+    # Macro details
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    actions = Column(JSON, nullable=False)  # Array of actions to execute
+    
+    # Sharing
+    is_shared = Column(Boolean, default=False, nullable=False)  # Shared with team or personal
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    created_by = relationship("User", foreign_keys="TicketMacro.created_by_id")
+    created_by_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    def __repr__(self):
+        return f"<TicketMacro {self.name}>"
+    
+    __table_args__ = (
+        Index('idx_macro_tenant_shared', 'tenant_id', 'is_shared'),
     )
 

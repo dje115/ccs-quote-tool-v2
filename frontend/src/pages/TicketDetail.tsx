@@ -60,16 +60,24 @@ import {
   Assignment as AssignmentIcon,
   TrendingUp as TrendingUpIcon,
   AddComment as AddCommentIcon,
+  Reply as ReplyIcon,
   Assessment as AssessmentIcon,
   AccessTime as AccessTimeIcon,
   Error as ErrorIcon,
-  Article as ArticleIcon
+  Article as ArticleIcon,
+  MergeType as MergeTypeIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { helpdeskAPI, slaAPI } from '../services/api';
 import TicketKBAnswer from '../components/TicketKBAnswer';
 import TicketNPA from '../components/TicketNPA';
 import TicketChatbot from '../components/TicketChatbot';
+import TicketTemplateSelector from '../components/TicketTemplateSelector';
+import QuickReplyMenu from '../components/QuickReplyMenu';
+import KeyboardShortcutsHelp from '../components/KeyboardShortcutsHelp';
+import TicketMacroMenu from '../components/TicketMacroMenu';
+import TicketMergeDialog from '../components/TicketMergeDialog';
+import { useKeyboardShortcuts, KeyboardShortcut } from '../hooks/useKeyboardShortcuts';
 
 const TicketDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -102,6 +110,8 @@ const TicketDetail: React.FC = () => {
   const [currentNpa, setCurrentNpa] = useState<any>(null);
   const [npaHistory, setNpaHistory] = useState<any[]>([]);
   const [loadingNpaHistory, setLoadingNpaHistory] = useState(false);
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
 
   // Use ref to track description cleanup status to avoid re-renders
   const descriptionCleanupStatusRef = useRef<string | null>(null);
@@ -135,6 +145,65 @@ const TicketDetail: React.FC = () => {
     
     return () => clearInterval(interval);
   }, [id, ticket?.description_ai_cleanup_status]); // Only re-run if ticket ID or status changes
+
+  // Keyboard Shortcuts
+  const shortcuts: KeyboardShortcut[] = [
+    {
+      key: 's',
+      ctrl: true,
+      description: 'Save ticket',
+      action: async () => {
+        if (ticket) {
+          try {
+            await helpdeskAPI.updateTicket(ticket.id, ticket);
+            setSuccess('Ticket saved');
+          } catch (err: any) {
+            setError(err.response?.data?.detail || 'Failed to save ticket');
+          }
+        }
+      },
+      disabled: !ticket
+    },
+    {
+      key: 'r',
+      ctrl: true,
+      description: 'Reply/Add Comment',
+      action: () => {
+        setCommentDialogOpen(true);
+      },
+      disabled: !ticket
+    },
+    {
+      key: 'k',
+      ctrl: true,
+      description: 'Open Knowledge Base',
+      action: () => {
+        setCurrentTab(1);
+      },
+      disabled: !ticket
+    },
+    {
+      key: '/',
+      ctrl: true,
+      description: 'Show Shortcuts Help',
+      action: () => {
+        setShortcutsHelpOpen(true);
+      }
+    },
+    {
+      key: 'Escape',
+      description: 'Close Dialog',
+      action: () => {
+        if (commentDialogOpen) setCommentDialogOpen(false);
+        if (npaDialogOpen) setNpaDialogOpen(false);
+        if (statusMenuAnchor) setStatusMenuAnchor(null);
+        if (priorityMenuAnchor) setPriorityMenuAnchor(null);
+        if (actionMenuAnchor) setActionMenuAnchor(null);
+      }
+    }
+  ];
+
+  useKeyboardShortcuts(shortcuts);
 
   const loadCurrentNPA = async () => {
     try {
@@ -560,6 +629,27 @@ const TicketDetail: React.FC = () => {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          {id && (
+            <>
+              <TicketTemplateSelector
+                ticketId={id}
+                onTemplateApplied={async (template) => {
+                  setSuccess(`Template "${template.name}" applied successfully!`);
+                  await loadTicket();
+                  await loadCurrentNPA();
+                }}
+              />
+              <TicketMacroMenu
+                ticketId={id}
+                onMacroExecuted={async () => {
+                  setSuccess('Macro executed successfully!');
+                  await loadTicket();
+                  await loadCurrentNPA();
+                }}
+                onError={(error) => setError(error)}
+              />
+            </>
+          )}
           <Tooltip title="Run AI Analysis">
             <Button
               variant="outlined"
@@ -600,6 +690,11 @@ const TicketDetail: React.FC = () => {
         <MenuItem onClick={() => { setActionMenuAnchor(null); }}>
           <ListItemIcon><AssignmentIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Assign Ticket</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => { setActionMenuAnchor(null); setMergeDialogOpen(true); }}>
+          <ListItemIcon><MergeTypeIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Merge Ticket</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -1516,17 +1611,28 @@ const TicketDetail: React.FC = () => {
       <Dialog open={commentDialogOpen} onClose={() => setCommentDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Add Comment</DialogTitle>
         <DialogContent>
-          <TextField
-            fullWidth
-            multiline
-            rows={6}
-            label="Comment"
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            margin="normal"
-            required
-            placeholder="Add your comment here..."
-          />
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={6}
+              label="Comment"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              margin="normal"
+              required
+              placeholder="Add your comment here..."
+            />
+            <Button
+              variant="outlined"
+              startIcon={<ReplyIcon />}
+              onClick={(e) => setQuickReplyAnchor(e.currentTarget)}
+              sx={{ mt: 2, minWidth: 120 }}
+              size="small"
+            >
+              Quick Reply
+            </Button>
+          </Box>
           <Box sx={{ mt: 2 }}>
             <input
               type="checkbox"
@@ -1550,6 +1656,18 @@ const TicketDetail: React.FC = () => {
             Add Comment
           </Button>
         </DialogActions>
+        
+        {/* Quick Reply Menu */}
+        <QuickReplyMenu
+          anchorEl={quickReplyAnchor}
+          open={Boolean(quickReplyAnchor)}
+          onClose={() => setQuickReplyAnchor(null)}
+          onSelect={(content) => {
+            setNewComment(prev => prev ? `${prev}\n\n${content}` : content);
+            setQuickReplyAnchor(null);
+          }}
+          ticketId={id || undefined}
+        />
       </Dialog>
 
       {/* NPA State Selection Dialog */}
@@ -1665,6 +1783,41 @@ const TicketDetail: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Keyboard Shortcuts Help */}
+      <KeyboardShortcutsHelp
+        open={shortcutsHelpOpen}
+        onClose={() => setShortcutsHelpOpen(false)}
+        customShortcuts={[
+          { key: 's', ctrl: true, description: 'Save ticket' },
+          { key: 'e', ctrl: true, description: 'Edit ticket' },
+          { key: 'a', ctrl: true, description: 'Assign ticket' },
+          { key: 'r', ctrl: true, description: 'Reply/Add Comment' },
+          { key: 'k', ctrl: true, description: 'Open Knowledge Base' },
+          { key: '/', ctrl: true, description: 'Show Shortcuts Help' },
+          { key: 'Escape', description: 'Close Dialog' }
+        ]}
+      />
+
+      {/* Merge Ticket Dialog */}
+      {ticket && (
+        <TicketMergeDialog
+          open={mergeDialogOpen}
+          onClose={() => setMergeDialogOpen(false)}
+          sourceTicket={{
+            id: ticket.id,
+            ticket_number: ticket.ticket_number,
+            subject: ticket.subject,
+            status: ticket.status,
+            priority: ticket.priority,
+            created_at: ticket.created_at
+          }}
+          onMergeSuccess={async () => {
+            setSuccess('Ticket merged successfully!');
+            await loadTicket();
+          }}
+        />
+      )}
     </Container>
   );
 };

@@ -494,6 +494,43 @@ export const helpdeskAPI = {
       close_ticket: closeTicket || false,
       notes 
     }),
+  // Ticket Templates endpoints
+  getTemplates: (category?: string, activeOnly: boolean = true) => 
+    apiClient.get('/helpdesk/templates', { params: { category, active_only: activeOnly } }),
+  getTemplate: (templateId: string) => apiClient.get(`/helpdesk/templates/${templateId}`),
+  createTemplate: (data: any) => apiClient.post('/helpdesk/templates', data),
+  updateTemplate: (templateId: string, data: any) => apiClient.put(`/helpdesk/templates/${templateId}`, data),
+  deleteTemplate: (templateId: string) => apiClient.delete(`/helpdesk/templates/${templateId}`),
+  applyTemplate: (ticketId: string, templateId: string) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/apply-template/${templateId}`),
+  // Quick Reply Templates endpoints
+  getQuickReplies: (category?: string, includeShared: boolean = true) => 
+    apiClient.get('/helpdesk/quick-replies', { params: { category, include_shared: includeShared } }),
+  getQuickReply: (templateId: string) => apiClient.get(`/helpdesk/quick-replies/${templateId}`),
+  createQuickReply: (data: any) => apiClient.post('/helpdesk/quick-replies', data),
+  updateQuickReply: (templateId: string, data: any) => apiClient.put(`/helpdesk/quick-replies/${templateId}`, data),
+  deleteQuickReply: (templateId: string) => apiClient.delete(`/helpdesk/quick-replies/${templateId}`),
+  // Bulk Operations endpoints
+  bulkAssignTickets: (ticketIds: string[], userId: string) => 
+    apiClient.post('/helpdesk/tickets/bulk-assign', { ticket_ids: ticketIds, user_id: userId }),
+  bulkUpdateTickets: (data: { ticket_ids: string[]; action: string; [key: string]: any }) => 
+    apiClient.post('/helpdesk/tickets/bulk-update', data),
+  bulkCloseTickets: (ticketIds: string[], status: 'closed' | 'resolved' = 'closed') => 
+    apiClient.post('/helpdesk/tickets/bulk-close', ticketIds, { params: { status } }),
+  // Ticket Macros endpoints
+  getMacros: (includeShared: boolean = true) => 
+    apiClient.get('/helpdesk/macros', { params: { include_shared: includeShared } }),
+  getMacro: (macroId: string) => apiClient.get(`/helpdesk/macros/${macroId}`),
+  createMacro: (data: any) => apiClient.post('/helpdesk/macros', data),
+  updateMacro: (macroId: string, data: any) => apiClient.put(`/helpdesk/macros/${macroId}`, data),
+  deleteMacro: (macroId: string) => apiClient.delete(`/helpdesk/macros/${macroId}`),
+  executeMacro: (ticketId: string, macroId: string) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/execute-macro/${macroId}`),
+  // Ticket Merging endpoints
+  mergeTicket: (ticketId: string, targetTicketId: string) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/merge`, { target_ticket_id: targetTicketId }),
+  getMergedTickets: (ticketId: string) => 
+    apiClient.get(`/helpdesk/tickets/${ticketId}/merged-tickets`),
   // Analytics endpoints
   getVolumeTrends: (startDate: string, endDate: string, interval: 'day' | 'week' | 'month' = 'day') =>
     apiClient.get('/helpdesk/analytics/volume-trends', { params: { start_date: startDate, end_date: endDate, interval } }),
