@@ -2948,14 +2948,26 @@ async def save_chat_to_npa(
 async def mark_chat_as_solution(
     ticket_id: str,
     message_id: str,
+    add_to_kb: Optional[bool] = Body(False, embed=True),
+    close_ticket: Optional[bool] = Body(False, embed=True),
     notes: Optional[str] = Body(None, embed=True),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """Mark a chat message as the solution"""
+    """
+    Mark a chat message as the solution and perform workflow actions:
+    - Close current NPA
+    - Create new NPA with state='solution' containing the fix
+    - Optionally add to knowledge base
+    - Optionally close the ticket
+    """
     from app.core.database import SessionLocal
-    from app.models.helpdesk import Ticket, TicketAgentChat
+    from app.models.helpdesk import Ticket, TicketAgentChat, NPAHistory, TicketStatus
+    from app.services.ticket_npa_service import TicketNPAService
+    from app.services.helpdesk_service import HelpdeskService
+    from datetime import datetime, timezone
+    import uuid
     
     sync_db = SessionLocal()
     try:
@@ -2983,16 +2995,116 @@ async def mark_chat_as_solution(
             TicketAgentChat.is_solution == True
         ).update({"is_solution": False})
         
-        # Mark this as solution
+        # Mark this message as solution
         message.is_solution = True
-        message.solution_notes = notes
+        message.solution_notes = notes or "Marked as solution from agent chat"
+        
+        # Close current NPA if exists
+        if ticket.npa_original_text:
+            current_npa_history = sync_db.query(NPAHistory).filter(
+                NPAHistory.ticket_id == ticket_id,
+                NPAHistory.tenant_id == current_tenant.id,
+                NPAHistory.completed_at.is_(None)
+            ).order_by(NPAHistory.created_at.desc()).first()
+            
+            if current_npa_history:
+                # Mark existing history entry as completed
+                current_npa_history.completed_at = datetime.now(timezone.utc)
+                current_npa_history.completed_by_id = current_user.id
+                current_npa_history.completion_notes = "Closed when marking solution"
+            else:
+                # Create history entry for current NPA before closing
+                closed_npa_history = NPAHistory(
+                    id=str(uuid.uuid4()),
+                    ticket_id=ticket_id,
+                    tenant_id=current_tenant.id,
+                    npa_original_text=ticket.npa_original_text,
+                    npa_cleaned_text=ticket.npa_cleaned_text,
+                    npa_state=ticket.npa_state if isinstance(ticket.npa_state, str) else (ticket.npa_state.value if hasattr(ticket.npa_state, 'value') else str(ticket.npa_state)) if ticket.npa_state else 'investigation',
+                    assigned_to_id=ticket.next_point_of_action_assigned_to_id,
+                    due_date=ticket.next_point_of_action_due_date,
+                    date_override=ticket.npa_date_override,
+                    exclude_from_sla=ticket.npa_exclude_from_sla,
+                    answers_to_questions=ticket.npa_answers_original_text,
+                    answers_cleaned_text=ticket.npa_answers_cleaned_text,
+                    completed_at=datetime.now(timezone.utc),
+                    completed_by_id=current_user.id,
+                    completion_notes="Closed when marking solution"
+                )
+                sync_db.add(closed_npa_history)
+        
+        # Create new NPA with state='solution' containing the fix
+        solution_text = f"SOLUTION (Fix):\n{message.content}"
+        if notes:
+            solution_text += f"\n\nNotes: {notes}"
+        
+        npa_service = TicketNPAService(sync_db, current_tenant.id)
+        result = npa_service.update_npa(
+            ticket=ticket,
+            npa=solution_text,
+            npa_state='solution',  # Mark as solution state
+            trigger_ai_cleanup=True
+        )
+        
+        # Create a history entry for the solution NPA
+        solution_npa_history = NPAHistory(
+            id=str(uuid.uuid4()),
+            ticket_id=ticket_id,
+            tenant_id=current_tenant.id,
+            npa_original_text=solution_text,
+            npa_cleaned_text=result.get("npa"),  # AI-cleaned version
+            npa_state='solution',  # Explicitly mark as solution
+            assigned_to_id=ticket.next_point_of_action_assigned_to_id,
+            due_date=ticket.next_point_of_action_due_date,
+            date_override=ticket.npa_date_override,
+            exclude_from_sla=True,  # Solutions don't count toward SLA
+            answers_to_questions=message.content,  # Store the solution
+            ai_cleanup_status=result.get("ai_cleanup_status", "pending"),
+            ai_cleanup_task_id=result.get("ai_cleanup_task_id")
+        )
+        sync_db.add(solution_npa_history)
+        sync_db.flush()  # Flush to get the ID
+        
+        # Link message to solution NPA
+        message.linked_to_npa_id = solution_npa_history.id
+        
+        # Optionally add to knowledge base
+        kb_article_id = None
+        if add_to_kb:
+            try:
+                helpdesk_service = HelpdeskService(sync_db, current_tenant.id)
+                kb_article = helpdesk_service.create_knowledge_base_article(
+                    title=f"Solution: {ticket.subject}",
+                    content=f"**Problem:**\n{ticket.description}\n\n**Solution:**\n{message.content}",
+                    summary=f"Solution for: {ticket.subject}",
+                    category=ticket.ticket_type.value if hasattr(ticket.ticket_type, 'value') else str(ticket.ticket_type),
+                    tags=[ticket.ticket_number, "solution", "agent-chat"],
+                    author_id=current_user.id,
+                    is_published=True,
+                    is_featured=False
+                )
+                kb_article_id = kb_article.id
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error creating knowledge base article: {e}", exc_info=True)
+                # Don't fail the whole operation if KB creation fails
+        
+        # Optionally close the ticket
+        if close_ticket:
+            ticket.status = TicketStatus.RESOLVED
+            ticket.closed_at = datetime.now(timezone.utc)
+            ticket.closed_by_id = current_user.id
         
         sync_db.commit()
         
         return {
             "success": True,
             "message_id": message_id,
-            "message": "Chat marked as solution"
+            "npa_id": solution_npa_history.id,
+            "kb_article_id": kb_article_id,
+            "ticket_closed": close_ticket,
+            "message": "Solution marked, NPA created, and actions completed"
         }
     finally:
         sync_db.close()

@@ -488,8 +488,12 @@ export const helpdeskAPI = {
   getAgentChatTaskStatus: (ticketId: string, taskId: string) => apiClient.get(`/helpdesk/tickets/${ticketId}/agent-chat/task/${taskId}`),
   saveChatToNPA: (ticketId: string, messageId: string, npaId?: string, createNew?: boolean) => 
     apiClient.post(`/helpdesk/tickets/${ticketId}/agent-chat/${messageId}/save-to-npa`, { npa_id: npaId, create_new: createNew }),
-  markChatAsSolution: (ticketId: string, messageId: string, notes?: string) => 
-    apiClient.post(`/helpdesk/tickets/${ticketId}/agent-chat/${messageId}/mark-solution`, { notes }),
+  markChatAsSolution: (ticketId: string, messageId: string, addToKB?: boolean, closeTicket?: boolean, notes?: string) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/agent-chat/${messageId}/mark-solution`, { 
+      add_to_kb: addToKB || false,
+      close_ticket: closeTicket || false,
+      notes 
+    }),
   // Analytics endpoints
   getVolumeTrends: (startDate: string, endDate: string, interval: 'day' | 'week' | 'month' = 'day') =>
     apiClient.get('/helpdesk/analytics/volume-trends', { params: { start_date: startDate, end_date: endDate, interval } }),

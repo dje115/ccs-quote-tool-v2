@@ -22,7 +22,10 @@ import {
   ListItemSecondaryAction,
   Menu,
   MenuItem,
-  Tooltip
+  Tooltip,
+  Checkbox,
+  FormControlLabel,
+  FormGroup
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -84,6 +87,11 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [pollingTaskId, setPollingTaskId] = useState<string | null>(null);
   const [messageMenuAnchor, setMessageMenuAnchor] = useState<{ anchor: HTMLElement; messageId: string } | null>(null);
+  const [showSolutionDialog, setShowSolutionDialog] = useState(false);
+  const [solutionMessageId, setSolutionMessageId] = useState<string | null>(null);
+  const [addToKB, setAddToKB] = useState(false);
+  const [closeTicket, setCloseTicket] = useState(true); // Recommended by default
+  const [solutionNotes, setSolutionNotes] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -335,9 +343,28 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
   };
 
   const handleMarkAsSolution = async (messageId: string) => {
+    // Show dialog for options
+    setSolutionMessageId(messageId);
+    setShowSolutionDialog(true);
+    setMessageMenuAnchor(null);
+  };
+
+  const confirmMarkAsSolution = async () => {
+    if (!solutionMessageId) return;
+    
     try {
-      await helpdeskAPI.markChatAsSolution(ticketId, messageId);
-      setMessageMenuAnchor(null);
+      await helpdeskAPI.markChatAsSolution(
+        ticketId, 
+        solutionMessageId, 
+        addToKB, 
+        closeTicket, 
+        solutionNotes || undefined
+      );
+      setShowSolutionDialog(false);
+      setSolutionMessageId(null);
+      setAddToKB(false);
+      setCloseTicket(true);
+      setSolutionNotes('');
       setError(null);
       await loadChatHistory();
     } catch (err: any) {
@@ -546,6 +573,96 @@ const TicketChatbot: React.FC<TicketChatbotProps> = ({ ticketId }) => {
           Mark as Solution
         </MenuItem>
       </Menu>
+
+      {/* Mark as Solution Dialog */}
+      <Dialog 
+        open={showSolutionDialog} 
+        onClose={() => {
+          setShowSolutionDialog(false);
+          setSolutionMessageId(null);
+          setAddToKB(false);
+          setCloseTicket(true);
+          setSolutionNotes('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CheckCircleIcon color="success" />
+            Mark as Solution
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            This will close the current NPA and create a new NPA marked as "solution" containing this fix.
+          </Typography>
+          
+          <FormGroup sx={{ mb: 3 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={addToKB}
+                  onChange={(e) => setAddToKB(e.target.checked)}
+                />
+              }
+              label="Add to Knowledge Base"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 4, mb: 1 }}>
+              Create a knowledge base article from this solution
+            </Typography>
+            
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={closeTicket}
+                  onChange={(e) => setCloseTicket(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={
+                <Box>
+                  <Typography component="span">Close Ticket</Typography>
+                  <Chip label="Recommended" size="small" color="primary" sx={{ ml: 1 }} />
+                </Box>
+              }
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 4 }}>
+              Mark the ticket as resolved
+            </Typography>
+          </FormGroup>
+
+          <TextField
+            label="Additional Notes (Optional)"
+            multiline
+            rows={3}
+            fullWidth
+            value={solutionNotes}
+            onChange={(e) => setSolutionNotes(e.target.value)}
+            placeholder="Add any additional notes about this solution..."
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setShowSolutionDialog(false);
+            setSolutionMessageId(null);
+            setAddToKB(false);
+            setCloseTicket(true);
+            setSolutionNotes('');
+          }}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={confirmMarkAsSolution} 
+            variant="contained" 
+            color="success"
+            startIcon={<CheckCircleIcon />}
+          >
+            Mark as Solution
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
