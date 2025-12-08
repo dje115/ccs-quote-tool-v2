@@ -34,7 +34,7 @@ class KnowledgeBaseArticle(BaseModel):
     tags = Column(JSON, default=list)  # List of tags
     
     # Status
-    status = Column(String(20), default=ArticleStatus.PUBLISHED.value, nullable=False, index=True)
+    is_published = Column(Boolean, default=False, nullable=False, index=True)
     is_featured = Column(Boolean, default=False, nullable=False)
     
     # Usage tracking
@@ -50,7 +50,7 @@ class KnowledgeBaseArticle(BaseModel):
         return f"<KnowledgeBaseArticle {self.title}>"
     
     __table_args__ = (
-        Index('idx_kb_article_tenant_status', 'tenant_id', 'status'),
+        Index('idx_kb_article_tenant_published', 'tenant_id', 'is_published'),
         Index('idx_kb_article_category', 'category'),
     )
 

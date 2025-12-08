@@ -105,7 +105,31 @@ async def list_opportunities(
     result = await db.execute(stmt)
     opportunities = result.scalars().all()
     
-    return [OpportunityResponse.model_validate(opp) for opp in opportunities]
+    # Convert stage enum to string for each opportunity
+    result = []
+    for opp in opportunities:
+        opp_dict = {
+            "id": opp.id,
+            "customer_id": opp.customer_id,
+            "tenant_id": opp.tenant_id,
+            "title": opp.title,
+            "description": opp.description,
+            "stage": opp.stage.value if hasattr(opp.stage, 'value') else str(opp.stage),
+            "conversion_probability": opp.conversion_probability,
+            "potential_deal_date": opp.potential_deal_date,
+            "estimated_value": float(opp.estimated_value) if opp.estimated_value else None,
+            "quote_ids": opp.quote_ids,
+            "support_contract_ids": opp.support_contract_ids,
+            "attachments": opp.attachments,
+            "notes": opp.notes,
+            "recurring_quote_schedule": opp.recurring_quote_schedule,
+            "created_by": opp.created_by,
+            "updated_by": opp.updated_by,
+            "created_at": opp.created_at,
+            "updated_at": opp.updated_at
+        }
+        result.append(OpportunityResponse(**opp_dict))
+    return result
 
 
 @router.get("/customer/{customer_id}", response_model=List[OpportunityResponse])
@@ -144,7 +168,31 @@ async def get_customer_opportunities(
     result = await db.execute(stmt)
     opportunities = result.scalars().all()
     
-    return [OpportunityResponse.model_validate(opp) for opp in opportunities]
+    # Convert stage enum to string for each opportunity
+    result = []
+    for opp in opportunities:
+        opp_dict = {
+            "id": opp.id,
+            "customer_id": opp.customer_id,
+            "tenant_id": opp.tenant_id,
+            "title": opp.title,
+            "description": opp.description,
+            "stage": opp.stage.value if hasattr(opp.stage, 'value') else str(opp.stage),
+            "conversion_probability": opp.conversion_probability,
+            "potential_deal_date": opp.potential_deal_date,
+            "estimated_value": float(opp.estimated_value) if opp.estimated_value else None,
+            "quote_ids": opp.quote_ids,
+            "support_contract_ids": opp.support_contract_ids,
+            "attachments": opp.attachments,
+            "notes": opp.notes,
+            "recurring_quote_schedule": opp.recurring_quote_schedule,
+            "created_by": opp.created_by,
+            "updated_by": opp.updated_by,
+            "created_at": opp.created_at,
+            "updated_at": opp.updated_at
+        }
+        result.append(OpportunityResponse(**opp_dict))
+    return result
 
 
 @router.post("/", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
@@ -190,7 +238,7 @@ async def create_opportunity(
     await db.commit()
     await db.refresh(opportunity)
     
-    return OpportunityResponse.model_validate(opportunity)
+    return opportunity_to_response(opportunity)
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
@@ -219,7 +267,7 @@ async def get_opportunity(
             detail="Opportunity not found"
         )
     
-    return OpportunityResponse.model_validate(opportunity)
+    return opportunity_to_response(opportunity)
 
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
@@ -297,7 +345,7 @@ async def update_opportunity(
             logger = logging.getLogger(__name__)
             logger.warning(f"Lifecycle check failed for customer {opportunity.customer_id}: {e}")
     
-    return OpportunityResponse.model_validate(opportunity)
+    return opportunity_to_response(opportunity)
 
 
 @router.put("/{opportunity_id}/stage", response_model=OpportunityResponse)
@@ -351,7 +399,7 @@ async def update_opportunity_stage(
         logger = logging.getLogger(__name__)
         logger.warning(f"Lifecycle check failed for customer {opportunity.customer_id}: {e}")
     
-    return OpportunityResponse.model_validate(opportunity)
+    return opportunity_to_response(opportunity)
 
 
 @router.post("/{opportunity_id}/attach-quote")
@@ -391,7 +439,7 @@ async def attach_quote_to_opportunity(
         await db.commit()
     
     await db.refresh(opportunity)
-    return OpportunityResponse.model_validate(opportunity)
+    return opportunity_to_response(opportunity)
 
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)

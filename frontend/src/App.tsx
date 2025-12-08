@@ -58,6 +58,8 @@ const CustomerSLAReport = lazy(() => import('./pages/CustomerSLAReport'));
 const HelpdeskPerformance = lazy(() => import('./pages/HelpdeskPerformance'));
 const NPADashboard = lazy(() => import('./components/NPADashboard'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
+const TicketTemplates = lazy(() => import('./pages/TicketTemplates'));
+const TicketMacros = lazy(() => import('./pages/TicketMacros'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -443,6 +445,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <KnowledgeBase />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/templates"
+            element={
+              <ProtectedRoute>
+                <TicketTemplates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/macros"
+            element={
+              <ProtectedRoute>
+                <TicketMacros />
               </ProtectedRoute>
             }
           />

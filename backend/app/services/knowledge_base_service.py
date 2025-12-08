@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, or_, func
 from datetime import datetime
 
-from app.models.knowledge_base import KnowledgeBaseArticle, KnowledgeBaseTicketLink, ArticleStatus
+from app.models.knowledge_base import KnowledgeBaseArticle, KnowledgeBaseTicketLink
 from app.models.helpdesk import Ticket
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class KnowledgeBaseService:
         summary: Optional[str] = None,
         category: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        status: str = ArticleStatus.PUBLISHED.value,
+        is_published: bool = True,
         user_id: Optional[str] = None
     ) -> KnowledgeBaseArticle:
         """Create a new knowledge base article"""
@@ -52,8 +52,8 @@ class KnowledgeBaseService:
             summary=summary,
             category=category,
             tags=tags or [],
-            status=status,
-            created_by=user_id
+            is_published=is_published,
+            author_id=user_id
         )
         
         self.db.add(article)
@@ -72,7 +72,7 @@ class KnowledgeBaseService:
         try:
             stmt = select(KnowledgeBaseArticle).where(
                 KnowledgeBaseArticle.tenant_id == self.tenant_id,
-                KnowledgeBaseArticle.status == ArticleStatus.PUBLISHED.value,
+                KnowledgeBaseArticle.is_published == True,
                 or_(
                     KnowledgeBaseArticle.title.ilike(f"%{query}%"),
                     KnowledgeBaseArticle.content.ilike(f"%{query}%"),
@@ -273,7 +273,7 @@ class KnowledgeBaseService:
             try:
                 stmt = select(KnowledgeBaseArticle).where(
                     KnowledgeBaseArticle.tenant_id == self.tenant_id,
-                    KnowledgeBaseArticle.status == ArticleStatus.PUBLISHED.value
+                    KnowledgeBaseArticle.is_published == True
                 )
                 all_articles = self.db.execute(stmt).scalars().all()
             except Exception as db_error:
@@ -494,7 +494,7 @@ class KnowledgeBaseService:
         # Find articles in same category
         stmt = select(KnowledgeBaseArticle).where(
             KnowledgeBaseArticle.tenant_id == self.tenant_id,
-            KnowledgeBaseArticle.status == ArticleStatus.PUBLISHED.value,
+            KnowledgeBaseArticle.is_published == True,
             KnowledgeBaseArticle.id != article_id
         )
         
@@ -649,7 +649,7 @@ class KnowledgeBaseService:
                 article = self.db.query(KnowledgeBaseArticle).filter(
                     KnowledgeBaseArticle.id == article_id,
                     KnowledgeBaseArticle.tenant_id == self.tenant_id,
-                    KnowledgeBaseArticle.status == ArticleStatus.PUBLISHED.value
+                    KnowledgeBaseArticle.is_published == True
                 ).first()
                 articles = [article] if article else []
             else:

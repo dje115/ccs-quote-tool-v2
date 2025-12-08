@@ -37,7 +37,9 @@ import {
   Assessment as AssessmentIcon,
   Work as OpportunitiesIcon,
   Description as ContractsIcon,
-  Assignment as AssignmentIcon
+  Assignment as AssignmentIcon,
+  Description as TemplateIcon,
+  Build as MacroIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -135,6 +137,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Helpdesk Performance', icon: <AssessmentIcon />, path: '/helpdesk/performance' },
     { text: 'NPA Dashboard', icon: <AssignmentIcon />, path: '/helpdesk/npa-dashboard' },
     { text: 'Knowledge Base', icon: <PsychologyIcon />, path: '/helpdesk/knowledge-base' },
+    { text: 'Ticket Templates', icon: <TemplateIcon />, path: '/helpdesk/templates' },
+    { text: 'Ticket Macros', icon: <MacroIcon />, path: '/helpdesk/macros' },
     { text: 'SLA Management', icon: <AssessmentIcon />, path: '/sla' },
     { text: 'SLA Dashboard', icon: <AssessmentIcon />, path: '/sla/dashboard' },
     { text: 'SLA Reports', icon: <AssessmentIcon />, path: '/sla/reports' },
