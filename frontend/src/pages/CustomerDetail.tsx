@@ -95,6 +95,7 @@ import ActivityCenter from '../components/ActivityCenter';
 import CustomerTimeline from '../components/CustomerTimeline';
 import ContactDialog from '../components/ContactDialog';
 import CustomerContractsTab from '../components/CustomerContractsTab';
+import CustomerPatternAnalysis from '../components/CustomerPatternAnalysis';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -115,6 +116,7 @@ const CustomerDetail: React.FC = () => {
   const [updateAddresses, setUpdateAddresses] = useState(false);
   const [createTicketDialogOpen, setCreateTicketDialogOpen] = useState(false);
   const [newTicket, setNewTicket] = useState({ subject: '', description: '', priority: 'medium' });
+  const [patternAnalysisOpen, setPatternAnalysisOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState(() => {
     // Restore tab from localStorage on component mount
     const savedTab = localStorage.getItem('customerDetailTab');
@@ -546,6 +548,17 @@ const CustomerDetail: React.FC = () => {
         >
           Edit
         </Button>
+        {tickets.length > 0 && (
+          <Tooltip title="Analyze ticket patterns for this customer">
+            <Button
+              variant="outlined"
+              startIcon={<TrendingUpIcon />}
+              onClick={() => setPatternAnalysisOpen(true)}
+            >
+              Pattern Analysis
+            </Button>
+          </Tooltip>
+        )}
       </Box>
       {/* AI Analysis Options Dialog */}
       <Dialog 
@@ -2598,6 +2611,16 @@ const CustomerDetail: React.FC = () => {
       {/* Tab Panel 11: Contracts */}
       {currentTab === 11 && customer && (
         <CustomerContractsTab customerId={customer.id} />
+      )}
+
+      {/* Pattern Analysis Dialog */}
+      {id && (
+        <CustomerPatternAnalysis
+          open={patternAnalysisOpen}
+          onClose={() => setPatternAnalysisOpen(false)}
+          customerId={id}
+          customerName={customer?.company_name}
+        />
       )}
     </Container>
   );

@@ -44,6 +44,7 @@ const Suppliers = lazy(() => import('./pages/Suppliers'));
 const PromptManagement = lazy(() => import('./pages/PromptManagement'));
 const Helpdesk = lazy(() => import('./pages/Helpdesk'));
 const TicketDetail = lazy(() => import('./pages/TicketDetail'));
+const AgentDashboard = lazy(() => import('./pages/AgentDashboard'));
 const TrendsDashboard = lazy(() => import('./pages/TrendsDashboard'));
 const MetricsDashboard = lazy(() => import('./pages/MetricsDashboard'));
 const Contracts = lazy(() => import('./pages/Contracts'));
@@ -410,6 +411,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Helpdesk />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/helpdesk/agent-dashboard"
+            element={
+              <ProtectedRoute>
+                <AgentDashboard />
               </ProtectedRoute>
             }
           />

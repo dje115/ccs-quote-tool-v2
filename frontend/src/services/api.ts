@@ -430,6 +430,7 @@ export const helpdeskAPI = {
     apiClient.post(`/helpdesk/tickets/${id}/assign`, { user_id: userId }),
   analyzeTicket: (id: string) => apiClient.post(`/helpdesk/tickets/${id}/analyze`),
   getTicketStats: () => apiClient.get('/helpdesk/tickets/stats'),
+  getAgentDashboard: () => apiClient.get('/helpdesk/tickets/agent-dashboard'),
   searchKnowledgeBase: (query: string, category?: string) => 
     apiClient.get('/helpdesk/knowledge-base/search', { params: { query, category } }),
   // AI-powered endpoints
@@ -531,6 +532,22 @@ export const helpdeskAPI = {
     apiClient.post(`/helpdesk/tickets/${ticketId}/merge`, { target_ticket_id: targetTicketId }),
   getMergedTickets: (ticketId: string) => 
     apiClient.get(`/helpdesk/tickets/${ticketId}/merged-tickets`),
+  // Ticket Linking endpoints
+  linkTicket: (ticketId: string, targetTicketId: string, linkType: string = 'related') => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/link`, { target_ticket_id: targetTicketId, link_type: linkType }),
+  unlinkTicket: (ticketId: string, linkId: string) => 
+    apiClient.delete(`/helpdesk/tickets/${ticketId}/link/${linkId}`),
+  getTicketLinks: (ticketId: string) => 
+    apiClient.get(`/helpdesk/tickets/${ticketId}/links`),
+  // Time Tracking endpoints
+  getTimeEntries: (ticketId: string) => 
+    apiClient.get(`/helpdesk/tickets/${ticketId}/time-entries`),
+  createTimeEntry: (ticketId: string, data: any) => 
+    apiClient.post(`/helpdesk/tickets/${ticketId}/time-entries`, data),
+  updateTimeEntry: (ticketId: string, entryId: string, data: any) => 
+    apiClient.put(`/helpdesk/tickets/${ticketId}/time-entries/${entryId}`, data),
+  deleteTimeEntry: (ticketId: string, entryId: string) => 
+    apiClient.delete(`/helpdesk/tickets/${ticketId}/time-entries/${entryId}`),
   // Analytics endpoints
   getVolumeTrends: (startDate: string, endDate: string, interval: 'day' | 'week' | 'month' = 'day') =>
     apiClient.get('/helpdesk/analytics/volume-trends', { params: { start_date: startDate, end_date: endDate, interval } }),

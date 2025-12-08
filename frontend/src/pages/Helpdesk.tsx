@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import CrossCustomerPatternAnalysis from '../components/CrossCustomerPatternAnalysis';
 import {
   Container,
   Box,
@@ -34,7 +35,8 @@ import {
   FilterList as FilterIcon,
   Search as SearchIcon,
   Visibility as ViewIcon,
-  Assessment as AssessmentIcon
+  Assessment as AssessmentIcon,
+  TrendingUp as TrendingUpIcon
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { helpdeskAPI, customerAPI } from '../services/api';
@@ -95,6 +97,7 @@ const Helpdesk: React.FC = () => {
     }
   });
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
+  const [crossCustomerPatternOpen, setCrossCustomerPatternOpen] = useState(false);
 
   useEffect(() => {
     loadTickets();
@@ -143,18 +146,7 @@ const Helpdesk: React.FC = () => {
       }
       
       const response = await helpdeskAPI.getTickets(params);
-      let filteredTickets = response.data.tickets || response.data || [];
-      
-      // Apply search filter
-      if (searchQuery) {
-        filteredTickets = filteredTickets.filter((ticket: Ticket) =>
-          ticket.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          ticket.ticket_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          ticket.description?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
-      
-      setTickets(filteredTickets);
+      setTickets(response.data.tickets || response.data || []);
     } catch (err: any) {
       console.error('Error loading tickets:', err);
       setError(err.response?.data?.detail || 'Failed to load tickets');
@@ -258,13 +250,22 @@ const Helpdesk: React.FC = () => {
         <Typography variant="h4" component="h1">
           Helpdesk & Customer Service
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setCreateDialogOpen(true)}
-        >
-          New Ticket
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<TrendingUpIcon />}
+            onClick={() => setCrossCustomerPatternOpen(true)}
+          >
+            Cross-Customer Patterns
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            New Ticket
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -567,6 +568,12 @@ const Helpdesk: React.FC = () => {
           loadStats();
           setCreateDialogOpen(false);
         }}
+      />
+
+      {/* Cross-Customer Pattern Analysis Dialog */}
+      <CrossCustomerPatternAnalysis
+        open={crossCustomerPatternOpen}
+        onClose={() => setCrossCustomerPatternOpen(false)}
       />
     </Container>
   );

@@ -36,6 +36,7 @@ class PromptCategory(str, enum.Enum):
     HELPDESK_KB_ANSWER = "helpdesk_kb_answer"  # Generate answers from KB articles
     HELPDESK_QUICK_RESPONSE = "helpdesk_quick_response"  # Generate quick customer responses
     HELPDESK_AGENT_ASSISTANT = "helpdesk_agent_assistant"  # Agent chatbot for asking questions about tickets
+    HELPDESK_PATTERN_DETECTION = "helpdesk_pattern_detection"  # AI pattern detection for tickets (customer-specific and cross-customer)
     DASHBOARD_ANALYTICS = "dashboard_analytics"
     # Smart Quoting Module prompts
     QUOTE_SCOPE_ANALYSIS = "quote_scope_analysis"

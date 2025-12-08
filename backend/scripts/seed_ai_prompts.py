@@ -2967,6 +2967,84 @@ Return your response as plain text (not JSON)."""
     else:
         print("⏭️  helpdesk_agent_assistant prompt already exists")
 
+    # 39. Helpdesk Pattern Detection Prompt (for customer and cross-customer pattern analysis)
+    pattern_detection_prompt = """Analyze the following tickets to identify patterns, recurring issues, and similarities.
+
+{ticket_data}
+
+Your task is to:
+1. Identify recurring patterns or themes across tickets
+2. Find similar tickets that might be duplicates or related issues
+3. Identify common problems or root causes
+4. Calculate frequency of issues
+5. Assess severity of patterns
+
+For each pattern found, provide:
+- Pattern name: A clear, descriptive name
+- Description: Detailed explanation of the pattern
+- Ticket IDs: List of ticket IDs that match this pattern
+- Common themes: Array of common themes or keywords
+- Frequency: Number of tickets in this pattern
+- Severity: One of: low, medium, high, critical
+
+For similar tickets, provide pairs with:
+- ticket_id: First ticket ID
+- similar_ticket_id: Similar ticket ID
+- similarity_score: Float between 0.0 and 1.0
+- reason: Brief explanation of why they're similar
+
+Return your analysis as JSON with this exact structure:
+{{
+    "patterns": [
+        {{
+            "pattern_name": "string",
+            "description": "string",
+            "ticket_ids": ["id1", "id2", "id3"],
+            "common_themes": ["theme1", "theme2"],
+            "frequency": 5,
+            "severity": "medium"
+        }}
+    ],
+    "similar_tickets": [
+        {{
+            "ticket_id": "id1",
+            "similar_ticket_id": "id2",
+            "similarity_score": 0.85,
+            "reason": "Both tickets about same issue"
+        }}
+    ]
+}}
+
+Focus on identifying actionable patterns that help improve support operations."""
+
+    pattern_detection_system = """You are an expert helpdesk analyst specializing in identifying patterns and trends in support tickets. You analyze ticket data to find recurring issues, similar tickets, and systemic problems. Always respond with valid JSON matching the required format."""
+
+    existing_pattern_detection = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.HELPDESK_PATTERN_DETECTION.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_pattern_detection:
+        service.create_prompt(
+            name="Helpdesk Pattern Detection",
+            category=PromptCategory.HELPDESK_PATTERN_DETECTION.value,
+            system_prompt=pattern_detection_system,
+            user_prompt_template=pattern_detection_prompt,
+            model="gpt-4",
+            temperature=0.3,
+            max_tokens=2000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "ticket_data": "JSON array of ticket data including id, ticket_number, subject, description, status, priority, created_at, tags"
+            },
+            description="AI-powered pattern detection for identifying recurring issues and similar tickets (customer-specific and cross-customer analysis)"
+        )
+        print("✅ Created helpdesk_pattern_detection prompt")
+    else:
+        print("⏭️  helpdesk_pattern_detection prompt already exists")
+
     print("✅ AI prompts seeding complete!")
 
 

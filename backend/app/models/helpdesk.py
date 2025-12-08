@@ -3,7 +3,7 @@
 Helpdesk models for ticket management and customer service
 """
 
-from sqlalchemy import Column, String, Boolean, Text, ForeignKey, DateTime, Integer, Enum, JSON, Index
+from sqlalchemy import Column, String, Boolean, Text, ForeignKey, DateTime, Integer, Enum, JSON, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -156,6 +156,9 @@ class Ticket(Base, TimestampMixin):
     history = relationship("TicketHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketHistory.created_at")
     npa_history = relationship("NPAHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="NPAHistory.created_at")
     agent_chat = relationship("TicketAgentChat", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketAgentChat.created_at")
+    outgoing_links = relationship("TicketLink", foreign_keys="TicketLink.source_ticket_id", back_populates="source_ticket", cascade="all, delete-orphan")
+    incoming_links = relationship("TicketLink", foreign_keys="TicketLink.target_ticket_id", back_populates="target_ticket", cascade="all, delete-orphan")
+    time_entries = relationship("TicketTimeEntry", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketTimeEntry.created_at.desc()")
     
     def __repr__(self):
         return f"<Ticket {self.ticket_number} - {self.subject}>"
@@ -481,5 +484,62 @@ class TicketMacro(Base, TimestampMixin):
     
     __table_args__ = (
         Index('idx_macro_tenant_shared', 'tenant_id', 'is_shared'),
+    )
+
+
+class TicketLink(Base, TimestampMixin):
+    """Links between related tickets"""
+    __tablename__ = "ticket_links"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    
+    # Link details
+    source_ticket_id = Column(String(36), ForeignKey("tickets.id"), nullable=False, index=True)
+    target_ticket_id = Column(String(36), ForeignKey("tickets.id"), nullable=False, index=True)
+    link_type = Column(String(50), nullable=False, default='related', index=True)  # 'related', 'duplicate', 'blocks', 'blocked_by', 'follows', 'followed_by'
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    source_ticket = relationship("Ticket", foreign_keys="TicketLink.source_ticket_id", back_populates="outgoing_links")
+    target_ticket = relationship("Ticket", foreign_keys="TicketLink.target_ticket_id", back_populates="incoming_links")
+    created_by = relationship("User", foreign_keys="TicketLink.created_by_id")
+    created_by_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    def __repr__(self):
+        return f"<TicketLink {self.source_ticket_id} -> {self.target_ticket_id} ({self.link_type})>"
+    
+    __table_args__ = (
+        UniqueConstraint('source_ticket_id', 'target_ticket_id', 'link_type', name='uq_ticket_link'),
+    )
+
+
+class TicketTimeEntry(Base, TimestampMixin):
+    """Time tracking entries for tickets"""
+    __tablename__ = "ticket_time_entries"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    ticket_id = Column(String(36), ForeignKey("tickets.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Time entry details
+    description = Column(Text, nullable=True)
+    hours = Column(String(20), nullable=False)  # Store as string to handle decimal precision
+    billable = Column(Boolean, default=False, nullable=False)
+    activity_type = Column(String(50), nullable=True)  # 'work', 'research', 'communication', 'meeting', 'other'
+    started_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    ticket = relationship("Ticket", back_populates="time_entries")
+    user = relationship("User", foreign_keys="TicketTimeEntry.user_id")
+    
+    def __repr__(self):
+        return f"<TicketTimeEntry {self.hours}h on ticket {self.ticket_id}>"
+    
+    __table_args__ = (
+        Index('idx_time_entry_ticket_user', 'ticket_id', 'user_id'),
     )
 

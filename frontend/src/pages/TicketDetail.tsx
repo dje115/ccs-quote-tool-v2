@@ -65,7 +65,8 @@ import {
   AccessTime as AccessTimeIcon,
   Error as ErrorIcon,
   Article as ArticleIcon,
-  MergeType as MergeTypeIcon
+  MergeType as MergeTypeIcon,
+  Link as LinkIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { helpdeskAPI, slaAPI } from '../services/api';
@@ -77,6 +78,8 @@ import QuickReplyMenu from '../components/QuickReplyMenu';
 import KeyboardShortcutsHelp from '../components/KeyboardShortcutsHelp';
 import TicketMacroMenu from '../components/TicketMacroMenu';
 import TicketMergeDialog from '../components/TicketMergeDialog';
+import TicketLinkDialog from '../components/TicketLinkDialog';
+import TimeTrackingDialog from '../components/TimeTrackingDialog';
 import { useKeyboardShortcuts, KeyboardShortcut } from '../hooks/useKeyboardShortcuts';
 
 const TicketDetail: React.FC = () => {
@@ -123,6 +126,8 @@ const TicketDetail: React.FC = () => {
       loadKbSuggestions();
       loadCurrentNPA();
       loadNpaHistory();
+      loadTicketLinks();
+      loadTimeEntries();
     }
   }, [id]);
   
@@ -204,6 +209,34 @@ const TicketDetail: React.FC = () => {
   ];
 
   useKeyboardShortcuts(shortcuts);
+
+  const loadTicketLinks = async () => {
+    if (!id) return;
+    try {
+      setLoadingLinks(true);
+      const response = await helpdeskAPI.getTicketLinks(id);
+      setLinkedTickets(response.data);
+    } catch (error: any) {
+      console.error('Error loading ticket links:', error);
+      setLinkedTickets(null);
+    } finally {
+      setLoadingLinks(false);
+    }
+  };
+
+  const loadTimeEntries = async () => {
+    if (!id) return;
+    try {
+      setLoadingTimeEntries(true);
+      const response = await helpdeskAPI.getTimeEntries(id);
+      setTimeEntries(response.data);
+    } catch (error: any) {
+      console.error('Error loading time entries:', error);
+      setTimeEntries(null);
+    } finally {
+      setLoadingTimeEntries(false);
+    }
+  };
 
   const loadCurrentNPA = async () => {
     try {
@@ -696,6 +729,10 @@ const TicketDetail: React.FC = () => {
           <ListItemIcon><MergeTypeIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Merge Ticket</ListItemText>
         </MenuItem>
+        <MenuItem onClick={() => { setActionMenuAnchor(null); setLinkDialogOpen(true); }}>
+          <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Link Ticket</ListItemText>
+        </MenuItem>
       </Menu>
 
       {/* Status Menu */}
@@ -872,6 +909,98 @@ const TicketDetail: React.FC = () => {
               </Typography>
             </Alert>
           )}
+        </Paper>
+      )}
+
+      {/* Linked Tickets Section */}
+      {linkedTickets && (linkedTickets.outgoing_links?.length > 0 || linkedTickets.incoming_links?.length > 0) && (
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <LinkIcon color="primary" />
+              <Typography variant="h6">Linked Tickets</Typography>
+            </Box>
+            <Button
+              size="small"
+              startIcon={<LinkIcon />}
+              onClick={() => setLinkDialogOpen(true)}
+            >
+              Link Ticket
+            </Button>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+          <Grid container spacing={2}>
+            {linkedTickets.outgoing_links?.length > 0 && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Links To:
+                </Typography>
+                {linkedTickets.outgoing_links.map((item: any) => (
+                  <Box key={item.link.id} sx={{ mb: 1, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {item.ticket.ticket_number}: {item.ticket.subject}
+                        </Typography>
+                        <Chip label={item.link.link_type} size="small" sx={{ mt: 0.5, mr: 0.5 }} />
+                        <Chip label={item.ticket.status} size="small" sx={{ mt: 0.5 }} />
+                      </Box>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={async () => {
+                          try {
+                            await helpdeskAPI.unlinkTicket(ticket!.id, item.link.id);
+                            setSuccess('Link removed');
+                            await loadTicketLinks();
+                          } catch (err: any) {
+                            setError(err.response?.data?.detail || 'Failed to remove link');
+                          }
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </Box>
+                  </Box>
+                ))}
+              </Grid>
+            )}
+            {linkedTickets.incoming_links?.length > 0 && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Linked From:
+                </Typography>
+                {linkedTickets.incoming_links.map((item: any) => (
+                  <Box key={item.link.id} sx={{ mb: 1, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {item.ticket.ticket_number}: {item.ticket.subject}
+                        </Typography>
+                        <Chip label={item.link.link_type} size="small" sx={{ mt: 0.5, mr: 0.5 }} />
+                        <Chip label={item.ticket.status} size="small" sx={{ mt: 0.5 }} />
+                      </Box>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={async () => {
+                          try {
+                            await helpdeskAPI.unlinkTicket(ticket!.id, item.link.id);
+                            setSuccess('Link removed');
+                            await loadTicketLinks();
+                          } catch (err: any) {
+                            setError(err.response?.data?.detail || 'Failed to remove link');
+                          }
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </Box>
+                  </Box>
+                ))}
+              </Grid>
+            )}
+          </Grid>
         </Paper>
       )}
 
@@ -1815,6 +1944,43 @@ const TicketDetail: React.FC = () => {
           onMergeSuccess={async () => {
             setSuccess('Ticket merged successfully!');
             await loadTicket();
+          }}
+        />
+      )}
+
+      {/* Link Ticket Dialog */}
+      {ticket && (
+        <TicketLinkDialog
+          open={linkDialogOpen}
+          onClose={() => setLinkDialogOpen(false)}
+          sourceTicket={{
+            id: ticket.id,
+            ticket_number: ticket.ticket_number,
+            subject: ticket.subject,
+            status: ticket.status,
+            priority: ticket.priority,
+            created_at: ticket.created_at
+          }}
+          onLinkSuccess={async () => {
+            setSuccess('Ticket linked successfully!');
+            await loadTicketLinks();
+          }}
+        />
+      )}
+
+      {/* Time Tracking Dialog */}
+      {ticket && (
+        <TimeTrackingDialog
+          open={timeTrackingDialogOpen}
+          onClose={() => {
+            setTimeTrackingDialogOpen(false);
+            setEditingTimeEntry(null);
+          }}
+          ticketId={ticket.id}
+          existingEntry={editingTimeEntry}
+          onTimeEntryCreated={async () => {
+            setSuccess(editingTimeEntry ? 'Time entry updated!' : 'Time logged successfully!');
+            await loadTimeEntries();
           }}
         />
       )}

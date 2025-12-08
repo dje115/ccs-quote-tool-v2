@@ -107,6 +107,24 @@ class TicketMacroUpdate(BaseModel):
     is_shared: Optional[bool] = None
 
 
+class TicketTimeEntryCreate(BaseModel):
+    description: Optional[str] = None
+    hours: float
+    billable: bool = False
+    activity_type: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+
+
+class TicketTimeEntryUpdate(BaseModel):
+    description: Optional[str] = None
+    hours: Optional[float] = None
+    billable: Optional[bool] = None
+    activity_type: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+
+
 @router.post("/tickets", status_code=status.HTTP_201_CREATED)
 async def create_ticket(
     ticket_data: TicketCreate,
@@ -268,35 +286,166 @@ async def list_tickets(
     assigned_to_id: Optional[str] = Query(None),
     customer_id: Optional[str] = Query(None),
     ticket_type: Optional[TicketType] = Query(None),
+    search: Optional[str] = Query(None, description="Search in subject, description, ticket number"),
+    tags: Optional[str] = Query(None, description="Comma-separated list of tags"),
+    created_from: Optional[str] = Query(None, description="Created from date (ISO format)"),
+    created_to: Optional[str] = Query(None, description="Created to date (ISO format)"),
+    updated_from: Optional[str] = Query(None, description="Updated from date (ISO format)"),
+    updated_to: Optional[str] = Query(None, description="Updated to date (ISO format)"),
+    has_attachments: Optional[bool] = Query(None, description="Filter by tickets with/without attachments"),
+    sla_breached: Optional[bool] = Query(None, description="Filter by SLA breach status"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query("created_at", description="Sort field: created_at, updated_at, priority, status"),
+    sort_order: Optional[str] = Query("desc", description="Sort order: asc, desc"),
     current_user: User = Depends(get_current_user),
     current_tenant: Tenant = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    List tickets with filters
+    List tickets with advanced filters and search
     
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     """
     try:
-        # HelpdeskService currently expects sync session - use sync wrapper
         from app.core.database import SessionLocal
+        from app.models.helpdesk import Ticket, TicketAttachment
+        from sqlalchemy import or_, and_, func, desc, asc
+        from datetime import datetime
+        
         sync_db = SessionLocal()
         try:
-            service = HelpdeskService(sync_db, current_user.tenant_id)
-            tickets = service.get_tickets(
-                status=ticket_status,
-                priority=priority,
-                assigned_to_id=assigned_to_id or (current_user.id if assigned_to_id == "me" else None),
-                customer_id=customer_id,
-                ticket_type=ticket_type,
-                limit=limit,
-                offset=offset
-            )
+            # Build query
+            query = sync_db.query(Ticket).filter(Ticket.tenant_id == current_tenant.id)
+            
+            # Status filter
+            if ticket_status:
+                query = query.filter(Ticket.status == ticket_status)
+            
+            # Priority filter
+            if priority:
+                query = query.filter(Ticket.priority == priority)
+            
+            # Assigned to filter
+            if assigned_to_id:
+                if assigned_to_id == "me":
+                    query = query.filter(Ticket.assigned_to_id == current_user.id)
+                elif assigned_to_id == "unassigned":
+                    query = query.filter(Ticket.assigned_to_id == None)
+                else:
+                    query = query.filter(Ticket.assigned_to_id == assigned_to_id)
+            
+            # Customer filter
+            if customer_id:
+                query = query.filter(Ticket.customer_id == customer_id)
+            
+            # Ticket type filter
+            if ticket_type:
+                query = query.filter(Ticket.ticket_type == ticket_type)
+            
+            # Search filter (subject, description, ticket_number)
+            if search:
+                search_term = f"%{search}%"
+                query = query.filter(
+                    or_(
+                        Ticket.subject.ilike(search_term),
+                        Ticket.description.ilike(search_term),
+                        Ticket.ticket_number.ilike(search_term)
+                    )
+                )
+            
+            # Tags filter
+            if tags:
+                tag_list = [tag.strip() for tag in tags.split(',')]
+                # Filter tickets that have any of the specified tags
+                for tag in tag_list:
+                    query = query.filter(Ticket.tags.contains([tag]))
+            
+            # Date range filters
+            if created_from:
+                try:
+                    from_date = datetime.fromisoformat(created_from.replace('Z', '+00:00'))
+                    query = query.filter(Ticket.created_at >= from_date)
+                except:
+                    pass
+            
+            if created_to:
+                try:
+                    to_date = datetime.fromisoformat(created_to.replace('Z', '+00:00'))
+                    query = query.filter(Ticket.created_at <= to_date)
+                except:
+                    pass
+            
+            if updated_from:
+                try:
+                    from_date = datetime.fromisoformat(updated_from.replace('Z', '+00:00'))
+                    query = query.filter(Ticket.updated_at >= from_date)
+                except:
+                    pass
+            
+            if updated_to:
+                try:
+                    to_date = datetime.fromisoformat(updated_to.replace('Z', '+00:00'))
+                    query = query.filter(Ticket.updated_at <= to_date)
+                except:
+                    pass
+            
+            # Attachments filter
+            if has_attachments is not None:
+                if has_attachments:
+                    # Tickets with attachments
+                    ticket_ids_with_attachments = sync_db.query(TicketAttachment.ticket_id).distinct().subquery()
+                    query = query.filter(Ticket.id.in_(sync_db.query(ticket_ids_with_attachments.c.ticket_id)))
+                else:
+                    # Tickets without attachments
+                    ticket_ids_with_attachments = sync_db.query(TicketAttachment.ticket_id).distinct().subquery()
+                    query = query.filter(~Ticket.id.in_(sync_db.query(ticket_ids_with_attachments.c.ticket_id)))
+            
+            # SLA breach filter
+            if sla_breached is not None:
+                if sla_breached:
+                    query = query.filter(
+                        or_(
+                            Ticket.sla_first_response_breached == True,
+                            Ticket.sla_resolution_breached == True
+                        )
+                    )
+                else:
+                    query = query.filter(
+                        and_(
+                            Ticket.sla_first_response_breached != True,
+                            Ticket.sla_resolution_breached != True
+                        )
+                    )
+            
+            # Sorting
+            if sort_by == "updated_at":
+                order_by = desc(Ticket.updated_at) if sort_order == "desc" else asc(Ticket.updated_at)
+            elif sort_by == "priority":
+                order_by = desc(Ticket.priority) if sort_order == "desc" else asc(Ticket.priority)
+            elif sort_by == "status":
+                order_by = desc(Ticket.status) if sort_order == "desc" else asc(Ticket.status)
+            else:  # created_at (default)
+                order_by = desc(Ticket.created_at) if sort_order == "desc" else asc(Ticket.created_at)
+            
+            query = query.order_by(order_by)
+            
+            # Get total count before pagination
+            total_count = query.count()
+            
+            # Apply pagination
+            tickets = query.offset(offset).limit(limit).all()
+            
         finally:
             sync_db.close()
-        return {"tickets": tickets, "count": len(tickets)}
+        
+        return {
+            "tickets": tickets,
+            "count": len(tickets),
+            "total": total_count,
+            "offset": offset,
+            "limit": limit
+        }
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
@@ -335,6 +484,211 @@ async def get_ticket_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting stats: {str(e)}"
+        )
+
+
+@router.get("/tickets/agent-dashboard")
+async def get_agent_dashboard(
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get agent dashboard data including assigned tickets, workload, SLA status, etc.
+    
+    PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    """
+    try:
+        from app.core.database import SessionLocal
+        from app.models.helpdesk import Ticket, TicketStatus, TicketPriority
+        from sqlalchemy import func, and_, or_
+        from datetime import datetime, timezone, timedelta
+        
+        sync_db = SessionLocal()
+        try:
+            # My Assigned Tickets
+            my_tickets = sync_db.query(Ticket).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id,
+                Ticket.status.in_([TicketStatus.OPEN, TicketStatus.IN_PROGRESS])
+            ).order_by(Ticket.priority.desc(), Ticket.created_at.desc()).limit(10).all()
+            
+            # Ticket counts by status
+            ticket_counts = sync_db.query(
+                Ticket.status,
+                func.count(Ticket.id).label('count')
+            ).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id
+            ).group_by(Ticket.status).all()
+            
+            status_counts = {status.value: count for status, count in ticket_counts}
+            
+            # Priority breakdown
+            priority_counts = sync_db.query(
+                Ticket.priority,
+                func.count(Ticket.id).label('count')
+            ).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id,
+                Ticket.status.in_([TicketStatus.OPEN, TicketStatus.IN_PROGRESS])
+            ).group_by(Ticket.priority).all()
+            
+            priority_breakdown = {priority.value: count for priority, count in priority_counts}
+            
+            # SLA Status
+            sla_breached = sync_db.query(func.count(Ticket.id)).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id,
+                Ticket.status.in_([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]),
+                or_(
+                    Ticket.sla_first_response_breached == True,
+                    Ticket.sla_resolution_breached == True
+                )
+            ).scalar() or 0
+            
+            sla_at_risk = sync_db.query(func.count(Ticket.id)).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id,
+                Ticket.status.in_([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]),
+                Ticket.sla_policy_id != None
+            ).scalar() or 0
+            
+            # Recent activity (tickets updated in last 24 hours)
+            yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+            recent_activity = sync_db.query(Ticket).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id,
+                Ticket.updated_at >= yesterday
+            ).order_by(Ticket.updated_at.desc()).limit(5).all()
+            
+            # Overdue tickets (past due date if exists)
+            overdue_tickets = sync_db.query(Ticket).filter(
+                Ticket.tenant_id == current_tenant.id,
+                Ticket.assigned_to_id == current_user.id,
+                Ticket.status.in_([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]),
+                or_(
+                    Ticket.sla_first_response_breached == True,
+                    Ticket.sla_resolution_breached == True
+                )
+            ).order_by(Ticket.priority.desc()).limit(5).all()
+            
+            # Time tracking summary
+            from app.models.helpdesk import TicketTimeEntry
+            today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            today_time = sync_db.query(func.sum(func.cast(TicketTimeEntry.hours, func.Float))).filter(
+                TicketTimeEntry.tenant_id == current_tenant.id,
+                TicketTimeEntry.user_id == current_user.id,
+                TicketTimeEntry.created_at >= today
+            ).scalar() or 0.0
+            
+            this_week_start = today - timedelta(days=today.weekday())
+            week_time = sync_db.query(func.sum(func.cast(TicketTimeEntry.hours, func.Float))).filter(
+                TicketTimeEntry.tenant_id == current_tenant.id,
+                TicketTimeEntry.user_id == current_user.id,
+                TicketTimeEntry.created_at >= this_week_start
+            ).scalar() or 0.0
+            
+        finally:
+            sync_db.close()
+        
+        return {
+            "my_tickets": my_tickets,
+            "status_counts": status_counts,
+            "priority_breakdown": priority_breakdown,
+            "sla": {
+                "breached": sla_breached,
+                "at_risk": sla_at_risk
+            },
+            "recent_activity": recent_activity,
+            "overdue_tickets": overdue_tickets,
+            "time_tracking": {
+                "today_hours": float(today_time),
+                "week_hours": float(week_time)
+            }
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting agent dashboard: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting agent dashboard: {str(e)}"
+        )
+
+
+# ============================================================================
+# TICKET PATTERN DETECTION
+# ============================================================================
+
+@router.post("/tickets/patterns/customer/{customer_id}")
+async def detect_customer_patterns(
+    customer_id: str,
+    limit: int = Body(50, embed=True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Detect patterns in tickets for a specific customer using AI
+    This can be run manually to identify recurring issues
+    """
+    try:
+        from app.core.database import SessionLocal
+        from app.services.ticket_pattern_detection_service import TicketPatternDetectionService
+        
+        sync_db = SessionLocal()
+        try:
+            service = TicketPatternDetectionService(sync_db, current_tenant.id)
+            result = service.detect_customer_patterns(customer_id, limit=limit)
+        finally:
+            sync_db.close()
+        
+        return result
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error detecting customer patterns: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error detecting patterns: {str(e)}"
+        )
+
+
+@router.post("/tickets/patterns/cross-customer")
+async def detect_cross_customer_patterns(
+    limit_per_customer: int = Body(20, embed=True),
+    min_tickets_per_pattern: int = Body(3, embed=True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Detect patterns across all customers to identify widespread issues
+    This can be run manually to find systemic problems
+    """
+    try:
+        from app.core.database import SessionLocal
+        from app.services.ticket_pattern_detection_service import TicketPatternDetectionService
+        
+        sync_db = SessionLocal()
+        try:
+            service = TicketPatternDetectionService(sync_db, current_tenant.id)
+            result = service.detect_cross_customer_patterns(
+                limit_per_customer=limit_per_customer,
+                min_tickets_per_pattern=min_tickets_per_pattern
+            )
+        finally:
+            sync_db.close()
+        
+        return result
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error detecting cross-customer patterns: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error detecting patterns: {str(e)}"
         )
 
 
@@ -4376,6 +4730,524 @@ async def get_merged_tickets(
             "ticket_id": ticket_id,
             "merged_tickets": merged_tickets
         }
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# TICKET LINKING
+# ============================================================================
+
+@router.post("/tickets/{ticket_id}/link")
+async def link_ticket(
+    ticket_id: str,
+    target_ticket_id: str = Body(..., embed=True),
+    link_type: str = Body("related", embed=True),
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Link a ticket to another ticket.
+    Link types: 'related', 'duplicate', 'blocks', 'blocked_by', 'follows', 'followed_by'
+    """
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketLink
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        # Validate link type
+        valid_link_types = ['related', 'duplicate', 'blocks', 'blocked_by', 'follows', 'followed_by']
+        if link_type not in valid_link_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid link type. Must be one of: {', '.join(valid_link_types)}"
+            )
+        
+        # Get both tickets
+        source_ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        target_ticket = sync_db.query(Ticket).filter(
+            Ticket.id == target_ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not source_ticket:
+            raise HTTPException(status_code=404, detail="Source ticket not found")
+        
+        if not target_ticket:
+            raise HTTPException(status_code=404, detail="Target ticket not found")
+        
+        if source_ticket.id == target_ticket.id:
+            raise HTTPException(status_code=400, detail="Cannot link ticket to itself")
+        
+        # Check if link already exists
+        existing_link = sync_db.query(TicketLink).filter(
+            TicketLink.source_ticket_id == ticket_id,
+            TicketLink.target_ticket_id == target_ticket_id,
+            TicketLink.link_type == link_type,
+            TicketLink.tenant_id == current_tenant.id
+        ).first()
+        
+        if existing_link:
+            raise HTTPException(status_code=400, detail="Link already exists")
+        
+        # Create the link
+        link = TicketLink(
+            id=str(uuid.uuid4()),
+            tenant_id=current_tenant.id,
+            source_ticket_id=ticket_id,
+            target_ticket_id=target_ticket_id,
+            link_type=link_type,
+            created_by_id=current_user.id
+        )
+        
+        sync_db.add(link)
+        
+        # If linking as 'duplicate', also create reverse link
+        if link_type == 'duplicate':
+            reverse_link = TicketLink(
+                id=str(uuid.uuid4()),
+                tenant_id=current_tenant.id,
+                source_ticket_id=target_ticket_id,
+                target_ticket_id=ticket_id,
+                link_type='duplicate',
+                created_by_id=current_user.id
+            )
+            sync_db.add(reverse_link)
+        
+        # Add history entries
+        from app.models.helpdesk import TicketHistory
+        source_history = TicketHistory(
+            id=str(uuid.uuid4()),
+            ticket_id=ticket_id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            action="linked",
+            old_value=None,
+            new_value=f"{link_type}:{target_ticket.ticket_number}",
+            description=f"Linked to ticket {target_ticket.ticket_number} ({link_type})"
+        )
+        sync_db.add(source_history)
+        
+        target_history = TicketHistory(
+            id=str(uuid.uuid4()),
+            ticket_id=target_ticket_id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            action="linked_from",
+            old_value=None,
+            new_value=f"{link_type}:{source_ticket.ticket_number}",
+            description=f"Linked from ticket {source_ticket.ticket_number} ({link_type})"
+        )
+        sync_db.add(target_history)
+        
+        sync_db.commit()
+        sync_db.refresh(link)
+        
+        return {
+            "success": True,
+            "link": link,
+            "message": f"Ticket linked successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error linking ticket: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error linking ticket: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.delete("/tickets/{ticket_id}/link/{link_id}")
+async def unlink_ticket(
+    ticket_id: str,
+    link_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Remove a link between tickets"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketLink
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get the link
+        link = sync_db.query(TicketLink).filter(
+            TicketLink.id == link_id,
+            TicketLink.tenant_id == current_tenant.id,
+            (TicketLink.source_ticket_id == ticket_id) | (TicketLink.target_ticket_id == ticket_id)
+        ).first()
+        
+        if not link:
+            raise HTTPException(status_code=404, detail="Link not found")
+        
+        # If it's a duplicate link, also remove the reverse link
+        if link.link_type == 'duplicate':
+            reverse_link = sync_db.query(TicketLink).filter(
+                TicketLink.source_ticket_id == link.target_ticket_id,
+                TicketLink.target_ticket_id == link.source_ticket_id,
+                TicketLink.link_type == 'duplicate',
+                TicketLink.tenant_id == current_tenant.id
+            ).first()
+            if reverse_link:
+                sync_db.delete(reverse_link)
+        
+        sync_db.delete(link)
+        sync_db.commit()
+        
+        return {
+            "success": True,
+            "message": "Link removed successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error unlinking ticket: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error unlinking ticket: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.get("/tickets/{ticket_id}/links")
+async def get_ticket_links(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get all links for a ticket (both outgoing and incoming)"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketLink
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get outgoing links (this ticket links to others)
+        outgoing_links = sync_db.query(TicketLink).filter(
+            TicketLink.source_ticket_id == ticket_id,
+            TicketLink.tenant_id == current_tenant.id
+        ).all()
+        
+        # Get incoming links (other tickets link to this one)
+        incoming_links = sync_db.query(TicketLink).filter(
+            TicketLink.target_ticket_id == ticket_id,
+            TicketLink.tenant_id == current_tenant.id
+        ).all()
+        
+        # Load related tickets
+        outgoing_tickets = []
+        for link in outgoing_links:
+            target_ticket = sync_db.query(Ticket).filter(Ticket.id == link.target_ticket_id).first()
+            if target_ticket:
+                outgoing_tickets.append({
+                    "link": link,
+                    "ticket": target_ticket
+                })
+        
+        incoming_tickets = []
+        for link in incoming_links:
+            source_ticket = sync_db.query(Ticket).filter(Ticket.id == link.source_ticket_id).first()
+            if source_ticket:
+                incoming_tickets.append({
+                    "link": link,
+                    "ticket": source_ticket
+                })
+        
+        return {
+            "ticket_id": ticket_id,
+            "outgoing_links": outgoing_tickets,
+            "incoming_links": incoming_tickets
+        }
+    finally:
+        sync_db.close()
+
+
+# ============================================================================
+# TICKET TIME TRACKING
+# ============================================================================
+
+@router.get("/tickets/{ticket_id}/time-entries")
+async def get_ticket_time_entries(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Get all time entries for a ticket"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketTimeEntry
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get time entries
+        time_entries = sync_db.query(TicketTimeEntry).filter(
+            TicketTimeEntry.ticket_id == ticket_id,
+            TicketTimeEntry.tenant_id == current_tenant.id
+        ).order_by(TicketTimeEntry.created_at.desc()).all()
+        
+        # Calculate totals
+        total_hours = sum(float(entry.hours) for entry in time_entries)
+        billable_hours = sum(float(entry.hours) for entry in time_entries if entry.billable)
+        
+        return {
+            "ticket_id": ticket_id,
+            "time_entries": time_entries,
+            "total_hours": total_hours,
+            "billable_hours": billable_hours
+        }
+    finally:
+        sync_db.close()
+
+
+@router.post("/tickets/{ticket_id}/time-entries", status_code=status.HTTP_201_CREATED)
+async def create_time_entry(
+    ticket_id: str,
+    time_entry_data: TicketTimeEntryCreate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Create a new time entry for a ticket"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketTimeEntry, TicketHistory
+    from datetime import datetime, timezone
+    import uuid
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Parse dates if provided
+        started_at = None
+        ended_at = None
+        if time_entry_data.started_at:
+            started_at = datetime.fromisoformat(time_entry_data.started_at.replace('Z', '+00:00'))
+        if time_entry_data.ended_at:
+            ended_at = datetime.fromisoformat(time_entry_data.ended_at.replace('Z', '+00:00'))
+        
+        # Create time entry
+        time_entry = TicketTimeEntry(
+            id=str(uuid.uuid4()),
+            tenant_id=current_tenant.id,
+            ticket_id=ticket_id,
+            user_id=current_user.id,
+            description=time_entry_data.description,
+            hours=str(time_entry_data.hours),
+            billable=time_entry_data.billable,
+            activity_type=time_entry_data.activity_type,
+            started_at=started_at,
+            ended_at=ended_at
+        )
+        
+        sync_db.add(time_entry)
+        
+        # Add history entry
+        history = TicketHistory(
+            id=str(uuid.uuid4()),
+            ticket_id=ticket_id,
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            action="time_logged",
+            old_value=None,
+            new_value=f"{time_entry_data.hours}h",
+            description=f"Logged {time_entry_data.hours} hours"
+        )
+        sync_db.add(history)
+        
+        sync_db.commit()
+        sync_db.refresh(time_entry)
+        
+        return time_entry
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error creating time entry: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating time entry: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.put("/tickets/{ticket_id}/time-entries/{entry_id}")
+async def update_time_entry(
+    ticket_id: str,
+    entry_id: str,
+    time_entry_data: TicketTimeEntryUpdate,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Update a time entry"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketTimeEntry
+    from datetime import datetime
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get time entry
+        time_entry = sync_db.query(TicketTimeEntry).filter(
+            TicketTimeEntry.id == entry_id,
+            TicketTimeEntry.ticket_id == ticket_id,
+            TicketTimeEntry.tenant_id == current_tenant.id
+        ).first()
+        
+        if not time_entry:
+            raise HTTPException(status_code=404, detail="Time entry not found")
+        
+        # Check permission: only the creator can edit
+        if time_entry.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only edit your own time entries")
+        
+        # Update fields
+        if time_entry_data.description is not None:
+            time_entry.description = time_entry_data.description
+        if time_entry_data.hours is not None:
+            time_entry.hours = str(time_entry_data.hours)
+        if time_entry_data.billable is not None:
+            time_entry.billable = time_entry_data.billable
+        if time_entry_data.activity_type is not None:
+            time_entry.activity_type = time_entry_data.activity_type
+        if time_entry_data.started_at is not None:
+            time_entry.started_at = datetime.fromisoformat(time_entry_data.started_at.replace('Z', '+00:00'))
+        if time_entry_data.ended_at is not None:
+            time_entry.ended_at = datetime.fromisoformat(time_entry_data.ended_at.replace('Z', '+00:00'))
+        
+        sync_db.commit()
+        sync_db.refresh(time_entry)
+        
+        return time_entry
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating time entry: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating time entry: {str(e)}"
+        )
+    finally:
+        sync_db.close()
+
+
+@router.delete("/tickets/{ticket_id}/time-entries/{entry_id}")
+async def delete_time_entry(
+    ticket_id: str,
+    entry_id: str,
+    current_user: User = Depends(get_current_user),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Delete a time entry"""
+    from app.core.database import SessionLocal
+    from app.models.helpdesk import Ticket, TicketTimeEntry
+    
+    sync_db = SessionLocal()
+    try:
+        # Verify ticket exists
+        ticket = sync_db.query(Ticket).filter(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == current_tenant.id
+        ).first()
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        
+        # Get time entry
+        time_entry = sync_db.query(TicketTimeEntry).filter(
+            TicketTimeEntry.id == entry_id,
+            TicketTimeEntry.ticket_id == ticket_id,
+            TicketTimeEntry.tenant_id == current_tenant.id
+        ).first()
+        
+        if not time_entry:
+            raise HTTPException(status_code=404, detail="Time entry not found")
+        
+        # Check permission: only the creator can delete
+        if time_entry.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only delete your own time entries")
+        
+        sync_db.delete(time_entry)
+        sync_db.commit()
+        
+        return {"success": True, "message": "Time entry deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        sync_db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error deleting time entry: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting time entry: {str(e)}"
+        )
     finally:
         sync_db.close()
 
