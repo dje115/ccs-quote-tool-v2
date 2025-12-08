@@ -77,6 +77,6 @@ def decode_token(token: str) -> dict:
             algorithms=[settings.JWT_ALGORITHM]
         )
         return payload
-    except jwt.PyJWTError:
+    except jwt.JWTError:
         return None
 

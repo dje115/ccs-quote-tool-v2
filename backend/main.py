@@ -4,7 +4,7 @@ CCS Quote Tool v2 - FastAPI Main Application
 Multi-tenant SaaS CRM and Quoting Platform
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -153,10 +153,45 @@ async def health_check():
     }
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """HTTPException handler - handles validation errors, auth errors, etc."""
+    from app.core.error_handler import handle_http_exception
+    
+    # Get the origin from the request
+    origin = request.headers.get("origin")
+    
+    # Check if origin is allowed
+    allowed_origins = settings.CORS_ORIGINS
+    if origin and origin in allowed_origins:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    else:
+        headers = {}
+    
+    # Use error handler utility for consistent formatting
+    error_response = handle_http_exception(exc, request)
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response,
+        headers=headers
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler with environment-aware error messages"""
+    from fastapi import HTTPException
     from app.core.error_handler import create_error_response
+    
+    # Don't handle HTTPException here - it's handled above
+    if isinstance(exc, HTTPException):
+        raise exc
     
     # Get the origin from the request
     origin = request.headers.get("origin")
