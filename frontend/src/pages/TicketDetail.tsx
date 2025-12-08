@@ -80,6 +80,7 @@ import TicketMacroMenu from '../components/TicketMacroMenu';
 import TicketMergeDialog from '../components/TicketMergeDialog';
 import TicketLinkDialog from '../components/TicketLinkDialog';
 import TimeTrackingDialog from '../components/TimeTrackingDialog';
+import CustomerPatternAnalysis from '../components/CustomerPatternAnalysis';
 import { useKeyboardShortcuts, KeyboardShortcut } from '../hooks/useKeyboardShortcuts';
 
 const TicketDetail: React.FC = () => {
@@ -115,6 +116,15 @@ const TicketDetail: React.FC = () => {
   const [loadingNpaHistory, setLoadingNpaHistory] = useState(false);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [timeTrackingDialogOpen, setTimeTrackingDialogOpen] = useState(false);
+  const [linkedTickets, setLinkedTickets] = useState<any>(null);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [timeEntries, setTimeEntries] = useState<any[]>([]);
+  const [loadingTimeEntries, setLoadingTimeEntries] = useState(false);
+  const [editingTimeEntry, setEditingTimeEntry] = useState<any>(null);
+  const [quickReplyAnchor, setQuickReplyAnchor] = useState<null | HTMLElement>(null);
+  const [customerPatternAnalysisOpen, setCustomerPatternAnalysisOpen] = useState(false);
 
   // Use ref to track description cleanup status to avoid re-renders
   const descriptionCleanupStatusRef = useRef<string | null>(null);
@@ -733,6 +743,12 @@ const TicketDetail: React.FC = () => {
           <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Link Ticket</ListItemText>
         </MenuItem>
+        {ticket?.customer_id && (
+          <MenuItem onClick={() => { setActionMenuAnchor(null); setCustomerPatternAnalysisOpen(true); }}>
+            <ListItemIcon><TrendingUpIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Customer Patterns</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
 
       {/* Status Menu */}
@@ -788,14 +804,54 @@ const TicketDetail: React.FC = () => {
               )}
             </Stack>
             {ticket?.customer_name && (
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Customer: {ticket.customer_name}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                  Customer: {ticket.customer_name}
+                </Typography>
+                {ticket?.customer_id && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<TrendingUpIcon />}
+                    onClick={() => setCustomerPatternAnalysisOpen(true)}
+                    sx={{ 
+                      bgcolor: 'rgba(255,255,255,0.2)', 
+                      color: 'white', 
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      '&:hover': {
+                        bgcolor: 'rgba(255,255,255,0.3)',
+                        borderColor: 'rgba(255,255,255,0.5)'
+                      }
+                    }}
+                  >
+                    Patterns
+                  </Button>
+                )}
+              </Box>
             )}
             {!ticket?.customer_name && ticket?.customer_id && (
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Customer ID: {ticket.customer_id}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                  Customer ID: {ticket.customer_id}
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<TrendingUpIcon />}
+                  onClick={() => setCustomerPatternAnalysisOpen(true)}
+                  sx={{ 
+                    bgcolor: 'rgba(255,255,255,0.2)', 
+                    color: 'white', 
+                    borderColor: 'rgba(255,255,255,0.3)',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.3)',
+                      borderColor: 'rgba(255,255,255,0.5)'
+                    }
+                  }}
+                >
+                  Patterns
+                </Button>
+              </Box>
             )}
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
@@ -1982,6 +2038,16 @@ const TicketDetail: React.FC = () => {
             setSuccess(editingTimeEntry ? 'Time entry updated!' : 'Time logged successfully!');
             await loadTimeEntries();
           }}
+        />
+      )}
+
+      {/* Customer Pattern Analysis Dialog */}
+      {ticket?.customer_id && (
+        <CustomerPatternAnalysis
+          open={customerPatternAnalysisOpen}
+          onClose={() => setCustomerPatternAnalysisOpen(false)}
+          customerId={ticket.customer_id}
+          customerName={ticket.customer_name || 'Unknown Customer'}
         />
       )}
     </Container>

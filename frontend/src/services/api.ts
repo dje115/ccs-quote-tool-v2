@@ -564,6 +564,17 @@ export const helpdeskAPI = {
       params: { start_date: startDate, end_date: endDate, format, report_type: reportType },
       responseType: 'blob'
     }),
+  // Pattern Detection endpoints
+  detectCustomerPatterns: (customerId: string, limitPerCustomer: number = 20, minTicketsPerPattern: number = 3) =>
+    apiClient.post(`/helpdesk/tickets/patterns/customer/${customerId}`, {
+      limit_per_customer: limitPerCustomer,
+      min_tickets_per_pattern: minTicketsPerPattern
+    }),
+  detectCrossCustomerPatterns: (limitPerCustomer: number = 20, minTicketsPerPattern: number = 3) =>
+    apiClient.post('/helpdesk/tickets/patterns/cross-customer', {
+      limit_per_customer: limitPerCustomer,
+      min_tickets_per_pattern: minTicketsPerPattern
+    }),
 };
 
 // Customer Health API

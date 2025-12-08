@@ -24,9 +24,9 @@ class TicketPatternDetectionService:
         self.db = db
         self.tenant_id = tenant_id
         self.ai_service = AIProviderService(db, tenant_id)
-        self.prompt_service = AIPromptService(db)
+        self.prompt_service = AIPromptService(db, tenant_id=tenant_id)
     
-    def detect_customer_patterns(
+    async def detect_customer_patterns(
         self,
         customer_id: str,
         limit: int = 50
@@ -86,8 +86,9 @@ class TicketPatternDetectionService:
                 })
             
             # Get AI prompt for pattern detection (database-driven)
-            prompt_obj = self.prompt_service.get_prompt_by_category(
-                PromptCategory.HELPDESK_PATTERN_DETECTION
+            prompt_obj = await self.prompt_service.get_prompt(
+                category=PromptCategory.HELPDESK_PATTERN_DETECTION.value,
+                tenant_id=self.tenant_id
             )
             
             if prompt_obj:
@@ -304,8 +305,9 @@ Tickets:
                     })
             
             # Get AI prompt for pattern detection (database-driven)
-            prompt_obj = self.prompt_service.get_prompt_by_category(
-                PromptCategory.HELPDESK_PATTERN_DETECTION
+            prompt_obj = await self.prompt_service.get_prompt(
+                category=PromptCategory.HELPDESK_PATTERN_DETECTION.value,
+                tenant_id=self.tenant_id
             )
             
             if prompt_obj:

@@ -57,8 +57,8 @@ class ContractGeneratorService:
             )
             
             # Get or create contract generation prompt
-            prompt_obj = await self.prompt_service.get_prompt_by_category(
-                category=PromptCategory.CONTRACT_GENERATION,
+            prompt_obj = await self.prompt_service.get_prompt(
+                category=PromptCategory.CONTRACT_GENERATION.value,
                 tenant_id=self.tenant_id
             )
             
@@ -277,8 +277,8 @@ Generate the contract template now:"""
             )
             
             # Get or create contract generation prompt
-            prompt_obj = await self.prompt_service.get_prompt_by_category(
-                category=PromptCategory.CONTRACT_GENERATION,
+            prompt_obj = await self.prompt_service.get_prompt(
+                category=PromptCategory.CONTRACT_GENERATION.value,
                 tenant_id=self.tenant_id
             )
             

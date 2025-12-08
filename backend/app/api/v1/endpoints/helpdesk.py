@@ -640,7 +640,7 @@ async def detect_customer_patterns(
         sync_db = SessionLocal()
         try:
             service = TicketPatternDetectionService(sync_db, current_tenant.id)
-            result = service.detect_customer_patterns(customer_id, limit=limit)
+            result = await service.detect_customer_patterns(customer_id, limit=limit)
         finally:
             sync_db.close()
         
@@ -674,7 +674,7 @@ async def detect_cross_customer_patterns(
         sync_db = SessionLocal()
         try:
             service = TicketPatternDetectionService(sync_db, current_tenant.id)
-            result = service.detect_cross_customer_patterns(
+            result = await service.detect_cross_customer_patterns(
                 limit_per_customer=limit_per_customer,
                 min_tickets_per_pattern=min_tickets_per_pattern
             )
@@ -4969,14 +4969,28 @@ async def get_ticket_links(
             TicketLink.tenant_id == current_tenant.id
         ).all()
         
-        # Load related tickets
+        # Load related tickets and serialize to dict
         outgoing_tickets = []
         for link in outgoing_links:
             target_ticket = sync_db.query(Ticket).filter(Ticket.id == link.target_ticket_id).first()
             if target_ticket:
                 outgoing_tickets.append({
-                    "link": link,
-                    "ticket": target_ticket
+                    "link": {
+                        "id": link.id,
+                        "source_ticket_id": link.source_ticket_id,
+                        "target_ticket_id": link.target_ticket_id,
+                        "link_type": link.link_type,
+                        "created_by_id": link.created_by_id,
+                        "created_at": link.created_at.isoformat() if link.created_at else None
+                    },
+                    "ticket": {
+                        "id": target_ticket.id,
+                        "ticket_number": target_ticket.ticket_number,
+                        "subject": target_ticket.subject,
+                        "status": target_ticket.status.value if target_ticket.status else None,
+                        "priority": target_ticket.priority.value if target_ticket.priority else None,
+                        "created_at": target_ticket.created_at.isoformat() if target_ticket.created_at else None
+                    }
                 })
         
         incoming_tickets = []
@@ -4984,8 +4998,22 @@ async def get_ticket_links(
             source_ticket = sync_db.query(Ticket).filter(Ticket.id == link.source_ticket_id).first()
             if source_ticket:
                 incoming_tickets.append({
-                    "link": link,
-                    "ticket": source_ticket
+                    "link": {
+                        "id": link.id,
+                        "source_ticket_id": link.source_ticket_id,
+                        "target_ticket_id": link.target_ticket_id,
+                        "link_type": link.link_type,
+                        "created_by_id": link.created_by_id,
+                        "created_at": link.created_at.isoformat() if link.created_at else None
+                    },
+                    "ticket": {
+                        "id": source_ticket.id,
+                        "ticket_number": source_ticket.ticket_number,
+                        "subject": source_ticket.subject,
+                        "status": source_ticket.status.value if source_ticket.status else None,
+                        "priority": source_ticket.priority.value if source_ticket.priority else None,
+                        "created_at": source_ticket.created_at.isoformat() if source_ticket.created_at else None
+                    }
                 })
         
         return {

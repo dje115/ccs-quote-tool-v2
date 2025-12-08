@@ -166,7 +166,7 @@ const CrossCustomerPatternAnalysis: React.FC<CrossCustomerPatternAnalysisProps> 
             </Paper>
 
             <Alert severity="info">
-              <Typography variant="body2">
+              <Typography variant="body2" component="div">
                 This analysis will:
                 <ul style={{ marginTop: 8, marginBottom: 0 }}>
                   <li>Examine tickets from all customers</li>
@@ -308,12 +308,14 @@ const CrossCustomerPatternAnalysis: React.FC<CrossCustomerPatternAnalysisProps> 
 
             {results.patterns && results.patterns.length === 0 && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                No widespread patterns found. This could indicate:
-                <ul style={{ marginTop: 8, marginBottom: 0 }}>
-                  <li>Issues are customer-specific rather than systemic</li>
-                  <li>Not enough tickets meet the minimum threshold</li>
-                  <li>Try adjusting the analysis parameters</li>
-                </ul>
+                <Typography component="div" variant="body2">
+                  No widespread patterns found. This could indicate:
+                  <ul style={{ marginTop: 8, marginBottom: 0 }}>
+                    <li>Issues are customer-specific rather than systemic</li>
+                    <li>Not enough tickets meet the minimum threshold</li>
+                    <li>Try adjusting the analysis parameters</li>
+                  </ul>
+                </Typography>
               </Alert>
             )}
           </Box>

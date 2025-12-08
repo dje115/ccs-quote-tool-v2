@@ -78,7 +78,7 @@ const CustomerPatternAnalysis: React.FC<CustomerPatternAnalysisProps> = ({
       setError(null);
       setResults(null);
       
-      const response = await helpdeskAPI.detectCustomerPatterns(customerId, limit);
+      const response = await helpdeskAPI.detectCustomerPatterns(customerId, limit, 3);
       setResults(response.data);
     } catch (err: any) {
       console.error('Error analyzing patterns:', err);
