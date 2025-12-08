@@ -16,7 +16,7 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.core.redis import init_redis
 from app.core.celery import init_celery
-from app.core.middleware import TenantMiddleware, LoggingMiddleware
+from app.core.middleware import TenantMiddleware, LoggingMiddleware, SecurityHeadersMiddleware
 from app.core.logging import setup_logging, get_logger
 from app.api.v1.api import api_router
 # Version endpoint is included via api_router, no need to import here
@@ -121,7 +121,8 @@ app.add_middleware(
     allowed_hosts=["localhost", "127.0.0.1", "*.localhost"]
 )
 
-# Add custom middleware
+# Add custom middleware (order matters - security headers first)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(TenantMiddleware)
 app.add_middleware(LoggingMiddleware)
 
@@ -154,9 +155,8 @@ async def health_check():
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler with CORS headers"""
-    import traceback
-    from fastapi.responses import Response
+    """Global exception handler with environment-aware error messages"""
+    from app.core.error_handler import create_error_response
     
     # Get the origin from the request
     origin = request.headers.get("origin")
@@ -173,16 +173,17 @@ async def global_exception_handler(request: Request, exc: Exception):
     else:
         headers = {}
     
-    # Log the error for debugging
-    logger.error("Unhandled exception", extra={'exception': str(exc)}, exc_info=True)
+    # Create error response using error handler utility
+    error_response = create_error_response(
+        error=exc,
+        status_code=500,
+        default_message="An internal server error occurred",
+        request=request
+    )
     
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "Internal server error",
-            "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong",
-            "path": str(request.url)
-        },
+        content=error_response,
         headers=headers
     )
 

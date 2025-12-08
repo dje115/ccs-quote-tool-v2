@@ -97,6 +97,7 @@ import ContactDialog from '../components/ContactDialog';
 import CustomerContractsTab from '../components/CustomerContractsTab';
 import CustomerPatternAnalysis from '../components/CustomerPatternAnalysis';
 import CustomerSLAHistory from '../components/CustomerSLAHistory';
+import { sanitizeMarkdownBold } from '../utils/sanitize';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -832,7 +833,7 @@ const CustomerDetail: React.FC = () => {
                   '& strong': { fontWeight: 'bold', color: 'success.dark' }
                 }}
                 dangerouslySetInnerHTML={{
-                  __html: customer.description.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                  __html: sanitizeMarkdownBold(customer.description || '')
                 }}
               />
             </Paper>

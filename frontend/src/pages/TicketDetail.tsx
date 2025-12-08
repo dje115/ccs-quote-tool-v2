@@ -239,10 +239,10 @@ const TicketDetail: React.FC = () => {
     try {
       setLoadingTimeEntries(true);
       const response = await helpdeskAPI.getTimeEntries(id);
-      setTimeEntries(response.data);
+      setTimeEntries(response.data.time_entries || []);
     } catch (error: any) {
       console.error('Error loading time entries:', error);
-      setTimeEntries(null);
+      setTimeEntries([]);
     } finally {
       setLoadingTimeEntries(false);
     }
@@ -1059,6 +1059,140 @@ const TicketDetail: React.FC = () => {
           </Grid>
         </Paper>
       )}
+
+      {/* Time Tracking Section */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AccessTimeIcon color="primary" />
+            <Typography variant="h6">Time Tracking</Typography>
+          </Box>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<AccessTimeIcon />}
+            onClick={() => {
+              setEditingTimeEntry(null);
+              setTimeTrackingDialogOpen(true);
+            }}
+          >
+            Log Time
+          </Button>
+        </Box>
+        <Divider sx={{ mb: 2 }} />
+        
+        {loadingTimeEntries ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : timeEntries && Array.isArray(timeEntries) && timeEntries.length > 0 ? (
+          <Box>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Box sx={{ p: 1.5, bgcolor: 'primary.50', borderRadius: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Total Hours
+                  </Typography>
+                  <Typography variant="h6" color="primary">
+                    {timeEntries.reduce((sum: number, entry: any) => sum + parseFloat(entry.hours || 0), 0).toFixed(2)}h
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Box sx={{ p: 1.5, bgcolor: 'success.50', borderRadius: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Billable Hours
+                  </Typography>
+                  <Typography variant="h6" color="success.main">
+                    {timeEntries.filter((e: any) => e.billable).reduce((sum: number, entry: any) => sum + parseFloat(entry.hours || 0), 0).toFixed(2)}h
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+            
+            <List>
+              {timeEntries.map((entry: any) => (
+                <ListItem
+                  key={entry.id}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    mb: 1,
+                    bgcolor: 'background.paper'
+                  }}
+                  secondaryAction={
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setEditingTimeEntry(entry);
+                          setTimeTrackingDialogOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={async () => {
+                          if (window.confirm('Delete this time entry?')) {
+                            try {
+                              await helpdeskAPI.deleteTimeEntry(id!, entry.id);
+                              setSuccess('Time entry deleted');
+                              await loadTimeEntries();
+                            } catch (err: any) {
+                              setError(err.response?.data?.detail || 'Failed to delete time entry');
+                            }
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </Box>
+                  }
+                >
+                  <ListItemIcon>
+                    <AccessTimeIcon color={entry.billable ? 'success' : 'action'} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body1" fontWeight="medium">
+                          {entry.hours}h
+                        </Typography>
+                        {entry.billable && (
+                          <Chip label="Billable" size="small" color="success" />
+                        )}
+                        {entry.activity_type && (
+                          <Chip label={entry.activity_type} size="small" variant="outlined" />
+                        )}
+                      </Box>
+                    }
+                    secondary={
+                      <Box>
+                        {entry.description && (
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            {entry.description}
+                          </Typography>
+                        )}
+                        <Typography variant="caption" color="text.secondary">
+                          {entry.started_at ? new Date(entry.started_at).toLocaleString() : new Date(entry.created_at).toLocaleString()}
+                          {entry.user_name && ` • ${entry.user_name}`}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        ) : (
+          <Alert severity="info">
+            No time entries logged yet. Click "Log Time" to start tracking time on this ticket.
+          </Alert>
+        )}
+      </Paper>
 
       {/* Tabs */}
       <Paper sx={{ mb: 3 }}>

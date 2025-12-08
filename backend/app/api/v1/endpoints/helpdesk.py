@@ -5051,11 +5051,33 @@ async def get_ticket_time_entries(
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         
-        # Get time entries
-        time_entries = sync_db.query(TicketTimeEntry).filter(
+        # Get time entries with user information
+        from app.models.user import User
+        time_entries = sync_db.query(TicketTimeEntry).join(
+            User, TicketTimeEntry.user_id == User.id
+        ).filter(
             TicketTimeEntry.ticket_id == ticket_id,
             TicketTimeEntry.tenant_id == current_tenant.id
         ).order_by(TicketTimeEntry.created_at.desc()).all()
+        
+        # Convert to dicts with user info
+        entries_list = []
+        for entry in time_entries:
+            entry_dict = {
+                "id": entry.id,
+                "ticket_id": entry.ticket_id,
+                "user_id": entry.user_id,
+                "user_name": entry.user.full_name if entry.user else None,
+                "description": entry.description,
+                "hours": entry.hours,
+                "billable": entry.billable,
+                "activity_type": entry.activity_type,
+                "started_at": entry.started_at.isoformat() if entry.started_at else None,
+                "ended_at": entry.ended_at.isoformat() if entry.ended_at else None,
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
+                "updated_at": entry.updated_at.isoformat() if entry.updated_at else None
+            }
+            entries_list.append(entry_dict)
         
         # Calculate totals
         total_hours = sum(float(entry.hours) for entry in time_entries)
@@ -5063,7 +5085,7 @@ async def get_ticket_time_entries(
         
         return {
             "ticket_id": ticket_id,
-            "time_entries": time_entries,
+            "time_entries": entries_list,
             "total_hours": total_hours,
             "billable_hours": billable_hours
         }

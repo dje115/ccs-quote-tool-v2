@@ -74,8 +74,8 @@ async def get_version_info():
         version = fresh_settings.VERSION
     
     # Ensure we have a version
-    if not version or version == "3.0.3" or version == "3.1.0" or version == "3.2.0":
-        version = "3.3.0"
+    if not version or version == "3.0.3" or version == "3.1.0" or version == "3.2.0" or version == "3.3.0":
+        version = "3.4.0"
     
     return VersionResponse(
         version=version,

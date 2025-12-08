@@ -119,10 +119,16 @@ async def get_dashboard_stats(
         )
         
     except Exception as e:
-        logger.error(f"Failed to load dashboard stats: {e}", exc_info=True)
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to load dashboard stats: {str(e)}")
+        from app.core.error_handler import create_error_response, log_error
+        from fastapi import Request
+        log_error(e, context={"endpoint": "dashboard_stats"})
+        error_response = create_error_response(
+            error=e,
+            status_code=500,
+            default_message="Failed to load dashboard statistics",
+            context={"endpoint": "dashboard_stats"}
+        )
+        raise HTTPException(status_code=500, detail=error_response["message"])
 
 
 @router.get("/users", response_model=List[UserResponse])
@@ -165,8 +171,15 @@ async def list_all_users(
         return users
         
     except Exception as e:
-        logger.error(f"Failed to list users: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        from app.core.error_handler import create_error_response, log_error
+        log_error(e, context={"endpoint": "list_users"})
+        error_response = create_error_response(
+            error=e,
+            status_code=500,
+            default_message="Failed to retrieve user list",
+            context={"endpoint": "list_users"}
+        )
+        raise HTTPException(status_code=500, detail=error_response["message"])
 
 
 @router.post("/users/{user_id}/reset-password")
@@ -207,8 +220,15 @@ async def reset_user_password(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to reset password: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        from app.core.error_handler import create_error_response, log_error
+        log_error(e, context={"endpoint": "reset_password", "user_id": user_id})
+        error_response = create_error_response(
+            error=e,
+            status_code=500,
+            default_message="Failed to reset password",
+            context={"endpoint": "reset_password", "user_id": user_id}
+        )
+        raise HTTPException(status_code=500, detail=error_response["message"])
 
 
 class TenantListResponse(BaseModel):

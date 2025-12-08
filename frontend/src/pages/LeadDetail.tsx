@@ -33,6 +33,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { campaignAPI, customerAPI, leadAPI } from '../services/api';
 import LeadIntelligence from '../components/LeadIntelligence';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
+import { sanitizeMarkdownBold } from '../utils/sanitize';
 
 const LeadDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -252,7 +253,7 @@ const LeadDetail: React.FC = () => {
                   '& strong': { fontWeight: 'bold', color: 'success.dark' }
                 }}
                 dangerouslySetInnerHTML={{
-                  __html: lead.qualification_reason.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                  __html: sanitizeMarkdownBold(lead.qualification_reason || '')
                 }}
               />
             </Paper>
