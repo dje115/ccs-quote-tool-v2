@@ -3092,7 +3092,7 @@ The policy should be clear, comprehensive, and compliant with GDPR Article 13 (I
             category=PromptCategory.GDPR_PRIVACY_POLICY.value,
             system_prompt=gdpr_policy_system,
             user_prompt_template=gdpr_policy_prompt,
-            model="gpt-4",
+            model="gpt-5-mini",
             temperature=0.3,
             max_tokens=6000,  # Reduced from 15000 to fit within model context limits (8192 total - ~2000 input = ~6000 output)
             is_system=True,
