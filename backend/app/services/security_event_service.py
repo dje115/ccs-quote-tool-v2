@@ -62,7 +62,7 @@ class SecurityEventService:
             description=description,
             ip_address=ip_address,
             user_agent=user_agent,
-            metadata=json.dumps(metadata) if metadata else None,
+            event_metadata=json.dumps(metadata) if metadata else None,
             occurred_at=datetime.now(timezone.utc)
         )
         

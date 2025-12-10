@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+import json
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_super_admin
@@ -30,7 +31,7 @@ class SecurityEventResponse(BaseModel):
     description: str
     ip_address: Optional[str]
     user_agent: Optional[str]
-    metadata: Optional[dict]
+    event_metadata: Optional[dict]
     resolved: Optional[str]
     resolved_at: Optional[datetime]
     occurred_at: datetime
@@ -96,7 +97,26 @@ async def get_security_events(
         hours=hours
     )
     
-    return events
+    # Convert events to response format, parsing JSON metadata
+    response_events = []
+    for event in events:
+        event_dict = {
+            "id": event.id,
+            "tenant_id": event.tenant_id,
+            "user_id": event.user_id,
+            "event_type": event.event_type.value,
+            "severity": event.severity.value,
+            "description": event.description,
+            "ip_address": event.ip_address,
+            "user_agent": event.user_agent,
+            "event_metadata": json.loads(event.event_metadata) if event.event_metadata else None,
+            "resolved": event.resolved,
+            "resolved_at": event.resolved_at,
+            "occurred_at": event.occurred_at
+        }
+        response_events.append(event_dict)
+    
+    return response_events
 
 
 @router.get("/statistics", response_model=SecurityEventStatistics)

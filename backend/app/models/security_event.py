@@ -64,7 +64,7 @@ class SecurityEvent(Base, TimestampMixin):
     ip_address = Column(String(45), nullable=True, index=True)
     user_agent = Column(String(500), nullable=True)
     
-    metadata = Column(Text, nullable=True)  # JSON string for additional event data
+    event_metadata = Column(Text, nullable=True)  # JSON string for additional event data
     resolved = Column(String(36), nullable=True)  # User ID who resolved the event (if applicable)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     

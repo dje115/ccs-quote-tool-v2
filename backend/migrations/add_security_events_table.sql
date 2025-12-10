@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS security_events (
     description TEXT NOT NULL,
     ip_address VARCHAR(45),
     user_agent VARCHAR(500),
-    metadata TEXT,
+    event_metadata TEXT,
     resolved VARCHAR(36),
     resolved_at TIMESTAMP WITH TIME ZONE,
     occurred_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -32,6 +32,6 @@ CREATE INDEX IF NOT EXISTS idx_security_events_ip ON security_events(ip_address)
 COMMENT ON TABLE security_events IS 'Stores security-related events for monitoring and auditing';
 COMMENT ON COLUMN security_events.event_type IS 'Type of security event (failed_login, account_locked, etc.)';
 COMMENT ON COLUMN security_events.severity IS 'Severity level (low, medium, high, critical)';
-COMMENT ON COLUMN security_events.metadata IS 'JSON string for additional event data';
+COMMENT ON COLUMN security_events.event_metadata IS 'JSON string for additional event data';
 COMMENT ON COLUMN security_events.resolved IS 'User ID who resolved the event (if applicable)';
 
