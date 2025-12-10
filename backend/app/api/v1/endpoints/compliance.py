@@ -91,7 +91,7 @@ async def get_data_collection_analysis(
 
 
 @router.get("/gdpr/sar-subjects")
-async def get_sar_subjects(
+def get_sar_subjects(
     search: Optional[str] = Query(None, description="Search term for name or email"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -111,7 +111,8 @@ async def get_sar_subjects(
         Customer, Contact.customer_id == Customer.id
     ).filter(
         Customer.tenant_id == current_user.tenant_id,
-        Customer.is_deleted == False
+        Customer.is_deleted == False,
+        Contact.is_deleted == False
     )
     
     if search:
