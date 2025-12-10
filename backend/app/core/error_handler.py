@@ -131,7 +131,7 @@ def handle_http_exception(
         request: Optional request object
         
     Returns:
-        Dictionary with error response data
+        Dictionary with error response data (FastAPI format: {"detail": ...})
     """
     # HTTPExceptions are usually safe to show (validation errors, etc.)
     # But we still log them for monitoring
@@ -146,9 +146,8 @@ def handle_http_exception(
             }
         )
     
+    # Return in FastAPI's expected format (uses "detail" key)
     return {
-        "error": "Request error",
-        "message": exc.detail if settings.ENVIRONMENT == "production" else exc.detail,
-        "status_code": exc.status_code,
+        "detail": exc.detail
     }
 
