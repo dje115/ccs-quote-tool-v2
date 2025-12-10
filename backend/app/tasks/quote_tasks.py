@@ -65,8 +65,8 @@ def analyze_quote_requirements_task(
             openai_api_key=api_keys.openai
         )
         
-        # Run async analysis
-        result = asyncio.run(
+        # Run async analysis using async bridge
+        result = run_async_safe(
             analysis_service.analyze_requirements(
                 quote_data=quote_data,
                 clarification_answers=clarification_answers,
