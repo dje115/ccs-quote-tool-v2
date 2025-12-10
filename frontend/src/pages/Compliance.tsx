@@ -108,12 +108,12 @@ const Compliance: React.FC = () => {
     setEventsLoading(true);
     setError(null);
     try {
-      const [events, stats] = await Promise.all([
+      const [eventsRes, statsRes] = await Promise.all([
         complianceAPI.getSecurityEvents({ hours: 24, limit: 100 }),
         complianceAPI.getSecurityStatistics({ hours: 24 }),
       ]);
-      setSecurityEvents(events);
-      setSecurityStats(stats);
+      setSecurityEvents(Array.isArray(eventsRes?.data) ? eventsRes.data : []);
+      setSecurityStats(statsRes?.data || null);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load security events');
     } finally {
