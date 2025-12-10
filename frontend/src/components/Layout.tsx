@@ -40,8 +40,7 @@ import {
   Description as ContractsIcon,
   Assignment as AssignmentIcon,
   Description as TemplateIcon,
-  Build as MacroIcon,
-  Security as SecurityIcon
+  Build as MacroIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
