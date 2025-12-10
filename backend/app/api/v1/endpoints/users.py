@@ -158,6 +158,9 @@ async def create_user(
         
         return user
         
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(

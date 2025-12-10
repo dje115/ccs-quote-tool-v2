@@ -45,6 +45,7 @@ const Users: React.FC = () => {
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     email: '',
+    username: '',
     password: '',
     first_name: '',
     last_name: '',
@@ -310,6 +311,16 @@ const Users: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
+              />
+            </Grid>
+            <Grid size={12}>
+              <TextField
+                fullWidth
+                label="Username"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                required
+                helperText="Unique username for login"
               />
             </Grid>
             <Grid size={12}>
