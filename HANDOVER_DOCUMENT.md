@@ -668,18 +668,16 @@ frontend/src/components/Layout.tsx
 3. ✅ All changes committed and pushed to GitHub
 4. ✅ Version 3.5.0 released
 
-### Short-term Improvements (Phase 3)
-1. **Performance Optimization:**
-   - Fix N+1 query problems (use `selectinload()` for eager loading)
-   - Remove `asyncio.run()` from Celery tasks
-   - Implement strategic caching (Redis)
-2. **Security Hardening (Phase 4):**
-   - Enhanced rate limiting per endpoint type
-   - API key encryption at rest
-   - Password complexity policies and account lockout
-3. **MUI Grid Migration:** Update components to use Grid v2 API (non-security)
-4. **Testing:** Add comprehensive security and integration tests
-5. **Admin Portal:** Gradually migrate views to use new `api.js` utility instead of direct axios calls
+### Short-term Improvements
+1. **Testing:** Add comprehensive security and integration tests
+   - Test rate limiting with load testing
+   - Test password policy enforcement
+   - Test account lockout functionality
+   - Test API key encryption/decryption
+   - Integration tests for N+1 fixes, caching, and async patterns
+2. **MUI Grid Migration:** Update components to use Grid v2 API (non-security)
+3. **Admin Portal:** Gradually migrate views to use new `api.js` utility instead of direct axios calls
+4. **Run API Key Encryption Migration:** Execute `backend/scripts/encrypt_existing_api_keys.py` during maintenance window to encrypt existing plain-text API keys
 
 ### Long-term Enhancements
 1. **Template Variables:** Expand variable support (e.g., `{{ticket_number}}`, `{{agent_name}}`)
