@@ -61,7 +61,6 @@ const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const TicketTemplates = lazy(() => import('./pages/TicketTemplates'));
 const TicketMacros = lazy(() => import('./pages/TicketMacros'));
 const Compliance = lazy(() => import('./pages/Compliance'));
-const Compliance = lazy(() => import('./pages/Compliance'));
 
 // Loading fallback component
 const LoadingFallback = () => (
