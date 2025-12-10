@@ -45,9 +45,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     # Endpoint patterns for classification
     ADMIN_PATTERNS = ["/api/v1/admin/"]
-    LOGIN_PATTERNS = ["/api/v1/auth/login", "/api/v1/auth/register"]
+    LOGIN_PATTERNS = [
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/auth/passwordless/request",  # Passwordless login request
+        "/api/v1/auth/passwordless/verify",    # Passwordless login verification
+        "/api/v1/auth/verify-2fa",             # 2FA verification
+    ]
     PUBLIC_PATTERNS = [
-        "/api/v1/auth/",
+        "/api/v1/auth/csrf-token",  # CSRF token endpoint (public)
         "/health",
         "/docs",
         "/redoc",
@@ -122,11 +128,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """
         Classify endpoint type based on path
         
-        Returns: "admin", "login", "public", or "authenticated"
+        Returns: "admin", "login", "2fa", "public", or "authenticated"
         """
         # Check admin endpoints first
         if any(path.startswith(pattern) for pattern in self.ADMIN_PATTERNS):
             return "admin"
+        
+        # Check 2FA verification endpoint (stricter than login)
+        if path == "/api/v1/auth/login/verify-2fa":
+            return "2fa"
         
         # Check login endpoints
         if any(path.startswith(pattern) for pattern in self.LOGIN_PATTERNS):
