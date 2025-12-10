@@ -317,69 +317,147 @@ class GDPRService:
         
         return export
     
-    def generate_privacy_policy(
+    async def generate_privacy_policy(
         self,
         tenant_id: str,
         use_ai: bool = True,
+        include_iso: bool = False,
         custom_prompt: Optional[str] = None
     ) -> PrivacyPolicy:
         """
-        Generate a GDPR policy using AI based on data collection analysis
+        Generate a privacy policy using AI based on data collection records
         
         Args:
-            data_analysis: Output from analyze_data_collection()
+            tenant_id: Tenant ID
+            use_ai: Whether to use AI generation (default: True)
             include_iso: Whether to include ISO 27001 and ISO 9001 references
-            tenant_id: Tenant ID for AI provider resolution
+            custom_prompt: Optional custom prompt for AI generation (overrides database prompt)
             
         Returns:
-            Generated GDPR policy text
+            Generated PrivacyPolicy
         """
+        import uuid
+        from app.services.ai_prompt_service import AIPromptService
         from app.services.ai_provider_service import AIProviderService
+        from app.models.ai_prompt import PromptCategory
+        from app.core.async_bridge import run_async_safe
         
-        prompt = f"""Generate a comprehensive GDPR Privacy Policy based on the following data collection analysis:
-
-DATA COLLECTED:
-{json.dumps(data_analysis['data_categories'], indent=2)}
-
-DATA RETENTION:
-{json.dumps(data_analysis['data_retention'], indent=2)}
-
-DATA SHARING:
-{json.dumps(data_analysis['data_sharing'], indent=2)}
-
-DATA SUBJECT RIGHTS:
-{json.dumps(data_analysis['data_subject_rights'], indent=2)}
-
-SECURITY MEASURES:
-{json.dumps(data_analysis['security_measures'], indent=2)}
-
-Please generate a GDPR-compliant privacy policy that includes:
-1. Introduction and controller information
-2. What personal data we collect
-3. How we use personal data (legal basis for each)
-4. Data retention periods
-5. Data sharing and third parties
-6. Data subject rights and how to exercise them
-7. Security measures
-8. Contact information for data protection inquiries
-9. Right to lodge a complaint with supervisory authority
-10. Changes to this policy"""
+        # Get data collection analysis
+        data_analysis = self.analyze_data_collection(tenant_id=tenant_id)
+        rendered = None
         
-        if include_iso:
-            prompt += "\n\nAdditionally, include references to ISO 27001 (Information Security Management) and ISO 9001 (Quality Management) compliance where relevant."
+        if use_ai:
+            # Get prompt from database
+            prompt_service = AIPromptService(self.db, tenant_id=tenant_id)
+            prompt_obj = await prompt_service.get_prompt(
+                category=PromptCategory.GDPR_PRIVACY_POLICY.value,
+                tenant_id=tenant_id
+            )
+            
+            if not prompt_obj:
+                error_msg = f"GDPR privacy policy prompt not found in database for tenant {tenant_id}. Please seed prompts using backend/scripts/seed_ai_prompts.py"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Prepare ISO sections if requested
+            iso_sections = ""
+            if include_iso:
+                iso_sections = "\n\nAdditionally, include references to ISO 27001 (Information Security Management) and ISO 9001 (Quality Management) compliance where relevant."
+            
+            # Render prompt with variables
+            rendered = prompt_service.render_prompt(prompt_obj, {
+                "data_categories": json.dumps(data_analysis['data_categories'], indent=2),
+                "data_retention": json.dumps(data_analysis['data_retention'], indent=2),
+                "data_sharing": json.dumps(data_analysis['data_sharing'], indent=2),
+                "data_subject_rights": json.dumps(data_analysis['data_subject_rights'], indent=2),
+                "security_measures": json.dumps(data_analysis['security_measures'], indent=2),
+                "iso_sections": iso_sections
+            })
+            
+            # Use AI provider service
+            provider_service = AIProviderService(self.db, tenant_id=tenant_id)
+            
+            # Generate policy using the prompt from database
+            response = await provider_service.generate(
+                prompt=prompt_obj,
+                variables={
+                    "data_categories": json.dumps(data_analysis['data_categories'], indent=2),
+                    "data_retention": json.dumps(data_analysis['data_retention'], indent=2),
+                    "data_sharing": json.dumps(data_analysis['data_sharing'], indent=2),
+                    "data_subject_rights": json.dumps(data_analysis['data_subject_rights'], indent=2),
+                    "security_measures": json.dumps(data_analysis['security_measures'], indent=2),
+                    "iso_sections": iso_sections
+                }
+            )
+            
+            policy_content = response.content if hasattr(response, 'content') else str(response)
+        else:
+            # Generate template policy without AI
+            policy_content = self._generate_template_policy_from_analysis(data_analysis)
         
-        prompt += "\n\nThe policy should be clear, comprehensive, and compliant with GDPR Article 13 (Information to be provided) and Article 14 (Information to be provided where personal data have not been obtained from the data subject). Format the output as a well-structured privacy policy document suitable for publication on a website."
+        # Get latest version number
+        stmt = select(PrivacyPolicy).where(
+            PrivacyPolicy.tenant_id == tenant_id
+        ).order_by(PrivacyPolicy.created_at.desc())
+        result = self.db.execute(stmt)
+        latest = result.scalars().first()
         
-        # Use AI provider service with generate_with_rendered_prompts (no prompt object needed)
-        provider_service = AIProviderService(self.db, tenant_id=tenant_id)
+        version = "1.0"
+        if latest:
+            try:
+                current_version = float(latest.version)
+                version = f"{current_version + 0.1:.1f}"
+            except ValueError:
+                version = "1.0"
         
-        response = await provider_service.generate_with_rendered_prompts(
-            prompt=None,  # Use system default provider
-            system_prompt="You are a legal compliance expert specializing in GDPR and data protection regulations. Generate clear, comprehensive, and legally compliant privacy policies.",
-            user_prompt=prompt,
-            model="gpt-4",  # Use GPT-4 for better legal document generation
-            temperature=0.3,  # Lower temperature for more consistent legal documents
-            max_tokens=4000  # Longer documents need more tokens
+        # Create policy
+        policy = PrivacyPolicy(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            version=version,
+            title=f"Privacy Policy v{version}",
+            content=policy_content,
+            is_active=True,
+            generated_by_ai=use_ai,
+            generation_prompt=custom_prompt if custom_prompt else (rendered.get('user_prompt', '') if use_ai and rendered else None),
+            effective_date=datetime.now(timezone.utc),
+            next_review_date=datetime.now(timezone.utc) + timedelta(days=365)
         )
         
-        return response.content if hasattr(response, 'content') else str(response)
+        # Deactivate old policies
+        stmt = select(PrivacyPolicy).where(
+            and_(
+                PrivacyPolicy.tenant_id == tenant_id,
+                PrivacyPolicy.is_active == True
+            )
+        )
+        result = self.db.execute(stmt)
+        for old_policy in result.scalars().all():
+            old_policy.is_active = False
+        
+        self.db.add(policy)
+        self.db.commit()
+        self.db.refresh(policy)
+        
+        return policy
+    
+    def _generate_template_policy_from_analysis(self, data_analysis: Dict[str, Any]) -> str:
+        """Generate a template privacy policy without AI from data analysis"""
+        return f"""
+# Privacy Policy
+
+## 1. Introduction
+This privacy policy explains how we collect, use, and protect your personal data in accordance with GDPR.
+
+## 2. Data We Collect
+{json.dumps(data_analysis['data_categories'], indent=2)}
+
+## 3. Legal Basis
+We process your data based on: contract performance, legal obligations, legitimate interests, and consent where applicable.
+
+## 4. Your Rights
+{json.dumps(data_analysis['data_subject_rights'], indent=2)}
+
+## 5. Contact
+For data protection inquiries, contact: {settings.SMTP_FROM_EMAIL}
+"""

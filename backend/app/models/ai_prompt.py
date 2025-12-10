@@ -50,6 +50,7 @@ class PromptCategory(str, enum.Enum):
     QUOTE_GENERATION = "quote_generation"  # Universal AI quote generation (industry-agnostic)
     MANUAL_QUOTE_REVIEW = "manual_quote_review"
     CONTRACT_GENERATION = "contract_generation"  # AI contract template generation
+    GDPR_PRIVACY_POLICY = "gdpr_privacy_policy"  # GDPR privacy policy generation
 
 
 class AIPrompt(Base, TimestampMixin):

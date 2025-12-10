@@ -153,7 +153,7 @@ Focus on UK market context and be realistic in your assessments.
             user_prompt_template=customer_analysis_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -217,7 +217,7 @@ Format your response as JSON:
             user_prompt_template=lead_scoring_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=4000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -283,7 +283,7 @@ Respond in JSON format:
             user_prompt_template=activity_enhancement_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=10000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -370,7 +370,7 @@ Respond in JSON:
             user_prompt_template=action_suggestions_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=20000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -442,7 +442,7 @@ Better 3 verified than 10 unverified."""
             user_prompt_template=competitor_analysis_prompt,
             model="gpt-5",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -501,7 +501,7 @@ Provide analysis in JSON format with:
             user_prompt_template=financial_analysis_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=10000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -540,7 +540,7 @@ Please provide:
             user_prompt_template=translation_prompt,
             model="gpt-5-mini",
             temperature=0.3,
-            max_tokens=5000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -625,7 +625,7 @@ If details are missing, state the assumption you are making inside the quotation
             user_prompt_template=quote_analysis_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -685,7 +685,7 @@ Response format (JSON):
             user_prompt_template=pricing_analysis_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -742,7 +742,7 @@ Response format (JSON):
             user_prompt_template=knowledge_base_search_prompt,
             model="gpt-5-mini",
             temperature=0.3,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -819,7 +819,7 @@ If you cannot provide solutions due to insufficient information, return an empty
             user_prompt_template=customer_service_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -867,7 +867,7 @@ Format as JSON array of objects with:
             user_prompt_template=product_search_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=10000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -919,7 +919,7 @@ Format as JSON object with:
             user_prompt_template=building_analysis_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1057,7 +1057,7 @@ Return only valid JSON in this structure:
             user_prompt_template=lead_generation_prompt_template,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=16000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1242,7 +1242,7 @@ Return only valid JSON in this structure:
             user_prompt_template=similar_business_prompt_template,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=100000,  # High token limit for comprehensive analysis
+            max_tokens=15000,  # High token limit for comprehensive analysis
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1400,7 +1400,7 @@ CRITICAL INSTRUCTIONS FOR USING USER NAME:
             user_prompt_template=dashboard_analytics_prompt_template,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=20000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1550,7 +1550,7 @@ Provide your analysis in the following JSON format:
             user_prompt_template=quote_scope_analysis_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1666,7 +1666,7 @@ Provide product recommendations in JSON format:
             user_prompt_template=product_recommendation_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1759,7 +1759,7 @@ Provide component selection in JSON format:
             user_prompt_template=component_selection_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1852,7 +1852,7 @@ Provide pricing recommendations in JSON format:
             user_prompt_template=pricing_recommendation_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=4000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -1960,7 +1960,7 @@ Provide labor estimation in JSON format:
             user_prompt_template=labor_estimation_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2079,7 +2079,7 @@ Provide upsell/cross-sell recommendations in JSON format:
             user_prompt_template=upsell_crosssell_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2180,7 +2180,7 @@ Provide email copy in JSON format:
             user_prompt_template=quote_email_copy_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=4000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2295,7 +2295,7 @@ Provide summary in JSON format:
             user_prompt_template=quote_summary_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2369,7 +2369,7 @@ Follow the QuoteCheckAI behaviour guidelines when responding."""
             user_prompt_template=manual_quote_review_prompt,
             model="gpt-5-mini",
             temperature=0.2,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2578,7 +2578,7 @@ Return a JSON object with the following structure:
             user_prompt_template=quote_generation_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=16000,  # Increased from 8000 to handle comprehensive quotes with multiple tiers
+            max_tokens=15000,  # Increased from 8000 to handle comprehensive quotes with multiple tiers
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2693,7 +2693,7 @@ Generate the contract now:"""
             user_prompt_template=contract_generation_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2771,7 +2771,7 @@ Return ONLY valid JSON, no markdown formatting."""
             user_prompt_template=npa_suggestions_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=1000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2833,7 +2833,7 @@ Return a JSON response:
             user_prompt_template=kb_answer_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2888,7 +2888,7 @@ Return a JSON response:
             user_prompt_template=quick_response_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=500,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -2953,7 +2953,7 @@ Return your response as plain text (not JSON)."""
             user_prompt_template=agent_assistant_prompt,
             model="gpt-5-mini",
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -3032,7 +3032,7 @@ Focus on identifying actionable patterns that help improve support operations.""
             user_prompt_template=pattern_detection_prompt,
             model="gpt-4",
             temperature=0.3,
-            max_tokens=2000,
+            max_tokens=15000,
             is_system=True,
             tenant_id=None,
             created_by=None,
@@ -3044,6 +3044,73 @@ Focus on identifying actionable patterns that help improve support operations.""
         print("✅ Created helpdesk_pattern_detection prompt")
     else:
         print("⏭️  helpdesk_pattern_detection prompt already exists")
+
+    # 18. GDPR Privacy Policy Generation Prompt
+    gdpr_policy_system = """You are a legal compliance expert specializing in GDPR and data protection regulations. Generate clear, comprehensive, and legally compliant privacy policies."""
+    
+    gdpr_policy_prompt = """Generate a comprehensive GDPR Privacy Policy based on the following data collection analysis:
+
+DATA COLLECTED:
+{data_categories}
+
+DATA RETENTION:
+{data_retention}
+
+DATA SHARING:
+{data_sharing}
+
+DATA SUBJECT RIGHTS:
+{data_subject_rights}
+
+SECURITY MEASURES:
+{security_measures}
+
+{iso_sections}
+
+Please generate a GDPR-compliant privacy policy that includes:
+1. Introduction and controller information
+2. What personal data we collect
+3. How we use personal data (legal basis for each)
+4. Data retention periods
+5. Data sharing and third parties
+6. Data subject rights and how to exercise them
+7. Security measures
+8. Contact information for data protection inquiries
+9. Right to lodge a complaint with supervisory authority
+10. Changes to this policy
+
+The policy should be clear, comprehensive, and compliant with GDPR Article 13 (Information to be provided) and Article 14 (Information to be provided where personal data have not been obtained from the data subject). Format the output as a well-structured privacy policy document suitable for publication on a website."""
+
+    existing_gdpr_policy = db.query(AIPrompt).filter(
+        AIPrompt.category == PromptCategory.GDPR_PRIVACY_POLICY.value,
+        AIPrompt.is_system == True
+    ).first()
+
+    if not existing_gdpr_policy:
+        service.create_prompt(
+            name="GDPR Privacy Policy Generation",
+            category=PromptCategory.GDPR_PRIVACY_POLICY.value,
+            system_prompt=gdpr_policy_system,
+            user_prompt_template=gdpr_policy_prompt,
+            model="gpt-4",
+            temperature=0.3,
+            max_tokens=15000,
+            is_system=True,
+            tenant_id=None,
+            created_by=None,
+            variables={
+                "data_categories": "JSON object describing data categories collected",
+                "data_retention": "JSON object describing data retention periods",
+                "data_sharing": "JSON object describing data sharing practices",
+                "data_subject_rights": "JSON object describing data subject rights",
+                "security_measures": "JSON array of security measures implemented",
+                "iso_sections": "Optional: Additional text to include ISO 27001 and ISO 9001 references if requested"
+            },
+            description="Generate GDPR-compliant privacy policies based on data collection analysis"
+        )
+        print("✅ Created gdpr_privacy_policy prompt")
+    else:
+        print("⏭️  gdpr_privacy_policy prompt already exists")
 
     print("✅ AI prompts seeding complete!")
 
