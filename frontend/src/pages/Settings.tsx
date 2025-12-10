@@ -239,7 +239,7 @@ const Settings: React.FC = () => {
     setTestResult(null);
     
     try {
-      const token = localStorage.getItem('access_token');
+      // SECURITY: Use HttpOnly cookies (sent automatically with credentials: 'include')
       // Use direct API call like the admin portal instead of proxy
       const response = await fetch(`http://localhost:8000/api/v1/settings/test-${apiType}`, {
         method: 'POST',

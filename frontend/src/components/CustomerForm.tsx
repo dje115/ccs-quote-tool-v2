@@ -119,13 +119,14 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ open, onClose, onSave, cust
     setError('');
 
     try {
-      const token = localStorage.getItem('access_token');
+      // SECURITY: Use HttpOnly cookies (sent automatically with withCredentials)
+      // Do NOT use localStorage tokens - they're vulnerable to XSS attacks
       const response = await fetch('/api/v1/ai-analysis/analyze-company', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
+        credentials: 'include',  // Send HttpOnly cookies
         body: JSON.stringify({
           company_name: formData.company_name,
           company_number: formData.company_number || undefined

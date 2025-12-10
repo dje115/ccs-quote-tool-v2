@@ -66,9 +66,11 @@ export const useWebSocket = (): UseWebSocketReturn => {
       return;
     }
     
-    // Get token from localStorage as fallback (cookie might not be available in WebSocket handshake)
-    // Backend will prefer cookie if available, but will use this token as fallback
-    const token = localStorage.getItem('access_token') || '';
+    // SECURITY NOTE: WebSockets don't support HttpOnly cookies in the handshake
+    // The backend WebSocket endpoint should authenticate via the first message or query param
+    // For now, we'll send an empty token and let the backend handle authentication via cookies in the initial message
+    // TODO: Implement proper WebSocket authentication that doesn't rely on localStorage tokens
+    const token = '';  // Removed localStorage token - backend should use cookie-based auth
 
     // Get WebSocket URL from environment or construct from API URL
     // SECURITY: Token will be sent as first message, not in URL (prevents logging/caching)

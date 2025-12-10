@@ -1639,12 +1639,10 @@ const CustomerDetail: React.FC = () => {
                                 onClick={async () => {
                                   if (doc.transaction_id) {
                                     try {
-                                      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+                                      // SECURITY: Use HttpOnly cookies (sent automatically with credentials: 'include')
                                       const apiUrl = getApiBaseUrl();
                                       const response = await fetch(`${apiUrl}/api/v1/customers/${id}/accounts-documents/${doc.transaction_id}/view`, {
-                                        headers: {
-                                          'Authorization': `Bearer ${token}`
-                                        }
+                                        credentials: 'include'  // Send HttpOnly cookies
                                       });
                                       if (response.ok) {
                                         const blob = await response.blob();
@@ -1669,12 +1667,10 @@ const CustomerDetail: React.FC = () => {
                                 onClick={async () => {
                                   if (doc.transaction_id) {
                                     try {
-                                      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+                                      // SECURITY: Use HttpOnly cookies (sent automatically with credentials: 'include')
                                       const apiUrl = getApiBaseUrl();
                                       const response = await fetch(`${apiUrl}/api/v1/customers/${id}/accounts-documents/${doc.transaction_id}/download-url?expires_hours=24`, {
-                                        headers: {
-                                          'Authorization': `Bearer ${token}`
-                                        }
+                                        credentials: 'include'  // Send HttpOnly cookies
                                       });
                                       if (response.ok) {
                                         const data = await response.json();
@@ -1877,9 +1873,9 @@ const CustomerDetail: React.FC = () => {
                                         const response = await fetch(`/api/v1/customers/${id}/addresses/include`, {
                                           method: 'POST',
                                           headers: {
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                                            'Content-Type': 'application/json'
                                           },
+                                          credentials: 'include',  // Send HttpOnly cookies
                                           body: JSON.stringify({ location_id: locationId })
                                         });
                                         

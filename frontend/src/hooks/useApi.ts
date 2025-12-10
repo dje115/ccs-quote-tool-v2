@@ -30,19 +30,10 @@ export const useApi = (): UseApiReturn => {
     withCredentials: true,  // IMPORTANT: Required for HttpOnly cookies and RLS
   });
 
-  // Add request interceptor to include auth token
-  apiClient.interceptors.request.use(
-    (config) => {
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    },
-    (error) => {
-      return Promise.reject(error);
-    }
-  );
+  // SECURITY: HttpOnly cookies are sent automatically with withCredentials: true
+  // Do NOT add Authorization header from localStorage - tokens are vulnerable to XSS
+  // The backend will read tokens from cookies first, then fall back to Authorization header if needed
+  // No request interceptor needed for authentication - cookies handle it automatically
 
   // Add response interceptor for error handling
   apiClient.interceptors.response.use(

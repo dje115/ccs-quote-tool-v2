@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { sanitizeText } from '../utils/sanitize';
 import {
   Container,
   Paper,
@@ -1745,7 +1746,7 @@ const TicketDetail: React.FC = () => {
                       </Typography>
                     </Box>
                     <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                      {comment.comment}
+                      {sanitizeText(comment.comment)}
                     </Typography>
                   </Card>
                 </ListItem>
@@ -1858,7 +1859,7 @@ const TicketDetail: React.FC = () => {
                           Original Text:
                         </Typography>
                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
-                          {entry.npa_original_text}
+                          {sanitizeText(entry.npa_original_text)}
                         </Typography>
                         
                         {entry.npa_cleaned_text && entry.npa_cleaned_text !== entry.npa_original_text && (
@@ -1867,7 +1868,7 @@ const TicketDetail: React.FC = () => {
                               Cleaned Text (Customer-Facing):
                             </Typography>
                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
-                              {entry.npa_cleaned_text}
+                              {sanitizeText(entry.npa_cleaned_text)}
                             </Typography>
                           </>
                         )}
@@ -1890,7 +1891,7 @@ const TicketDetail: React.FC = () => {
                               Completion Notes:
                             </Typography>
                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                              {entry.completion_notes}
+                              {sanitizeText(entry.completion_notes)}
                             </Typography>
                           </>
                         )}
@@ -1903,7 +1904,7 @@ const TicketDetail: React.FC = () => {
                             Answers to Questions:
                           </Typography>
                           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
-                            {entry.answers_to_questions}
+                            {sanitizeText(entry.answers_to_questions)}
                           </Typography>
                           {entry.answers_cleaned_text && entry.answers_cleaned_text !== entry.answers_to_questions && (
                             <>
@@ -1911,7 +1912,7 @@ const TicketDetail: React.FC = () => {
                                 AI-Cleaned Answers:
                               </Typography>
                               <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                {entry.answers_cleaned_text}
+                                {sanitizeText(entry.answers_cleaned_text)}
                               </Typography>
                             </>
                           )}
@@ -2011,7 +2012,7 @@ const TicketDetail: React.FC = () => {
                   Current NPA:
                 </Typography>
                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', maxHeight: '100px', overflow: 'auto' }}>
-                  {currentNpa.npa_original_text.substring(0, 200)}
+                  {sanitizeText(currentNpa.npa_original_text.substring(0, 200))}
                   {currentNpa.npa_original_text.length > 200 ? '...' : ''}
                 </Typography>
               </Alert>
