@@ -116,15 +116,37 @@ def get_sar_subjects(
     )
     
     if search:
-        search_term = f"%{search.lower()}%"
-        query = query.filter(
-            or_(
-                func.lower(Contact.first_name).like(search_term),
-                func.lower(Contact.last_name).like(search_term),
-                func.lower(Contact.email).like(search_term),
-                func.lower(Customer.company_name).like(search_term)
-            )
+        search_lower = search.lower().strip()
+        search_term = f"%{search_lower}%"
+        
+        # Split search into words for better matching
+        search_words = search_lower.split()
+        
+        # Build search conditions
+        conditions = [
+            func.lower(Contact.email).like(search_term),
+            func.lower(Customer.company_name).like(search_term)
+        ]
+        
+        # Search in concatenated full name
+        conditions.append(
+            func.lower(
+                func.concat(Contact.first_name, ' ', Contact.last_name)
+            ).like(search_term)
         )
+        
+        # Also search individual words in first_name or last_name
+        for word in search_words:
+            if len(word) > 1:  # Only search words longer than 1 character
+                word_term = f"%{word}%"
+                conditions.append(
+                    or_(
+                        func.lower(Contact.first_name).like(word_term),
+                        func.lower(Contact.last_name).like(word_term)
+                    )
+                )
+        
+        query = query.filter(or_(*conditions))
     
     contacts = query.limit(100).all()
     
@@ -146,15 +168,41 @@ def get_sar_subjects(
     )
     
     if search:
-        search_term = f"%{search.lower()}%"
-        user_query = user_query.filter(
-            or_(
-                func.lower(User.first_name).like(search_term),
-                func.lower(User.last_name).like(search_term),
-                func.lower(User.email).like(search_term),
-                func.lower(User.username).like(search_term)
-            )
+        search_lower = search.lower().strip()
+        search_term = f"%{search_lower}%"
+        
+        # Split search into words for better matching
+        search_words = search_lower.split()
+        
+        # Build search conditions
+        conditions = [
+            func.lower(User.email).like(search_term),
+            func.lower(User.username).like(search_term)
+        ]
+        
+        # Search in concatenated full name (if both first and last exist)
+        conditions.append(
+            func.lower(
+                func.concat(
+                    func.coalesce(User.first_name, ''),
+                    ' ',
+                    func.coalesce(User.last_name, '')
+                )
+            ).like(search_term)
         )
+        
+        # Also search individual words in first_name or last_name
+        for word in search_words:
+            if len(word) > 1:  # Only search words longer than 1 character
+                word_term = f"%{word}%"
+                conditions.append(
+                    or_(
+                        func.lower(User.first_name).like(word_term),
+                        func.lower(User.last_name).like(word_term)
+                    )
+                )
+        
+        user_query = user_query.filter(or_(*conditions))
     
     users = user_query.limit(100).all()
     
