@@ -7,6 +7,7 @@ COMPLIANCE: Provides endpoints for GDPR, security monitoring, and compliance man
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
@@ -89,27 +90,123 @@ async def get_data_collection_analysis(
     return analysis
 
 
-@router.get("/gdpr/sar-export", response_model=SARExport)
-async def get_sar_export(
-    user_id: Optional[str] = Query(None, description="User ID to export (defaults to current user)"),
+@router.get("/gdpr/sar-subjects")
+async def get_sar_subjects(
+    search: Optional[str] = Query(None, description="Search term for name or email"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Generate Subject Access Request (SAR) data export
+    Get list of contacts and users that can be subjects of SAR requests
     
-    COMPLIANCE: Allows users to export all their personal data as required by GDPR Article 15.
+    COMPLIANCE: Returns all contacts and users in the tenant's database for SAR selection.
+    """
+    from app.models.crm import Contact, Customer
+    from app.models.tenant import User
+    
+    subjects = []
+    
+    # Get all contacts with their customer info
+    query = db.query(Contact, Customer).join(
+        Customer, Contact.customer_id == Customer.id
+    ).filter(
+        Customer.tenant_id == current_user.tenant_id,
+        Customer.is_deleted == False
+    )
+    
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(Contact.first_name).like(search_term),
+                func.lower(Contact.last_name).like(search_term),
+                func.lower(Contact.email).like(search_term),
+                func.lower(Customer.company_name).like(search_term)
+            )
+        )
+    
+    contacts = query.limit(100).all()
+    
+    for contact, customer in contacts:
+        subjects.append({
+            "id": contact.id,
+            "type": "contact",
+            "name": f"{contact.first_name} {contact.last_name}",
+            "email": contact.email,
+            "phone": contact.phone,
+            "company": customer.company_name,
+            "role": contact.job_title or (contact.role.value if contact.role else None)
+        })
+    
+    # Get all users
+    user_query = db.query(User).filter(
+        User.tenant_id == current_user.tenant_id,
+        User.is_deleted == False
+    )
+    
+    if search:
+        search_term = f"%{search.lower()}%"
+        user_query = user_query.filter(
+            or_(
+                func.lower(User.first_name).like(search_term),
+                func.lower(User.last_name).like(search_term),
+                func.lower(User.email).like(search_term),
+                func.lower(User.username).like(search_term)
+            )
+        )
+    
+    users = user_query.limit(100).all()
+    
+    for user in users:
+        subjects.append({
+            "id": user.id,
+            "type": "user",
+            "name": f"{user.first_name} {user.last_name}" if user.first_name and user.last_name else user.email,
+            "email": user.email,
+            "phone": user.phone,
+            "company": None,
+            "role": user.role.value if user.role else None
+        })
+    
+    return {"subjects": subjects}
+
+
+@router.get("/gdpr/sar-export", response_model=SARExport)
+async def get_sar_export(
+    contact_id: Optional[str] = Query(None, description="Contact ID to export data for"),
+    user_id: Optional[str] = Query(None, description="User ID to export (defaults to current user if no contact_id)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate GDPR-compliant Subject Access Request (SAR) data export
+    
+    COMPLIANCE: Allows users to export personal data as required by GDPR Article 15.
+    Can export data for a specific contact or user.
     
     SECURITY: Users can only export their own data unless they are super admins.
+    Super admins can export data for any contact or user.
     """
-    # Users can only export their own data unless they are super admins
-    target_user_id = user_id if user_id and current_user.role.value == "super_admin" else current_user.id
-    
     gdpr_service = GDPRService(db)
-    export = gdpr_service.generate_sar_export_from_user(
-        user_id=target_user_id,
-        tenant_id=current_user.tenant_id
-    )
+    
+    # If contact_id is provided, use it (super admin only)
+    if contact_id:
+        if current_user.role.value != "super_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only super admins can export data for contacts"
+            )
+        export = gdpr_service.generate_sar_export_for_person(
+            tenant_id=current_user.tenant_id,
+            contact_id=contact_id
+        )
+    else:
+        # Users can only export their own data unless they are super admins
+        target_user_id = user_id if user_id and current_user.role.value == "super_admin" else current_user.id
+        export = gdpr_service.generate_sar_export_for_person(
+            tenant_id=current_user.tenant_id,
+            user_id=target_user_id
+        )
     
     return export
 

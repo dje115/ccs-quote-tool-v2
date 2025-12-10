@@ -721,13 +721,8 @@ export const complianceAPI = {
   generatePrivacyPolicy: (request?: { include_iso_sections?: boolean }) => apiClient.post('/compliance/gdpr/generate-policy', request || {}),
   listPrivacyPolicies: () => apiClient.get('/compliance/gdpr/policies'),
   createSAR: (data: any) => apiClient.post('/compliance/gdpr/sar', data),
-  getSARExport: (sarId?: string, token?: string) => {
-    if (sarId) {
-      return apiClient.get(`/compliance/gdpr/sar/${sarId}/export`, { params: { token } });
-    }
-    // Fallback to old endpoint that doesn't require sarId
-    return apiClient.get('/compliance/gdpr/sar-export');
-  },
+  getSARSubjects: (search?: string) => apiClient.get('/compliance/gdpr/sar-subjects', { params: { search } }),
+  getSARExport: (contactId?: string, userId?: string) => apiClient.get('/compliance/gdpr/sar-export', { params: { contact_id: contactId, user_id: userId } }),
   verifySAR: (sarId: string, token: string) => apiClient.post(`/compliance/gdpr/sar/${sarId}/verify`, null, { params: { token } }),
   
   // ISO (to be implemented)

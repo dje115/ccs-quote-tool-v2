@@ -15,6 +15,12 @@ import {
   DialogContent,
   DialogActions,
   Chip,
+  Autocomplete,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemButton,
+  Divider,
   Table,
   TableBody,
   TableCell,
@@ -102,6 +108,11 @@ const Compliance: React.FC = () => {
   const [sarExport, setSarExport] = useState<SARExport | null>(null);
   const [sarLoading, setSarLoading] = useState(false);
   const [sarDialogOpen, setSarDialogOpen] = useState(false);
+  const [sarSelectDialogOpen, setSarSelectDialogOpen] = useState(false);
+  const [sarSubjects, setSarSubjects] = useState<any[]>([]);
+  const [sarSearchTerm, setSarSearchTerm] = useState('');
+  const [selectedSarSubject, setSelectedSarSubject] = useState<any>(null);
+  const [loadingSarSubjects, setLoadingSarSubjects] = useState(false);
 
   // Load security events
   const loadSecurityEvents = async () => {
@@ -150,14 +161,43 @@ const Compliance: React.FC = () => {
     }
   };
 
-  // Generate SAR export
+  // Load SAR subjects (contacts and users)
+  const loadSARSubjects = async (search?: string) => {
+    setLoadingSarSubjects(true);
+    try {
+      const response = await complianceAPI.getSARSubjects(search);
+      setSarSubjects(response?.data?.subjects || []);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load subjects');
+    } finally {
+      setLoadingSarSubjects(false);
+    }
+  };
+
+  // Open SAR subject selection dialog
+  const openSARSelectDialog = () => {
+    setSarSelectDialogOpen(true);
+    setSarSearchTerm('');
+    setSelectedSarSubject(null);
+    loadSARSubjects();
+  };
+
+  // Generate SAR export for selected subject
   const generateSARExport = async () => {
+    if (!selectedSarSubject) {
+      setError('Please select a contact or user');
+      return;
+    }
+
     setSarLoading(true);
     setError(null);
     try {
-      const response = await complianceAPI.getSARExport();
+      const contactId = selectedSarSubject.type === 'contact' ? selectedSarSubject.id : undefined;
+      const userId = selectedSarSubject.type === 'user' ? selectedSarSubject.id : undefined;
+      const response = await complianceAPI.getSARExport(contactId, userId);
       setSarExport(response?.data || null);
       setSarDialogOpen(true);
+      setSarSelectDialogOpen(false);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to generate SAR export');
     } finally {
@@ -462,14 +502,15 @@ const Compliance: React.FC = () => {
                       Subject Access Request (SAR) Tool
                     </Typography>
                     <Typography variant="body2" color="textSecondary" paragraph>
-                      Generate a data export for GDPR Subject Access Requests. This exports all personal data
-                      associated with your account.
+                      Generate a GDPR-compliant Subject Access Request (SAR) data export for a contact or user
+                      in your tenant's database. The export will include only AI-cleaned versions of communications
+                      and will redact internal notes and references to other people.
                     </Typography>
                     <Button
                       variant="contained"
                       color="primary"
                       startIcon={<DownloadIcon />}
-                      onClick={generateSARExport}
+                      onClick={openSARSelectDialog}
                       disabled={sarLoading}
                     >
                       {sarLoading ? 'Generating...' : 'Generate SAR Export'}
@@ -607,6 +648,92 @@ const Compliance: React.FC = () => {
             Download JSON
           </Button>
           <Button onClick={() => setSarDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* SAR Subject Selection Dialog */}
+      <Dialog
+        open={sarSelectDialogOpen}
+        onClose={() => setSarSelectDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Select Person for SAR Export</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            Select a contact or user from your tenant's database to generate a GDPR-compliant SAR export.
+            The export will include only AI-cleaned versions of communications and will redact internal notes
+            and references to other people.
+          </Typography>
+          <TextField
+            fullWidth
+            label="Search by name, email, or company"
+            variant="outlined"
+            value={sarSearchTerm}
+            onChange={(e) => {
+              setSarSearchTerm(e.target.value);
+              loadSARSubjects(e.target.value);
+            }}
+            sx={{ mb: 2 }}
+            autoFocus
+          />
+          {loadingSarSubjects ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <List>
+              {sarSubjects.length === 0 ? (
+                <ListItem>
+                  <ListItemText primary="No contacts or users found" />
+                </ListItem>
+              ) : (
+                sarSubjects.map((subject) => (
+                  <React.Fragment key={subject.id}>
+                    <ListItemButton
+                      selected={selectedSarSubject?.id === subject.id}
+                      onClick={() => setSelectedSarSubject(subject)}
+                    >
+                      <ListItemText
+                        primary={subject.name}
+                        secondary={
+                          <Box>
+                            {subject.email && (
+                              <Typography variant="caption" display="block">
+                                {subject.email}
+                              </Typography>
+                            )}
+                            {subject.company && (
+                              <Typography variant="caption" display="block" color="textSecondary">
+                                {subject.company}
+                              </Typography>
+                            )}
+                            <Chip
+                              label={subject.type === 'contact' ? 'Contact' : 'User'}
+                              size="small"
+                              sx={{ mt: 0.5 }}
+                            />
+                          </Box>
+                        }
+                      />
+                    </ListItemButton>
+                    <Divider />
+                  </React.Fragment>
+                ))
+              )}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSarSelectDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={generateSARExport}
+            disabled={!selectedSarSubject || sarLoading}
+            variant="contained"
+            startIcon={sarLoading ? <CircularProgress size={20} /> : <DownloadIcon />}
+          >
+            {sarLoading ? 'Generating...' : 'Generate SAR Export'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Container>

@@ -11,14 +11,14 @@ COMPLIANCE: Handles GDPR-related operations including:
 import json
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 
 from app.models.tenant import User, Tenant
 from app.models.crm import Customer, Contact
 from app.models.quotes import Quote
-from app.models.helpdesk import Ticket
+from app.models.helpdesk import Ticket, TicketComment
 from app.models.sales import SalesActivity
 from app.models.leads import Lead
 from app.models.gdpr import DataCollectionRecord, PrivacyPolicy, SubjectAccessRequest, SARStatus
@@ -193,6 +193,350 @@ class GDPRService:
         }
         
         return analysis
+    
+    def _redact_other_people_names(self, text: str, subject_name: str, all_contact_names: List[str]) -> str:
+        """
+        Redact names of other people from text, keeping only the subject's name
+        
+        Args:
+            text: Text to redact
+            subject_name: Full name of the subject (e.g., "John Smith")
+            all_contact_names: List of all contact names in the system to redact
+            
+        Returns:
+            Text with other people's names redacted as [REDACTED]
+        """
+        if not text:
+            return text
+        
+        # Create a set of names to redact (excluding the subject)
+        names_to_redact = set()
+        for name in all_contact_names:
+            if name.lower() != subject_name.lower():
+                # Add full name and individual parts
+                parts = name.split()
+                for part in parts:
+                    if len(part) > 2:  # Only redact names longer than 2 characters
+                        names_to_redact.add(part)
+                names_to_redact.add(name)
+        
+        # Redact names (case-insensitive)
+        redacted_text = text
+        for name in sorted(names_to_redact, key=len, reverse=True):  # Sort by length to redact longer names first
+            if len(name) > 2:
+                # Redact full name
+                import re
+                pattern = re.compile(re.escape(name), re.IGNORECASE)
+                redacted_text = pattern.sub("[REDACTED]", redacted_text)
+        
+        return redacted_text
+    
+    def generate_sar_export_for_person(
+        self,
+        tenant_id: str,
+        contact_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate GDPR-compliant SAR export for a specific person (contact or user)
+        
+        Args:
+            tenant_id: Tenant ID
+            contact_id: Contact ID (for customer contacts)
+            user_id: User ID (for internal users)
+            
+        Returns:
+            GDPR-compliant SAR report as dictionary
+        """
+        from app.models.crm import Contact, Customer
+        from app.models.helpdesk import Ticket, TicketComment
+        from app.models.quotes import Quote
+        from app.models.sales import SalesActivity
+        
+        # Get all contact names for redaction (contacts are linked through customers)
+        all_customers = self.db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
+        customer_ids = [c.id for c in all_customers]
+        all_contacts = self.db.query(Contact).filter(Contact.customer_id.in_(customer_ids)).all() if customer_ids else []
+        all_contact_names = [f"{c.first_name} {c.last_name}" for c in all_contacts]
+        all_users = self.db.query(User).filter(User.tenant_id == tenant_id).all()
+        all_user_names = [f"{u.first_name} {u.last_name}" for u in all_users if u.first_name and u.last_name]
+        all_people_names = all_contact_names + all_user_names
+        
+        # Identify the subject
+        subject_name = None
+        subject_email = None
+        subject_phone = None
+        subject_role = None
+        company_name = None
+        
+        contact = None
+        customer = None
+        if contact_id:
+            contact = self.db.query(Contact).filter(Contact.id == contact_id).first()
+            if not contact:
+                raise ValueError("Contact not found")
+            
+            # Verify contact belongs to tenant through customer
+            customer = self.db.query(Customer).filter(
+                and_(Customer.id == contact.customer_id, Customer.tenant_id == tenant_id)
+            ).first()
+            if not customer:
+                raise ValueError("Contact not found or does not belong to this tenant")
+            
+            subject_name = f"{contact.first_name} {contact.last_name}"
+            subject_email = contact.email
+            subject_phone = contact.phone
+            subject_role = contact.job_title or (contact.role.value if contact.role else None)
+            company_name = customer.company_name
+        elif user_id:
+            user = self.db.query(User).filter(
+                and_(User.id == user_id, User.tenant_id == tenant_id)
+            ).first()
+            if not user:
+                raise ValueError("User not found")
+            subject_name = f"{user.first_name} {user.last_name}" if user.first_name and user.last_name else user.email
+            subject_email = user.email
+            subject_phone = user.phone
+            subject_role = user.role.value if user.role else None
+        else:
+            raise ValueError("Either contact_id or user_id must be provided")
+        
+        # Build GDPR-compliant SAR report
+        export_date = datetime.now(timezone.utc)
+        sar_id = f"SAR-{export_date.strftime('%Y%m%d')}-{contact_id or user_id}"
+        
+        report = {
+            "report_type": "Subject Access Request (SAR) Response Report",
+            "company": "CCS Quote Tool",  # TODO: Get from tenant settings
+            "requesting_party": subject_name,
+            "date_of_response": export_date.isoformat(),
+            "reference": sar_id,
+            "introduction": f"This report has been prepared in response to a Subject Access Request (SAR) submitted by {subject_name}. Under the UK GDPR and Data Protection Act 2018, this report covers personal data relating to {subject_name}.",
+            "data_subject": {
+                "name": subject_name,
+                "email": subject_email,
+                "phone": subject_phone,
+                "role": subject_role,
+                "company": company_name
+            },
+            "categories_of_personal_data": {},
+            "data": {}
+        }
+        
+        # 1. Contact Information
+        report["categories_of_personal_data"]["contact_information"] = {
+            "full_name": subject_name,
+            "job_title_role": subject_role,
+            "work_email_address": subject_email,
+            "work_telephone": subject_phone,
+            "company_address": company_name
+        }
+        
+        # 2. Communications (only AI-cleaned versions, redacted)
+        communications = []
+        
+        # Get tickets where this person is mentioned or is the contact
+        if contact_id and contact and customer:
+                tickets = self.db.query(Ticket).filter(
+                    and_(
+                        Ticket.tenant_id == tenant_id,
+                        Ticket.customer_id == customer.id
+                    )
+                ).all()
+                
+                for ticket in tickets:
+                    # Only include cleaned_description (AI-cleaned), not original or internal notes
+                    if ticket.cleaned_description:
+                        redacted_desc = self._redact_other_people_names(
+                            ticket.cleaned_description,
+                            subject_name,
+                            all_people_names
+                        )
+                        communications.append({
+                            "type": "Support Ticket",
+                            "ticket_number": ticket.ticket_number,
+                            "subject": ticket.subject,
+                            "description": redacted_desc,  # Only AI-cleaned version
+                            "status": ticket.status.value if ticket.status else None,
+                            "created_at": ticket.created_at.isoformat() if ticket.created_at else None
+                        })
+                    
+                    # Get ticket comments (only non-internal, AI-cleaned if available)
+                    comments = self.db.query(TicketComment).filter(
+                        and_(
+                            TicketComment.ticket_id == ticket.id,
+                            TicketComment.is_internal == False  # Exclude internal notes
+                        )
+                    ).all()
+                    
+                    for comment in comments:
+                        # Prefer AI-cleaned version if available, otherwise use content
+                        content = comment.content
+                        if hasattr(comment, 'cleaned_content') and comment.cleaned_content:
+                            content = comment.cleaned_content
+                        
+                        redacted_content = self._redact_other_people_names(
+                            content,
+                            subject_name,
+                            all_people_names
+                        )
+                        communications.append({
+                            "type": "Ticket Comment",
+                            "ticket_number": ticket.ticket_number,
+                            "content": redacted_content,
+                            "created_at": comment.created_at.isoformat() if comment.created_at else None
+                        })
+        
+        # Get sales activities (only AI-cleaned notes, redacted)
+        if contact_id:
+            activities = self.db.query(SalesActivity).filter(
+                and_(
+                    SalesActivity.tenant_id == tenant_id,
+                    SalesActivity.contact_id == contact_id
+                )
+            ).all()
+        elif user_id:
+            activities = self.db.query(SalesActivity).filter(
+                and_(
+                    SalesActivity.tenant_id == tenant_id,
+                    SalesActivity.user_id == user_id
+                )
+            ).all()
+        else:
+            activities = []
+        
+        for activity in activities:
+            # Only include notes_cleaned (AI-cleaned version), not original notes
+            if activity.notes_cleaned:
+                redacted_notes = self._redact_other_people_names(
+                    activity.notes_cleaned,
+                    subject_name,
+                    all_people_names
+                )
+                communications.append({
+                    "type": activity.activity_type.value.title() if activity.activity_type else "Activity",
+                    "subject": activity.subject,
+                    "notes": redacted_notes,  # Only AI-cleaned version
+                    "date": activity.activity_date.isoformat() if activity.activity_date else None,
+                    "duration_minutes": activity.duration_minutes
+                })
+        
+        report["data"]["communications"] = communications
+        
+        # 3. Contract and Account Data
+        contract_data = []
+        
+        if contact_id:
+            customer = self.db.query(Customer).filter(Customer.id == contact.customer_id).first()
+            if customer:
+                quotes = self.db.query(Quote).filter(
+                    and_(
+                        Quote.tenant_id == tenant_id,
+                        Quote.customer_id == customer.id
+                    )
+                ).all()
+                
+                for quote in quotes:
+                    contract_data.append({
+                        "type": "Quote",
+                        "quote_number": quote.quote_number,
+                        "status": quote.status.value if quote.status else None,
+                        "total_amount": float(quote.total_amount) if quote.total_amount else None,
+                        "created_at": quote.created_at.isoformat() if quote.created_at else None
+                    })
+        elif user_id:
+            quotes = self.db.query(Quote).filter(
+                and_(
+                    Quote.tenant_id == tenant_id,
+                    Quote.created_by == user_id
+                )
+            ).all()
+            
+            for quote in quotes:
+                contract_data.append({
+                    "type": "Quote",
+                    "quote_number": quote.quote_number,
+                    "status": quote.status.value if quote.status else None,
+                    "total_amount": float(quote.total_amount) if quote.total_amount else None,
+                    "created_at": quote.created_at.isoformat() if quote.created_at else None
+                })
+        
+        report["data"]["contracts_and_accounts"] = contract_data
+        
+        # 4. Technical or System Data
+        technical_data = []
+        
+        if user_id:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if user:
+                technical_data.append({
+                    "type": "User Account",
+                    "username": user.username,
+                    "is_active": user.is_active,
+                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                    "last_login": user.updated_at.isoformat() if user.updated_at else None
+                })
+        
+        report["data"]["technical_data"] = technical_data
+        
+        # 5. Source of Personal Data
+        report["source_of_data"] = [
+            "Individuals directly",
+            "The company (via onboarding, contracts, or communications)",
+            "Our internal staff logging interactions",
+            "Automated collection from systems used by the company"
+        ]
+        
+        # 6. Purpose and Lawful Basis
+        report["purpose_and_lawful_basis"] = {
+            "delivering_contracted_services": {
+                "purpose": "Delivering contracted services",
+                "lawful_basis": "Article 6(1)(b) – Contract",
+                "details": "Needed to manage account, provide support, fulfil services"
+            },
+            "communications": {
+                "purpose": "Communications",
+                "lawful_basis": "Article 6(1)(f) – Legitimate Interest",
+                "details": "For operational communication, support, updates"
+            },
+            "billing": {
+                "purpose": "Billing and account administration",
+                "lawful_basis": "Article 6(1)(c) – Legal Obligation",
+                "details": "Maintaining accurate financial records"
+            },
+            "support": {
+                "purpose": "Issue logging and support tickets",
+                "lawful_basis": "Article 6(1)(f) – Legitimate Interest",
+                "details": "Ensuring service quality & technical support"
+            },
+            "security": {
+                "purpose": "Security & access control",
+                "lawful_basis": "Article 6(1)(f) – Legitimate Interest",
+                "details": "Protecting systems and data"
+            }
+        }
+        
+        # 7. Retention Periods
+        report["retention_periods"] = {
+            "emails": "6 years - Standard business practice",
+            "contracts_quotes": "6–7 years - Legal and accounting requirements",
+            "crm_notes": "Duration of contract + 2 years - For continuity & dispute resolution",
+            "support_tickets": "3–6 years - Depending on issue severity",
+            "system_logs": "30–365 days - Depending on security requirements"
+        }
+        
+        # 8. Data Subject Rights
+        report["data_subject_rights"] = {
+            "right_to_access": "Access their personal data",
+            "right_to_rectification": "Request correction of inaccurate data",
+            "right_to_erasure": "Request erasure where legally applicable",
+            "right_to_restrict_processing": "Restrict processing",
+            "right_to_object": "Object to processing",
+            "right_to_data_portability": "Request data portability",
+            "right_to_complain": "Complain to the ICO (Information Commissioner's Office)"
+        }
+        
+        return report
     
     def generate_sar_export_from_user(self, user_id: str, tenant_id: str) -> Dict[str, Any]:
         """
