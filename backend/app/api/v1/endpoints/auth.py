@@ -4,6 +4,7 @@ Authentication endpoints
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -74,6 +75,12 @@ class LoginResponse(BaseModel):
     refresh_token: str
     token_type: str
     user: UserResponse
+
+
+class Login2FARequiredResponse(BaseModel):
+    requires_2fa: bool = True
+    temp_token: str  # Temporary token to use for 2FA verification
+    message: str = "Two-factor authentication required"
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -155,7 +162,39 @@ async def login(
     finally:
         sync_db.close()
     
-    # Create tokens
+    # Check if 2FA is enabled
+    from app.core.database import SessionLocal
+    from app.services.two_factor_service import TwoFactorService
+    
+    sync_db = SessionLocal()
+    try:
+        if TwoFactorService.is_2fa_enabled(sync_db, user.id):
+            # Generate temporary token for 2FA verification (stored in Redis, expires in 5 minutes)
+            import secrets
+            from app.core.redis import get_redis_client
+            from fastapi.responses import JSONResponse
+            
+            temp_token = secrets.token_urlsafe(32)
+            redis_client = await get_redis_client()
+            await redis_client.setex(
+                f"2fa_temp_token:{temp_token}",
+                300,  # 5 minutes
+                f"{user.id}:{user.tenant_id}"
+            )
+            
+            # Return 2FA required response
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "requires_2fa": True,
+                    "temp_token": temp_token,
+                    "message": "Two-factor authentication required"
+                }
+            )
+    finally:
+        sync_db.close()
+    
+    # Create tokens (2FA not required or already verified)
     access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
     
     # Create database-backed refresh token
@@ -560,6 +599,148 @@ async def verify_passwordless_login(
         )
         sync_db.add(db_refresh_token)
         sync_db.commit()
+    finally:
+        sync_db.close()
+    
+    # Set HttpOnly cookies
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        max_age=int(access_token_expires.total_seconds()),
+        path="/"
+    )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        max_age=int(refresh_token_expires.total_seconds()),
+        path="/"
+    )
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user
+    }
+
+
+class Verify2FARequest(BaseModel):
+    temp_token: str
+    code: str  # 6-digit TOTP code or backup code
+
+
+@router.post("/login/verify-2fa", response_model=LoginResponse)
+async def verify_2fa_login(
+    verify_data: Verify2FARequest,
+    response: Response,
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Verify 2FA code and complete login
+    
+    SECURITY: Verifies TOTP code or backup code and completes authentication.
+    """
+    from app.core.redis import get_redis_client
+    from app.core.database import SessionLocal
+    from app.services.two_factor_service import TwoFactorService
+    from app.models.user_2fa import User2FA
+    
+    # Get user info from temporary token
+    redis_client = await get_redis_client()
+    token_data = await redis_client.get(f"2fa_temp_token:{verify_data.temp_token}")
+    
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired temporary token"
+        )
+    
+    # Parse user_id and tenant_id from token data
+    user_id, tenant_id = token_data.decode().split(":")
+    
+    # Get user
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalars().first()
+    
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive"
+        )
+    
+    # Get 2FA configuration
+    sync_db = SessionLocal()
+    try:
+        user_2fa = TwoFactorService.get_user_2fa(sync_db, user.id)
+        
+        if not user_2fa or not user_2fa.is_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="2FA is not enabled for this user"
+            )
+        
+        # Verify code (try TOTP first, then backup codes)
+        code_valid = False
+        
+        # Try TOTP code
+        if len(verify_data.code) == 6 and verify_data.code.isdigit():
+            code_valid = TwoFactorService.verify_code(user_2fa.secret, verify_data.code)
+        
+        # Try backup code if TOTP failed
+        if not code_valid and user_2fa.backup_codes:
+            code_valid = TwoFactorService.verify_backup_code(user_2fa.backup_codes, verify_data.code)
+            if code_valid:
+                # Remove used backup code
+                import json
+                codes_list = json.loads(user_2fa.backup_codes)
+                code_hash = TwoFactorService.hash_backup_code(verify_data.code)
+                codes_list = [c for c in codes_list if c != code_hash]
+                user_2fa.backup_codes = json.dumps(codes_list) if codes_list else None
+                sync_db.add(user_2fa)
+                sync_db.commit()
+        
+        if not code_valid:
+            # Delete temporary token on failed verification
+            await redis_client.delete(f"2fa_temp_token:{verify_data.temp_token}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid 2FA code"
+            )
+        
+        # Update last used timestamp
+        user_2fa.last_used_at = datetime.utcnow()
+        sync_db.add(user_2fa)
+        sync_db.commit()
+    finally:
+        sync_db.close()
+    
+    # Delete temporary token
+    await redis_client.delete(f"2fa_temp_token:{verify_data.temp_token}")
+    
+    # Create tokens
+    access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
+    
+    # Create database-backed refresh token
+    from app.services.refresh_token_service import create_refresh_token as create_db_refresh_token
+    sync_db = SessionLocal()
+    try:
+        plain_refresh_token, db_refresh_token = create_db_refresh_token(
+            db=sync_db,
+            user_id=user.id,
+            tenant_id=user.tenant_id
+        )
+        refresh_token = plain_refresh_token
     finally:
         sync_db.close()
     

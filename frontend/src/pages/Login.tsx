@@ -23,6 +23,9 @@ const Login: React.FC = () => {
   const [version, setVersion] = useState<string>('3.0.2');
   const [loginMethod, setLoginMethod] = useState<'password' | 'passwordless'>('password');
   const [passwordlessSent, setPasswordlessSent] = useState(false);
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -55,6 +58,14 @@ const Login: React.FC = () => {
         setPasswordlessSent(true);
       } else {
         const response = await authAPI.login(email, password);
+        
+        // Check if 2FA is required
+        if (response.data.requires_2fa) {
+          setRequires2FA(true);
+          setTempToken(response.data.temp_token);
+          return;
+        }
+        
         const { user } = response.data;
 
         // SECURITY: Tokens are stored in HttpOnly cookies (set by backend automatically)
@@ -92,6 +103,30 @@ const Login: React.FC = () => {
     }
   };
 
+  const handle2FAVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (!tempToken) {
+        setError('Invalid session. Please login again.');
+        setRequires2FA(false);
+        return;
+      }
+
+      const response = await authAPI.verify2FA(tempToken, twoFactorCode);
+      const { user } = response.data;
+
+      localStorage.setItem('user', JSON.stringify(user));
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Invalid 2FA code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="sm">
       <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -113,6 +148,48 @@ const Login: React.FC = () => {
             <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
               Check your email for a login link. The link will expire in 15 minutes.
             </Alert>
+          ) : requires2FA ? (
+            <Box component="form" onSubmit={handle2FAVerify} sx={{ mt: 3 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Two-factor authentication required. Enter the 6-digit code from your authenticator app.
+              </Alert>
+              <TextField
+                fullWidth
+                label="2FA Code"
+                type="text"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                required
+                margin="normal"
+                autoFocus
+                inputProps={{ maxLength: 6, pattern: '[0-9]*' }}
+                helperText="Enter 6-digit code from your authenticator app or backup code"
+              />
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading || twoFactorCode.length < 6}
+                sx={{ mt: 3, mb: 2 }}
+              >
+                {loading ? 'Verifying...' : 'Verify & Login'}
+              </Button>
+              <Button
+                fullWidth
+                variant="outlined"
+                size="medium"
+                onClick={() => {
+                  setRequires2FA(false);
+                  setTempToken(null);
+                  setTwoFactorCode('');
+                  setError('');
+                }}
+                sx={{ mt: 1 }}
+              >
+                Back to Login
+              </Button>
+            </Box>
           ) : (
             <>
               <Tabs value={loginMethod === 'password' ? 0 : 1} onChange={(_, newValue) => {
@@ -167,14 +244,13 @@ const Login: React.FC = () => {
             </>
           )}
 
-            <Box sx={{ textAlign: 'center', mt: 2 }}>
-              <Typography variant="body2">
-                Don't have an account?{' '}
-                <Link href="/signup" underline="hover">
-                  Sign up for free trial
-                </Link>
-              </Typography>
-            </Box>
+          <Box sx={{ textAlign: 'center', mt: 2 }}>
+            <Typography variant="body2">
+              Don't have an account?{' '}
+              <Link href="/signup" underline="hover">
+                Sign up for free trial
+              </Link>
+            </Typography>
           </Box>
         </Paper>
 

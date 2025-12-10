@@ -164,6 +164,8 @@ export const authAPI = {
   // Passwordless login
   requestPasswordlessLogin: (email: string) => apiClient.post('/auth/passwordless/request', { email }),
   verifyPasswordlessLogin: (token: string) => apiClient.post('/auth/passwordless/verify', { token }),
+  // 2FA
+  verify2FA: (tempToken: string, code: string) => apiClient.post('/auth/login/verify-2fa', { temp_token: tempToken, code }),
   getCsrfToken: () => apiClient.get('/auth/csrf-token'),
   login: (email: string, password: string) =>
     apiClient.post('/auth/login', new URLSearchParams({ username: email, password }), {
