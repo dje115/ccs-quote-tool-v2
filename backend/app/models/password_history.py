@@ -31,7 +31,7 @@ class PasswordHistory(Base, TimestampMixin):
     set_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), index=True)
     
     # Relationships
-    user = relationship("User", backref="password_history")
+    user = relationship("User", back_populates="password_history")
     
     def __repr__(self):
         return f"<PasswordHistory {self.id} for user {self.user_id}>"

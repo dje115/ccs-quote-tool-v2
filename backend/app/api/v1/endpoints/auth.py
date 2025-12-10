@@ -171,11 +171,11 @@ async def login(
         if TwoFactorService.is_2fa_enabled(sync_db, user.id):
             # Generate temporary token for 2FA verification (stored in Redis, expires in 5 minutes)
             import secrets
-            from app.core.redis import get_redis_client
+            from app.core.redis import get_redis
             from fastapi.responses import JSONResponse
             
             temp_token = secrets.token_urlsafe(32)
-            redis_client = await get_redis_client()
+            redis_client = await get_redis()
             await redis_client.setex(
                 f"2fa_temp_token:{temp_token}",
                 300,  # 5 minutes
@@ -650,13 +650,13 @@ async def verify_2fa_login(
     
     SECURITY: Verifies TOTP code or backup code and completes authentication.
     """
-    from app.core.redis import get_redis_client
+    from app.core.redis import get_redis
     from app.core.database import SessionLocal
     from app.services.two_factor_service import TwoFactorService
     from app.models.user_2fa import User2FA
     
     # Get user info from temporary token
-    redis_client = await get_redis_client()
+    redis_client = await get_redis()
     token_data = await redis_client.get(f"2fa_temp_token:{verify_data.temp_token}")
     
     if not token_data:
