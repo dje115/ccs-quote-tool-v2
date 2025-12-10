@@ -352,25 +352,25 @@ async def save_provider_key(
             finally:
                 sync_db.close()
         
+        # Encrypt API key before storing
+        from app.core.encryption import encrypt_api_key
+        
+        encrypted_key = encrypt_api_key(request.api_key.strip()) if request.api_key else None
+        
         # Update or create key
         if existing_key:
-            existing_key.api_key = request.api_key.strip()
+            existing_key.api_key = encrypted_key  # Store encrypted key
             existing_key.is_valid = is_valid
             existing_key.test_result = test_result
             existing_key.test_error = test_error
             existing_key.last_tested = datetime.now(timezone.utc) if request.test_on_save else existing_key.last_tested
             existing_key.updated_at = datetime.now(timezone.utc)
         else:
-            # Encrypt API key before storing
-            from app.core.encryption import encrypt_api_key
-            
-            encrypted_key = encrypt_api_key(request.api_key) if request.api_key else None
-            
             new_key = ProviderAPIKey(
                 id=str(uuid.uuid4()),
                 provider_id=provider_id,
                 tenant_id=tenant_id,
-                api_key=request.api_key.strip(),
+                api_key=encrypted_key,  # Store encrypted key
                 is_valid=is_valid,
                 test_result=test_result,
                 test_error=test_error,
