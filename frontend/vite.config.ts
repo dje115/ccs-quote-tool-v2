@@ -28,18 +28,7 @@ export default defineConfig({
   build: {
     outDir: 'build',
     sourcemap: false,  // SECURITY: Disable source maps in production to prevent information disclosure
-    minify: 'esbuild',
-    // SECURITY: Enable terser options for better minification and security
-    terserOptions: {
-      compress: {
-        drop_console: true,  // Remove console.log statements in production
-        drop_debugger: true,  // Remove debugger statements
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],  // Remove specific console methods
-      },
-      format: {
-        comments: false,  // Remove comments from production build
-      },
-    },
+    minify: 'esbuild',  // esbuild provides fast, secure minification
     rollupOptions: {
       output: {
         // SECURITY: Obfuscate chunk names to prevent information disclosure
