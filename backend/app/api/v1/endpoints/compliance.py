@@ -133,10 +133,10 @@ async def generate_gdpr_policy(
     analysis = gdpr_service.analyze_data_collection(tenant_id=current_user.tenant_id)
     
     try:
-        policy_text = await gdpr_service.generate_gdpr_policy(
-            data_analysis=analysis,
-            include_iso=request.include_iso_sections,
-            tenant_id=current_user.tenant_id
+        policy = await gdpr_service.generate_privacy_policy(
+            tenant_id=current_user.tenant_id,
+            use_ai=True,
+            include_iso=request.include_iso_sections
         )
     except Exception as e:
         raise HTTPException(
@@ -144,9 +144,16 @@ async def generate_gdpr_policy(
             detail=f"Failed to generate policy: {str(e)}"
         )
     
+    # Convert datetime to ISO string if needed
+    generated_at = policy.generated_at
+    if hasattr(generated_at, 'isoformat'):
+        generated_at_str = generated_at.isoformat()
+    else:
+        generated_at_str = str(generated_at)
+    
     return {
-        "policy": policy_text,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "policy": policy.content,
+        "generated_at": generated_at_str,
         "based_on_analysis": analysis
     }
 
