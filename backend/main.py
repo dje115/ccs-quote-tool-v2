@@ -124,6 +124,7 @@ app.add_middleware(
 
 # Add custom middleware (order matters - security headers first)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)  # Rate limiting before CSRF (fail fast)
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(TenantMiddleware)
 app.add_middleware(LoggingMiddleware)
