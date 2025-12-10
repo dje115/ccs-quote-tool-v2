@@ -243,8 +243,8 @@ const Settings: React.FC = () => {
       // Use direct API call like the admin portal instead of proxy
       const response = await fetch(`http://localhost:8000/api/v1/settings/test-${apiType}`, {
         method: 'POST',
+        credentials: 'include',  // Send HttpOnly cookies
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });

@@ -83,10 +83,10 @@ const OnboardingTooltips: React.FC<OnboardingTooltipsProps> = ({
   // Check if user has configured their own API keys
   const checkAPIKeysStatus = async (): Promise<boolean> => {
     try {
-      const token = localStorage.getItem('access_token');
+      // SECURITY: Use HttpOnly cookies (sent automatically with credentials: 'include')
       const response = await fetch('http://localhost:8000/api/v1/settings/api-status', {
+        credentials: 'include',  // Send HttpOnly cookies
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
