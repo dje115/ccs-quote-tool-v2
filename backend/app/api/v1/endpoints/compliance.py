@@ -128,10 +128,11 @@ def get_sar_subjects(
             func.lower(Customer.company_name).like(search_term)
         ]
         
-        # Search in concatenated full name
+        # Search in concatenated full name (PostgreSQL uses || for concatenation)
+        from sqlalchemy import cast, String
         conditions.append(
             func.lower(
-                func.concat(Contact.first_name, ' ', Contact.last_name)
+                cast(Contact.first_name, String) + ' ' + cast(Contact.last_name, String)
             ).like(search_term)
         )
         
@@ -161,10 +162,10 @@ def get_sar_subjects(
             "role": contact.job_title or (contact.role.value if contact.role else None)
         })
     
-    # Get all users
+    # Get all users (User model doesn't have is_deleted, only is_active)
     user_query = db.query(User).filter(
         User.tenant_id == current_user.tenant_id,
-        User.is_deleted == False
+        User.is_active == True
     )
     
     if search:
@@ -180,14 +181,11 @@ def get_sar_subjects(
             func.lower(User.username).like(search_term)
         ]
         
-        # Search in concatenated full name (if both first and last exist)
+        # Search in concatenated full name (PostgreSQL uses || for concatenation)
+        from sqlalchemy import cast, String
         conditions.append(
             func.lower(
-                func.concat(
-                    func.coalesce(User.first_name, ''),
-                    ' ',
-                    func.coalesce(User.last_name, '')
-                )
+                cast(User.first_name, String) + ' ' + cast(User.last_name, String)
             ).like(search_term)
         )
         
