@@ -40,6 +40,7 @@ from .password_history import PasswordHistory
 from .account_lockout import AccountLockout
 from .passwordless_login import PasswordlessLoginToken
 from .user_2fa import User2FA
+from .security_event import SecurityEvent, SecurityEventType, SecurityEventSeverity
 
 __all__ = [
     "Base",
@@ -69,6 +70,9 @@ __all__ = [
     "PasswordHistory",
     "AccountLockout",
     "PasswordlessLoginToken",
-    "User2FA"
+    "User2FA",
+    "SecurityEvent",
+    "SecurityEventType",
+    "SecurityEventSeverity"
 ]
 
