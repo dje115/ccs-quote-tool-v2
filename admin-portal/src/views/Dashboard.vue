@@ -162,10 +162,16 @@ export default {
       try {
         const token = localStorage.getItem('admin_token')
         
+        if (!token) {
+          router.push('/login')
+          return
+        }
+        
         const response = await axios.get('http://localhost:8000/api/v1/admin/dashboard', {
           headers: {
             'Authorization': `Bearer ${token}`
-          }
+          },
+          withCredentials: true  // Include cookies for cross-origin
         })
         
         // Convert snake_case to camelCase for frontend

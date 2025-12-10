@@ -95,31 +95,62 @@ export default {
           
           console.log('Attempting login with:', loginForm.email)
           
+          // Fetch CSRF token first (for cross-origin support)
+          let csrfToken = null
+          try {
+            const csrfResponse = await axios.get('http://localhost:8000/api/v1/auth/csrf-token', {
+              withCredentials: true  // Include cookies
+            })
+            csrfToken = csrfResponse.data.csrf_token
+            // Also read from cookie if available
+            const cookieToken = document.cookie.split('; ').find(row => row.startsWith('csrf_token='))
+            if (cookieToken) {
+              csrfToken = cookieToken.split('=')[1]
+            }
+          } catch (csrfErr) {
+            console.warn('CSRF token fetch failed, continuing without it:', csrfErr)
+          }
+          
           // Use regular auth login endpoint - must send as URL encoded form data
           const params = new URLSearchParams()
           params.append('username', loginForm.email)
           params.append('password', loginForm.password)
           
+          const headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+          
+          // Add CSRF token if available
+          if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken
+          }
+          
           const response = await axios.post('http://localhost:8000/api/v1/auth/login', params, {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
+            headers: headers,
+            withCredentials: true  // Include cookies for cross-origin
           })
           
           console.log('Login response:', response.data)
           
+          // SECURITY: For cross-origin admin portal, we still use tokens in response body
+          // (HttpOnly cookies don't work cross-origin)
           if (response.data.access_token) {
             localStorage.setItem('admin_token', response.data.access_token)
+            if (response.data.refresh_token) {
+              localStorage.setItem('admin_refresh_token', response.data.refresh_token)
+            }
             
             // Verify user is admin
             const userResponse = await axios.get('http://localhost:8000/api/v1/auth/me', {
               headers: {
                 'Authorization': `Bearer ${response.data.access_token}`
-              }
+              },
+              withCredentials: true
             })
             
             if (userResponse.data.role !== 'super_admin') {
               localStorage.removeItem('admin_token')
+              localStorage.removeItem('admin_refresh_token')
               error.value = 'Admin access required (super_admin role needed)'
               ElMessage.error('Admin access required')
               return
@@ -131,7 +162,7 @@ export default {
         } catch (err) {
           console.error('Login error:', err)
           console.error('Error response:', err.response)
-          error.value = err.response?.data?.detail || err.message || 'Login failed'
+          error.value = err.response?.data?.detail || err.response?.data?.message || err.message || 'Login failed'
           ElMessage.error(error.value)
         } finally {
           loading.value = false
