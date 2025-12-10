@@ -194,28 +194,45 @@ class GDPRService:
         
         return analysis
     
-    def generate_sar_export(self, user_id: str, tenant_id: str) -> Dict[str, Any]:
+    def generate_sar_export(self, sar_id: str) -> Dict[str, Any]:
         """
-        Generate Subject Access Request (SAR) data export for a user
+        Generate data export for a Subject Access Request
         
         Args:
-            user_id: ID of the user requesting their data
-            tenant_id: Tenant ID for data isolation
+            sar_id: Subject Access Request ID
             
         Returns:
-            Dictionary containing all personal data for the user
+            Dictionary containing all user data
         """
+        stmt = select(SubjectAccessRequest).where(SubjectAccessRequest.id == sar_id)
+        result = self.db.execute(stmt)
+        sar = result.scalar_one_or_none()
+        
+        if not sar:
+            raise ValueError("Subject Access Request not found")
+        
+        if not sar.verified:
+            raise ValueError("SAR must be verified before export")
+        
+        # Get user if requestor is a user
+        user_id = sar.requestor_id
+        tenant_id = sar.tenant_id
+        
         export = {
             "export_date": datetime.now(timezone.utc).isoformat(),
+            "request_id": sar.id,
+            "requestor_email": sar.requestor_email,
+            "requestor_name": sar.requestor_name,
             "user_id": user_id,
             "tenant_id": tenant_id,
             "data": {}
         }
         
-        # Get user data
-        user = self.db.query(User).filter(
-            and_(User.id == user_id, User.tenant_id == tenant_id)
-        ).first()
+        # Get user data if requestor is a user
+        if user_id:
+            user = self.db.query(User).filter(
+                and_(User.id == user_id, User.tenant_id == tenant_id)
+            ).first()
         
         if user:
             export["data"]["user_profile"] = {
@@ -249,13 +266,23 @@ class GDPRService:
             for quote in quotes
         ]
         
-        # Get tickets created by or assigned to user
-        tickets = self.db.query(Ticket).filter(
-            and_(
-                Ticket.tenant_id == tenant_id,
-                (Ticket.created_by == user_id) | (Ticket.assigned_to == user_id)
-            )
-        ).all()
+        # Get tickets
+        tickets = []
+        if user_id:
+            tickets = self.db.query(Ticket).filter(
+                and_(
+                    Ticket.tenant_id == tenant_id,
+                    (Ticket.created_by == user_id) | (Ticket.assigned_to == user_id)
+                )
+            ).all()
+        elif customers:
+            customer_ids = [c.id for c in customers]
+            tickets = self.db.query(Ticket).filter(
+                and_(
+                    Ticket.tenant_id == tenant_id,
+                    Ticket.customer_id.in_(customer_ids)
+                )
+            ).all()
         
         export["data"]["tickets"] = [
             {
@@ -270,10 +297,12 @@ class GDPRService:
             for ticket in tickets
         ]
         
-        # Get sales activities
-        activities = self.db.query(SalesActivity).filter(
-            and_(SalesActivity.tenant_id == tenant_id, SalesActivity.user_id == user_id)
-        ).all()
+        # Get sales activities (only if user_id exists)
+        activities = []
+        if user_id:
+            activities = self.db.query(SalesActivity).filter(
+                and_(SalesActivity.tenant_id == tenant_id, SalesActivity.user_id == user_id)
+            ).all()
         
         export["data"]["sales_activities"] = [
             {
