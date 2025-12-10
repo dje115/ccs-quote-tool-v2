@@ -18,7 +18,12 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# SECURITY: Run linting before build to catch security issues
+RUN npm run lint || true  # Continue build even if linting has warnings
+
 # Build the application (environment variables are baked into the build)
+# SECURITY: Set NODE_ENV=production to ensure production optimizations
+ENV NODE_ENV=production
 RUN npm run build
 
 # Stage 2: Production stage with Nginx

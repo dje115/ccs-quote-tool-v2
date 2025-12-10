@@ -1,0 +1,20 @@
+# Build outputs
+build/
+dist/
+*.min.js
+
+# Dependencies
+node_modules/
+
+# Config files
+*.config.js
+*.config.ts
+vite.config.ts
+
+# Generated files
+coverage/
+.nyc_output/
+
+# Type definitions
+*.d.ts
+

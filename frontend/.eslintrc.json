@@ -1,0 +1,67 @@
+{
+  "extends": [
+    "eslint:recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "plugins": ["react", "react-hooks", "@typescript-eslint"],
+  "rules": {
+    /* Security-focused rules */
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "no-script-url": "error",
+    "no-unsafe-finally": "error",
+    "no-unsafe-optional-chaining": "error",
+    
+    /* React security rules */
+    "react/no-danger": "warn",
+    "react/no-danger-with-children": "error",
+    "react/jsx-no-script-url": "error",
+    
+    /* TypeScript security */
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unsafe-assignment": "warn",
+    "@typescript-eslint/no-unsafe-member-access": "warn",
+    "@typescript-eslint/no-unsafe-call": "warn",
+    
+    /* General best practices */
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-debugger": "error",
+    "no-alert": "warn",
+    "no-var": "error",
+    "prefer-const": "error",
+    "eqeqeq": ["error", "always"],
+    "curly": ["error", "all"],
+    
+    /* React hooks */
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    
+    /* React general */
+    "react/prop-types": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/jsx-uses-react": "off"
+  },
+  "settings": {
+    "react": {
+      "version": "detect"
+    }
+  },
+  "env": {
+    "browser": true,
+    "es2020": true,
+    "node": true
+  },
+  "ignorePatterns": ["build", "node_modules", "*.config.js", "*.config.ts"]
+}
+
