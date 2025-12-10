@@ -72,10 +72,29 @@ const Users: React.FC = () => {
     try {
       await userAPI.create(formData);
       setAddDialogOpen(false);
-      setFormData({ email: '', password: '', first_name: '', last_name: '', role: 'user' });
+      setFormData({ email: '', username: '', password: '', first_name: '', last_name: '', role: 'user' });
       loadUsers();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create user');
+      // Handle different error response formats
+      let errorMessage = 'Failed to create user';
+      
+      if (err.response?.data) {
+        // FastAPI validation errors can be in different formats
+        if (typeof err.response.data.detail === 'string') {
+          errorMessage = err.response.data.detail;
+        } else if (Array.isArray(err.response.data.detail)) {
+          // Pydantic validation errors
+          errorMessage = err.response.data.detail
+            .map((e: any) => e.msg || e.message || JSON.stringify(e))
+            .join('; ');
+        } else if (err.response.data.detail) {
+          errorMessage = JSON.stringify(err.response.data.detail);
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     }
   };
 
@@ -301,7 +320,7 @@ const Users: React.FC = () => {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
-                helperText="Minimum 8 characters"
+                helperText="Minimum 12 characters, must include uppercase, lowercase, digit, and special character"
               />
             </Grid>
             <Grid size={12}>
