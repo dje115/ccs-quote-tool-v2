@@ -100,6 +100,11 @@ async def get_security_events(
     # Convert events to response format, parsing JSON metadata
     response_events = []
     for event in events:
+        try:
+            event_metadata = json.loads(event.event_metadata) if event.event_metadata else None
+        except (json.JSONDecodeError, TypeError):
+            event_metadata = None
+        
         event_dict = {
             "id": event.id,
             "tenant_id": event.tenant_id,
@@ -109,12 +114,12 @@ async def get_security_events(
             "description": event.description,
             "ip_address": event.ip_address,
             "user_agent": event.user_agent,
-            "event_metadata": json.loads(event.event_metadata) if event.event_metadata else None,
+            "event_metadata": event_metadata,
             "resolved": event.resolved,
             "resolved_at": event.resolved_at,
             "occurred_at": event.occurred_at
         }
-        response_events.append(event_dict)
+        response_events.append(SecurityEventResponse(**event_dict))
     
     return response_events
 
