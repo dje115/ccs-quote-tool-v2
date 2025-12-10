@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     
     -- Token details
     token_hash VARCHAR(255) NOT NULL UNIQUE,
-    token_family VARCHAR(36) NOT NULL,
+        token_family VARCHAR(255) NOT NULL,
     parent_token_id VARCHAR(36),
     
     -- Status

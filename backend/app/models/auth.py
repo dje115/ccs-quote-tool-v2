@@ -28,7 +28,7 @@ class RefreshToken(Base, TimestampMixin):
     
     # Token details
     token_hash = Column(String(255), nullable=False, unique=True, index=True)  # Hashed token for storage
-    token_family = Column(String(36), nullable=False, index=True)  # Token family ID for rotation tracking
+    token_family = Column(String(255), nullable=False, index=True)  # Token family ID for rotation tracking
     parent_token_id = Column(String(36), ForeignKey("refresh_tokens.id"), nullable=True)  # Previous token in rotation chain
     
     # Status
