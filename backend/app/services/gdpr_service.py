@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """
-GDPR Compliance Service
+GDPR Service
 
-COMPLIANCE: Service for GDPR compliance including policy generation, SAR processing, and data collection tracking.
+COMPLIANCE: Handles GDPR-related operations including:
+- Data collection analysis
+- Subject Access Request (SAR) data export
+- GDPR policy generation
 """
 
 import json
 import logging
-import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_
 
-from app.models.gdpr import (
-    DataCollectionRecord, PrivacyPolicy, SubjectAccessRequest,
-    DataCollectionPurpose, SARStatus
-)
-from app.models.tenant import Tenant, User, Customer, Contact
-from app.models.helpdesk import Ticket, TicketComment
+from app.models.tenant import User, Tenant
+from app.models.crm import Customer, Contact
 from app.models.quotes import Quote
+from app.models.helpdesk import Ticket
 from app.models.sales import SalesActivity
+from app.models.leads import Lead
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -32,350 +32,324 @@ class GDPRService:
     def __init__(self, db: Session):
         self.db = db
     
-    def generate_privacy_policy(
-        self,
-        tenant_id: str,
-        use_ai: bool = True,
-        custom_prompt: Optional[str] = None
-    ) -> PrivacyPolicy:
+    def analyze_data_collection(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Generate a privacy policy using AI based on data collection records
+        Analyze what personal data is collected and why
         
-        Args:
-            tenant_id: Tenant ID
-            use_ai: Whether to use AI generation (default: True)
-            custom_prompt: Optional custom prompt for AI generation
-            
         Returns:
-            Generated PrivacyPolicy
+            Dictionary with data collection analysis
         """
-        import uuid
-        
-        # Get data collection records for tenant
-        stmt = select(DataCollectionRecord).where(
-            DataCollectionRecord.tenant_id == tenant_id
-        )
-        result = self.db.execute(stmt)
-        records = result.scalars().all()
-        
-        if use_ai:
-            # Build prompt from data collection records
-            data_summary = self._build_data_collection_summary(records)
-            
-            prompt = custom_prompt or f"""
-Generate a comprehensive GDPR-compliant privacy policy for a SaaS CRM and quoting platform.
-
-Data Collection Summary:
-{data_summary}
-
-The policy should include:
-1. Introduction and company information
-2. What data we collect and why
-3. Legal basis for processing
-4. How we use the data
-5. Data retention periods
-6. Data sharing and third parties
-7. Data subject rights (access, rectification, erasure, etc.)
-8. Security measures
-9. Contact information for data protection officer
-10. How to make a Subject Access Request
-
-Make it clear, comprehensive, and GDPR Article 13/14 compliant.
-"""
-            
-            # Use AI service to generate policy
-            try:
-                from app.services.ai_service import AIService
-                ai_service = AIService()
-                
-                response = ai_service.generate_completion(
-                    system_prompt="You are a legal compliance expert specializing in GDPR and data protection. Generate clear, comprehensive privacy policies.",
-                    user_prompt=prompt,
-                    model=settings.OPENAI_MODEL
-                )
-                
-                policy_content = response.content if hasattr(response, 'content') else str(response)
-            except Exception as e:
-                logger.error(f"AI policy generation failed: {e}")
-                policy_content = self._generate_template_policy(records)
-        else:
-            policy_content = self._generate_template_policy(records)
-        
-        # Get latest version number
-        stmt = select(PrivacyPolicy).where(
-            PrivacyPolicy.tenant_id == tenant_id
-        ).order_by(PrivacyPolicy.created_at.desc())
-        result = self.db.execute(stmt)
-        latest = result.scalars().first()
-        
-        version = "1.0"
-        if latest:
-            try:
-                current_version = float(latest.version)
-                version = f"{current_version + 0.1:.1f}"
-            except ValueError:
-                version = "1.0"
-        
-        # Create policy
-        policy = PrivacyPolicy(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            version=version,
-            title=f"Privacy Policy v{version}",
-            content=policy_content,
-            is_active=True,
-            generated_by_ai=use_ai,
-            generation_prompt=prompt if use_ai else None,
-            effective_date=datetime.now(timezone.utc),
-            next_review_date=datetime.now(timezone.utc) + timedelta(days=365)
-        )
-        
-        # Deactivate old policies
-        stmt = select(PrivacyPolicy).where(
-            and_(
-                PrivacyPolicy.tenant_id == tenant_id,
-                PrivacyPolicy.is_active == True
-            )
-        )
-        result = self.db.execute(stmt)
-        for old_policy in result.scalars().all():
-            old_policy.is_active = False
-        
-        self.db.add(policy)
-        self.db.commit()
-        self.db.refresh(policy)
-        
-        return policy
-    
-    def _build_data_collection_summary(self, records: List[DataCollectionRecord]) -> str:
-        """Build a summary of data collection from records"""
-        if not records:
-            return "No specific data collection records found. Using standard SaaS data collection practices."
-        
-        summary_parts = []
-        for record in records:
-            summary_parts.append(
-                f"- {record.data_category} ({record.data_type}): "
-                f"Purpose: {record.purpose}, Legal Basis: {record.legal_basis}"
-            )
-        
-        return "\n".join(summary_parts)
-    
-    def _generate_template_policy(self, records: List[DataCollectionRecord]) -> str:
-        """Generate a template privacy policy without AI"""
-        return f"""
-# Privacy Policy
-
-## 1. Introduction
-This privacy policy explains how we collect, use, and protect your personal data in accordance with GDPR.
-
-## 2. Data We Collect
-{self._build_data_collection_summary(records)}
-
-## 3. Legal Basis
-We process your data based on: contract performance, legal obligations, legitimate interests, and consent where applicable.
-
-## 4. Your Rights
-You have the right to:
-- Access your data
-- Rectify inaccurate data
-- Erasure of your data
-- Data portability
-- Object to processing
-- Restrict processing
-
-## 5. Contact
-For data protection inquiries, contact: {settings.SMTP_FROM_EMAIL}
-"""
-    
-    def create_sar(
-        self,
-        tenant_id: str,
-        requestor_email: str,
-        requestor_name: Optional[str] = None,
-        requested_data_types: Optional[List[str]] = None
-    ) -> SubjectAccessRequest:
-        """
-        Create a Subject Access Request
-        
-        Args:
-            tenant_id: Tenant ID
-            requestor_email: Email of person making the request
-            requestor_name: Optional name
-            requested_data_types: Optional list of data types requested
-            
-        Returns:
-            Created SubjectAccessRequest
-        """
-        import uuid
-        
-        # Check if requestor is a user
-        stmt = select(User).where(
-            and_(
-                User.email == requestor_email,
-                User.tenant_id == tenant_id
-            )
-        )
-        result = self.db.execute(stmt)
-        user = result.scalars().first()
-        
-        # Generate verification token
-        verification_token = secrets.token_urlsafe(32)
-        
-        # Calculate due date (30 days from now per GDPR)
-        due_date = datetime.now(timezone.utc) + timedelta(days=30)
-        
-        sar = SubjectAccessRequest(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            requestor_email=requestor_email,
-            requestor_name=requestor_name,
-            requestor_id=user.id if user else None,
-            status=SARStatus.PENDING.value,
-            requested_data_types=requested_data_types or [],
-            request_date=datetime.now(timezone.utc),
-            due_date=due_date,
-            verification_token=verification_token,
-            verified=False
-        )
-        
-        self.db.add(sar)
-        self.db.commit()
-        self.db.refresh(sar)
-        
-        # Send verification email
-        try:
-            from app.services.email_service import get_email_service
-            email_service = get_email_service()
-            
-            verification_url = f"{settings.CORS_ORIGINS[0] if settings.CORS_ORIGINS else 'http://localhost:3000'}/compliance/sar/verify?token={verification_token}"
-            
-            email_body = f"""
-            <html>
-            <body>
-                <h2>Subject Access Request Verification</h2>
-                <p>Hello {requestor_name or requestor_email},</p>
-                <p>You have submitted a Subject Access Request. Please verify your email address by clicking the link below:</p>
-                <p><a href="{verification_url}">Verify Email Address</a></p>
-                <p>Or copy and paste this link: {verification_url}</p>
-                <p>This link will expire in 7 days.</p>
-            </body>
-            </html>
-            """
-            
-            # Note: This would need to be async, but for now we'll log it
-            logger.info(f"SAR verification email should be sent to {requestor_email}")
-        except Exception as e:
-            logger.error(f"Failed to send SAR verification email: {e}")
-        
-        return sar
-    
-    def generate_sar_export(self, sar_id: str) -> Dict[str, Any]:
-        """
-        Generate data export for a Subject Access Request
-        
-        Args:
-            sar_id: Subject Access Request ID
-            
-        Returns:
-            Dictionary containing all user data
-        """
-        stmt = select(SubjectAccessRequest).where(SubjectAccessRequest.id == sar_id)
-        result = self.db.execute(stmt)
-        sar = result.scalar_one_or_none()
-        
-        if not sar:
-            raise ValueError("Subject Access Request not found")
-        
-        if not sar.verified:
-            raise ValueError("SAR must be verified before export")
-        
-        export_data = {
-            "request_id": sar.id,
-            "export_date": datetime.now(timezone.utc).isoformat(),
-            "requestor_email": sar.requestor_email,
-            "requestor_name": sar.requestor_name,
+        analysis = {
+            "data_categories": {
+                "user_data": {
+                    "collected": [
+                        "Email address",
+                        "Full name (first_name, last_name)",
+                        "Username",
+                        "Phone number (optional)",
+                        "Role and permissions",
+                        "Login history and authentication data",
+                        "Password hash (encrypted)",
+                        "2FA settings (if enabled)"
+                    ],
+                    "purpose": [
+                        "User authentication and authorization",
+                        "Account management",
+                        "Communication with users",
+                        "Access control and security"
+                    ],
+                    "legal_basis": "Contractual necessity and legitimate interest (security)"
+                },
+                "customer_data": {
+                    "collected": [
+                        "Company name",
+                        "Business contact information (email, phone)",
+                        "Business address",
+                        "Website URL",
+                        "Business sector and size",
+                        "Company description",
+                        "LinkedIn data (if available)",
+                        "Companies House data (if available)",
+                        "Google Maps location data"
+                    ],
+                    "purpose": [
+                        "CRM and customer relationship management",
+                        "Sales and marketing activities",
+                        "Quote generation and order processing",
+                        "Customer support and service delivery"
+                    ],
+                    "legal_basis": "Legitimate interest (business relationship) and contractual necessity"
+                },
+                "contact_data": {
+                    "collected": [
+                        "Full name",
+                        "Email address",
+                        "Phone number",
+                        "Job title",
+                        "Role in organization",
+                        "Communication preferences"
+                    ],
+                    "purpose": [
+                        "Business communication",
+                        "Sales and marketing activities",
+                        "Customer support"
+                    ],
+                    "legal_basis": "Legitimate interest (business relationship)"
+                },
+                "transaction_data": {
+                    "collected": [
+                        "Quote details and pricing",
+                        "Order information",
+                        "Payment records (if applicable)",
+                        "Contract details",
+                        "Support ticket information"
+                    ],
+                    "purpose": [
+                        "Order processing and fulfillment",
+                        "Contract management",
+                        "Customer support",
+                        "Financial record keeping"
+                    ],
+                    "legal_basis": "Contractual necessity and legal obligation"
+                },
+                "communication_data": {
+                    "collected": [
+                        "Email communications",
+                        "Sales activity notes",
+                        "Support ticket conversations",
+                        "Meeting notes",
+                        "WhatsApp messages (if integrated)"
+                    ],
+                    "purpose": [
+                        "Business communication records",
+                        "Customer service history",
+                        "Sales process tracking"
+                    ],
+                    "legal_basis": "Legitimate interest (business relationship) and contractual necessity"
+                },
+                "technical_data": {
+                    "collected": [
+                        "IP addresses",
+                        "User agent strings",
+                        "Login timestamps",
+                        "Security event logs",
+                        "API usage statistics"
+                    ],
+                    "purpose": [
+                        "Security and fraud prevention",
+                        "System monitoring and troubleshooting",
+                        "Compliance and auditing"
+                    ],
+                    "legal_basis": "Legitimate interest (security) and legal obligation"
+                }
+            },
+            "data_retention": {
+                "user_data": "Retained while account is active, deleted 30 days after account closure",
+                "customer_data": "Retained for duration of business relationship + 7 years for legal compliance",
+                "transaction_data": "Retained for 7 years for tax and legal compliance",
+                "communication_data": "Retained for duration of business relationship + 2 years",
+                "technical_data": "Retained for 90 days for security monitoring"
+            },
+            "data_sharing": {
+                "third_parties": [
+                    {
+                        "name": "OpenAI",
+                        "purpose": "AI-powered features and analysis",
+                        "data_shared": "Company information, descriptions, and business context",
+                        "legal_basis": "Legitimate interest (service delivery)"
+                    },
+                    {
+                        "name": "Companies House API",
+                        "purpose": "Company information verification",
+                        "data_shared": "Company registration numbers and names",
+                        "legal_basis": "Legitimate interest (data verification)"
+                    },
+                    {
+                        "name": "Google Maps API",
+                        "purpose": "Location services and mapping",
+                        "data_shared": "Address information",
+                        "legal_basis": "Legitimate interest (service delivery)"
+                    }
+                ],
+                "internal_sharing": "Data is shared within the tenant organization for business purposes"
+            },
+            "data_subject_rights": {
+                "right_to_access": "Users can request a copy of their personal data (SAR)",
+                "right_to_rectification": "Users can update their personal information",
+                "right_to_erasure": "Users can request deletion of their data (subject to legal obligations)",
+                "right_to_restrict_processing": "Users can request restriction of data processing",
+                "right_to_data_portability": "Users can export their data in a machine-readable format",
+                "right_to_object": "Users can object to processing based on legitimate interest"
+            },
+            "security_measures": [
+                "Encryption of data in transit (TLS/SSL)",
+                "Encryption of sensitive data at rest (API keys, passwords)",
+                "Access controls and authentication",
+                "Regular security audits and monitoring",
+                "Data backup and disaster recovery procedures"
+            ],
+            "last_updated": datetime.now(timezone.utc).isoformat()
         }
         
-        # If requestor is a user, get their data
-        if sar.requestor_id:
-            user_stmt = select(User).where(User.id == sar.requestor_id)
-            user_result = self.db.execute(user_stmt)
-            user = user_result.scalar_one_or_none()
-            
-            if user:
-                export_data["user_data"] = {
-                    "id": user.id,
-                    "email": user.email,
-                    "username": user.username,
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                    "created_at": user.created_at.isoformat() if user.created_at else None,
-                }
+        return analysis
+    
+    def generate_sar_export(self, user_id: str, tenant_id: str) -> Dict[str, Any]:
+        """
+        Generate Subject Access Request (SAR) data export for a user
         
-        # Get customer data if email matches
-        customer_stmt = select(Customer).where(
+        Args:
+            user_id: ID of the user requesting their data
+            tenant_id: Tenant ID for data isolation
+            
+        Returns:
+            Dictionary containing all personal data for the user
+        """
+        export = {
+            "export_date": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "data": {}
+        }
+        
+        # Get user data
+        user = self.db.query(User).filter(
+            and_(User.id == user_id, User.tenant_id == tenant_id)
+        ).first()
+        
+        if user:
+            export["data"]["user_profile"] = {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "role": user.role.value if user.role else None,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None
+            }
+        
+        # Get quotes created by or associated with user
+        quotes = self.db.query(Quote).filter(
+            and_(Quote.tenant_id == tenant_id, Quote.created_by == user_id)
+        ).all()
+        
+        export["data"]["quotes"] = [
+            {
+                "id": quote.id,
+                "quote_number": quote.quote_number,
+                "customer_id": quote.customer_id,
+                "status": quote.status.value if quote.status else None,
+                "total_amount": float(quote.total_amount) if quote.total_amount else None,
+                "created_at": quote.created_at.isoformat() if quote.created_at else None,
+                "updated_at": quote.updated_at.isoformat() if quote.updated_at else None
+            }
+            for quote in quotes
+        ]
+        
+        # Get tickets created by or assigned to user
+        tickets = self.db.query(Ticket).filter(
             and_(
-                Customer.tenant_id == sar.tenant_id,
-                Customer.main_email == sar.requestor_email
+                Ticket.tenant_id == tenant_id,
+                (Ticket.created_by == user_id) | (Ticket.assigned_to == user_id)
             )
+        ).all()
+        
+        export["data"]["tickets"] = [
+            {
+                "id": ticket.id,
+                "ticket_number": ticket.ticket_number,
+                "subject": ticket.subject,
+                "status": ticket.status.value if ticket.status else None,
+                "priority": ticket.priority.value if ticket.priority else None,
+                "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+                "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None
+            }
+            for ticket in tickets
+        ]
+        
+        # Get sales activities
+        activities = self.db.query(SalesActivity).filter(
+            and_(SalesActivity.tenant_id == tenant_id, SalesActivity.user_id == user_id)
+        ).all()
+        
+        export["data"]["sales_activities"] = [
+            {
+                "id": activity.id,
+                "customer_id": activity.customer_id,
+                "activity_type": activity.activity_type.value if activity.activity_type else None,
+                "notes": activity.notes,
+                "created_at": activity.created_at.isoformat() if activity.created_at else None
+            }
+            for activity in activities
+        ]
+        
+        return export
+    
+    async def generate_gdpr_policy(
+        self,
+        data_analysis: Dict[str, Any],
+        include_iso: bool = False,
+        tenant_id: Optional[str] = None
+    ) -> str:
+        """
+        Generate a GDPR policy using AI based on data collection analysis
+        
+        Args:
+            data_analysis: Output from analyze_data_collection()
+            include_iso: Whether to include ISO 27001 and ISO 9001 references
+            tenant_id: Tenant ID for AI provider resolution
+            
+        Returns:
+            Generated GDPR policy text
+        """
+        from app.services.ai_provider_service import AIProviderService
+        
+        prompt = f"""Generate a comprehensive GDPR Privacy Policy based on the following data collection analysis:
+
+DATA COLLECTED:
+{json.dumps(data_analysis['data_categories'], indent=2)}
+
+DATA RETENTION:
+{json.dumps(data_analysis['data_retention'], indent=2)}
+
+DATA SHARING:
+{json.dumps(data_analysis['data_sharing'], indent=2)}
+
+DATA SUBJECT RIGHTS:
+{json.dumps(data_analysis['data_subject_rights'], indent=2)}
+
+SECURITY MEASURES:
+{json.dumps(data_analysis['security_measures'], indent=2)}
+
+Please generate a GDPR-compliant privacy policy that includes:
+1. Introduction and controller information
+2. What personal data we collect
+3. How we use personal data (legal basis for each)
+4. Data retention periods
+5. Data sharing and third parties
+6. Data subject rights and how to exercise them
+7. Security measures
+8. Contact information for data protection inquiries
+9. Right to lodge a complaint with supervisory authority
+10. Changes to this policy"""
+        
+        if include_iso:
+            prompt += "\n\nAdditionally, include references to ISO 27001 (Information Security Management) and ISO 9001 (Quality Management) compliance where relevant."
+        
+        prompt += "\n\nThe policy should be clear, comprehensive, and compliant with GDPR Article 13 (Information to be provided) and Article 14 (Information to be provided where personal data have not been obtained from the data subject). Format the output as a well-structured privacy policy document suitable for publication on a website."
+        
+        # Use AI provider service with generate_with_rendered_prompts (no prompt object needed)
+        provider_service = AIProviderService(self.db, tenant_id=tenant_id)
+        
+        response = await provider_service.generate_with_rendered_prompts(
+            prompt=None,  # Use system default provider
+            system_prompt="You are a legal compliance expert specializing in GDPR and data protection regulations. Generate clear, comprehensive, and legally compliant privacy policies.",
+            user_prompt=prompt,
+            model="gpt-4",  # Use GPT-4 for better legal document generation
+            temperature=0.3,  # Lower temperature for more consistent legal documents
+            max_tokens=4000  # Longer documents need more tokens
         )
-        customer_result = self.db.execute(customer_stmt)
-        customers = customer_result.scalars().all()
         
-        if customers:
-            export_data["customer_data"] = []
-            for customer in customers:
-                export_data["customer_data"].append({
-                    "id": customer.id,
-                    "company_name": customer.company_name,
-                    "main_email": customer.main_email,
-                    "main_phone": customer.main_phone,
-                    "created_at": customer.created_at.isoformat() if customer.created_at else None,
-                })
-        
-        # Get tickets
-        if sar.requestor_id:
-            ticket_stmt = select(Ticket).where(
-                and_(
-                    Ticket.tenant_id == sar.tenant_id,
-                    Ticket.customer_id.in_([c.id for c in customers]) if customers else False
-                )
-            )
-            ticket_result = self.db.execute(ticket_stmt)
-            tickets = ticket_result.scalars().all()
-            
-            if tickets:
-                export_data["tickets"] = []
-                for ticket in tickets:
-                    export_data["tickets"].append({
-                        "id": ticket.id,
-                        "subject": ticket.subject,
-                        "description": ticket.description,
-                        "status": ticket.status.value if hasattr(ticket.status, 'value') else str(ticket.status),
-                        "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
-                    })
-        
-        # Get quotes
-        if customers:
-            quote_stmt = select(Quote).where(
-                and_(
-                    Quote.tenant_id == sar.tenant_id,
-                    Quote.customer_id.in_([c.id for c in customers])
-                )
-            )
-            quote_result = self.db.execute(quote_stmt)
-            quotes = quote_result.scalars().all()
-            
-            if quotes:
-                export_data["quotes"] = []
-                for quote in quotes:
-                    export_data["quotes"].append({
-                        "id": quote.id,
-                        "quote_number": quote.quote_number,
-                        "total_amount": float(quote.total_amount) if quote.total_amount else None,
-                        "status": quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
-                        "created_at": quote.created_at.isoformat() if quote.created_at else None,
-                    })
-        
-        return export_data
+        return response.content if hasattr(response, 'content') else str(response)
