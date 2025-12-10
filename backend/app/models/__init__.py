@@ -36,6 +36,8 @@ from .helpdesk import Ticket, TicketComment, TicketAttachment, TicketHistory, Ti
 from .auth import RefreshToken
 from .knowledge_base import KnowledgeBaseArticle
 from .sla_compliance import SLAComplianceRecord, SLABreachAlert
+from .password_history import PasswordHistory
+from .account_lockout import AccountLockout
 
 __all__ = [
     "Base",
@@ -61,6 +63,8 @@ __all__ = [
     "TicketStatus", "TicketPriority", "TicketType",
     "SLAComplianceRecord", "SLABreachAlert",
     "KnowledgeBaseArticle",
-    "RefreshToken"
+    "RefreshToken",
+    "PasswordHistory",
+    "AccountLockout"
 ]
 
