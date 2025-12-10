@@ -5,7 +5,7 @@ Main API router for v1
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import, provider_keys, emails, storage, pricing_config, support_contracts, contract_renewals, dynamic_pricing, helpdesk, reporting, sla, revenue, customer_portal, customer_portal_access, trends, metrics, quote_prompts, opportunities, contracts, quote_documents, whatsapp, security
+from app.api.v1.endpoints import auth, tenants, users, customers, contacts, leads, campaigns, quotes, settings, translation, ai_analysis, admin, dashboard, activities, sectors, campaign_monitor, planning, ai_prompts, products, version, websocket, suppliers, product_search, building_analysis, pricing_import, provider_keys, emails, storage, pricing_config, support_contracts, contract_renewals, dynamic_pricing, helpdesk, reporting, sla, revenue, customer_portal, customer_portal_access, trends, metrics, quote_prompts, opportunities, contracts, quote_documents, whatsapp, security, compliance
 
 # Create main API router
 api_router = APIRouter()
@@ -32,6 +32,7 @@ api_router.include_router(campaign_monitor.router, prefix="/campaign-monitor", t
 api_router.include_router(planning.router, prefix="/planning", tags=["planning-applications"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(security.router, prefix="/security", tags=["security"])
+api_router.include_router(compliance.router, prefix="/compliance", tags=["compliance"])
 api_router.include_router(ai_prompts.router, tags=["ai-prompts"])
 api_router.include_router(products.router, tags=["products"])
 api_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])

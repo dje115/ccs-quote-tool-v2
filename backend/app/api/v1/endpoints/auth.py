@@ -86,6 +86,7 @@ class Login2FARequiredResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request = None,
     response: Response = None,
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -131,11 +132,15 @@ async def login(
         if user:
             from app.core.database import SessionLocal
             from app.services.password_security_service import PasswordSecurityService
+            from app.services.security_event_service import SecurityEventService
+            from app.models.security_event import SecurityEventType, SecurityEventSeverity
             
             sync_db = SessionLocal()
             try:
                 password_service = PasswordSecurityService(sync_db)
-                password_service.record_failed_attempt(user.id)
+                ip_address = request.client.host if request and request.client else None
+                user_agent = request.headers.get("user-agent") if request else None
+                password_service.record_failed_attempt(user.id, ip_address=ip_address, user_agent=user_agent)
             finally:
                 sync_db.close()
         

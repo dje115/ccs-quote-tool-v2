@@ -95,6 +95,47 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 }
             )
             
+            # Log security event (async, don't block response)
+            try:
+                from app.core.database import SessionLocal
+                from app.services.security_event_service import SecurityEventService
+                from app.models.security_event import SecurityEventType, SecurityEventSeverity
+                
+                sync_db = SessionLocal()
+                try:
+                    security_service = SecurityEventService(sync_db)
+                    # Extract user_id from client_id if it's a user-based limit
+                    user_id = None
+                    tenant_id = None
+                    if client_id.startswith("user:"):
+                        user_id = client_id.replace("user:", "")
+                        # Get tenant_id from user if possible
+                        from app.models.tenant import User
+                        user = sync_db.query(User).filter(User.id == user_id).first()
+                        if user:
+                            tenant_id = user.tenant_id
+                    
+                    security_service.log_event(
+                        event_type=SecurityEventType.RATE_LIMIT_EXCEEDED,
+                        description=f"Rate limit exceeded for {client_id} on {request.url.path}",
+                        severity=SecurityEventSeverity.MEDIUM,
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        ip_address=request.client.host if request.client else None,
+                        user_agent=request.headers.get("user-agent"),
+                        metadata={
+                            "path": request.url.path,
+                            "endpoint_type": endpoint_type,
+                            "limit": limit,
+                            "client_id": client_id
+                        }
+                    )
+                finally:
+                    sync_db.close()
+            except Exception as e:
+                # Don't fail the request if logging fails
+                logger.error(f"Failed to log rate limit event: {e}")
+            
             # For login endpoints, add progressive delay
             if endpoint_type == "login":
                 delay = await self._get_progressive_delay(client_id)

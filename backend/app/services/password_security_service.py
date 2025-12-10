@@ -67,12 +67,14 @@ class PasswordSecurityService:
         
         return False, None
     
-    def record_failed_attempt(self, user_id: str):
+    def record_failed_attempt(self, user_id: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None):
         """
         Record a failed login attempt
         
         Args:
             user_id: User ID that failed login
+            ip_address: Optional IP address
+            user_agent: Optional user agent string
         """
         lockout = self.db.query(AccountLockout).filter(
             AccountLockout.user_id == user_id
@@ -95,6 +97,50 @@ class PasswordSecurityService:
                 lockout.locked_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
                 lockout.lockout_reason = f"Account locked after {lockout.failed_attempts} failed login attempts"
                 logger.warning(f"Account {user_id} locked after {lockout.failed_attempts} failed attempts")
+                
+                # Log security event for account lockout
+                try:
+                    from app.services.security_event_service import SecurityEventService
+                    from app.models.security_event import SecurityEventType, SecurityEventSeverity
+                    from app.models.tenant import User
+                    
+                    user = self.db.query(User).filter(User.id == user_id).first()
+                    if user:
+                        event_service = SecurityEventService(self.db)
+                        event_service.log_event(
+                            event_type=SecurityEventType.ACCOUNT_LOCKED,
+                            description=f"Account locked after {lockout.failed_attempts} failed login attempts",
+                            severity=SecurityEventSeverity.HIGH,
+                            tenant_id=user.tenant_id,
+                            user_id=user_id,
+                            ip_address=ip_address,
+                            user_agent=user_agent,
+                            metadata={"failed_attempts": lockout.failed_attempts, "lockout_reason": lockout.lockout_reason}
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to log security event: {e}")
+        
+        # Log failed login attempt
+        try:
+            from app.services.security_event_service import SecurityEventService
+            from app.models.security_event import SecurityEventType, SecurityEventSeverity
+            from app.models.tenant import User
+            
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if user:
+                event_service = SecurityEventService(self.db)
+                event_service.log_event(
+                    event_type=SecurityEventType.FAILED_LOGIN,
+                    description="Failed login attempt",
+                    severity=SecurityEventSeverity.MEDIUM,
+                    tenant_id=user.tenant_id,
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    metadata={"failed_attempts": lockout.failed_attempts if lockout else 1}
+                )
+        except Exception as e:
+            logger.error(f"Failed to log security event: {e}")
         
         self.db.commit()
     

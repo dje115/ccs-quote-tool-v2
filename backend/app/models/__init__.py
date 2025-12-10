@@ -41,6 +41,8 @@ from .account_lockout import AccountLockout
 from .passwordless_login import PasswordlessLoginToken
 from .user_2fa import User2FA
 from .security_event import SecurityEvent, SecurityEventType, SecurityEventSeverity
+from .gdpr import DataCollectionRecord, PrivacyPolicy, SubjectAccessRequest, DataCollectionPurpose, SARStatus
+from .iso import ISOControl, ISOAssessment, ISOAudit, ISOStandard, ComplianceStatus
 
 __all__ = [
     "Base",
@@ -73,6 +75,16 @@ __all__ = [
     "User2FA",
     "SecurityEvent",
     "SecurityEventType",
-    "SecurityEventSeverity"
+    "SecurityEventSeverity",
+    "DataCollectionRecord",
+    "PrivacyPolicy",
+    "SubjectAccessRequest",
+    "DataCollectionPurpose",
+    "SARStatus",
+    "ISOControl",
+    "ISOAssessment",
+    "ISOAudit",
+    "ISOStandard",
+    "ComplianceStatus"
 ]
 
