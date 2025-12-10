@@ -21,6 +21,7 @@ from app.models.quotes import Quote
 from app.models.helpdesk import Ticket
 from app.models.sales import SalesActivity
 from app.models.leads import Lead
+from app.models.gdpr import DataCollectionRecord, PrivacyPolicy, SubjectAccessRequest, SARStatus
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -287,12 +288,12 @@ class GDPRService:
         
         return export
     
-    async def generate_gdpr_policy(
+    def generate_privacy_policy(
         self,
-        data_analysis: Dict[str, Any],
-        include_iso: bool = False,
-        tenant_id: Optional[str] = None
-    ) -> str:
+        tenant_id: str,
+        use_ai: bool = True,
+        custom_prompt: Optional[str] = None
+    ) -> PrivacyPolicy:
         """
         Generate a GDPR policy using AI based on data collection analysis
         
