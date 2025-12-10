@@ -17,6 +17,7 @@ from app.core.database import init_db
 from app.core.redis import init_redis
 from app.core.celery import init_celery
 from app.core.middleware import TenantMiddleware, LoggingMiddleware, SecurityHeadersMiddleware
+from app.core.csrf import CSRFMiddleware
 from app.core.logging import setup_logging, get_logger
 from app.api.v1.api import api_router
 # Version endpoint is included via api_router, no need to import here
@@ -123,6 +124,7 @@ app.add_middleware(
 
 # Add custom middleware (order matters - security headers first)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(TenantMiddleware)
 app.add_middleware(LoggingMiddleware)
 

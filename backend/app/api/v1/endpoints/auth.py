@@ -20,6 +20,34 @@ from app.models.tenant import User, Tenant
 router = APIRouter()
 
 
+@router.get("/csrf-token")
+async def get_csrf_token(response: Response):
+    """
+    Get CSRF token for state-changing operations
+    
+    SECURITY: Returns a CSRF token that must be included in X-CSRF-Token header
+    for all POST, PUT, DELETE, and PATCH requests.
+    
+    The token is also set as a cookie for automatic inclusion.
+    """
+    from app.core.csrf import CSRFProtection
+    
+    csrf_token = CSRFProtection.generate_token()
+    
+    # Set token in cookie
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,  # JavaScript needs to read this
+        secure=settings.ENVIRONMENT == "production",
+        samesite="strict",
+        max_age=3600,  # 1 hour
+        path="/"
+    )
+    
+    return {"csrf_token": csrf_token}
+
+
 # Pydantic models
 class Token(BaseModel):
     access_token: str
@@ -86,7 +114,20 @@ async def login(
     
     # Create tokens
     access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
-    refresh_token = create_refresh_token(data={"sub": user.id, "tenant_id": user.tenant_id})
+    
+    # Create database-backed refresh token
+    from app.core.database import SessionLocal
+    from app.services.refresh_token_service import create_refresh_token as create_db_refresh_token
+    sync_db = SessionLocal()
+    try:
+        plain_refresh_token, db_refresh_token = create_db_refresh_token(
+            db=sync_db,
+            user_id=user.id,
+            tenant_id=user.tenant_id
+        )
+        refresh_token = plain_refresh_token
+    finally:
+        sync_db.close()
     
     # Calculate cookie expiration times
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -191,17 +232,70 @@ async def refresh_token(
             detail="Tenant mismatch"
         )
     
-    # TODO: Implement refresh token storage and rotation
-    # For now, we issue new tokens but don't invalidate old ones
-    # This is a security improvement but full rotation requires:
-    # 1. Store refresh tokens in database/Redis with unique ID
-    # 2. Check if token exists and is valid
-    # 3. Invalidate old token when issuing new one
-    # 4. Handle token family detection (if old token is reused, invalidate all tokens)
+    # Validate refresh token against database
+    from app.core.database import SessionLocal
+    from app.services.refresh_token_service import (
+        validate_refresh_token,
+        create_refresh_token as create_db_refresh_token,
+        revoke_refresh_token,
+        revoke_token_family
+    )
     
-    # Create new tokens (rotation: old token will be replaced by new one)
-    access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
-    new_refresh_token = create_refresh_token(data={"sub": user.id, "tenant_id": user.tenant_id})
+    sync_db = SessionLocal()
+    try:
+        # Validate the refresh token
+        db_token = validate_refresh_token(
+            db=sync_db,
+            token=refresh_token_value,
+            user_id=user_id
+        )
+        
+        if not db_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or revoked refresh token"
+            )
+        
+        # Check for token reuse (if parent token is being reused, it's an attack)
+        if db_token.parent_token_id:
+            # This token was created from a parent - check if parent is still valid
+            parent = sync_db.query(RefreshToken).filter(
+                RefreshToken.id == db_token.parent_token_id
+            ).first()
+            
+            if parent and not parent.is_revoked:
+                # Parent token still exists and is valid - this is token reuse attack!
+                # Revoke entire token family
+                revoke_token_family(
+                    db=sync_db,
+                    user_id=user_id,
+                    token_family=db_token.token_family,
+                    reason="Token reuse attack detected"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token reuse detected - all tokens revoked"
+                )
+        
+        # Revoke old token (rotation)
+        revoke_refresh_token(
+            db=sync_db,
+            token=refresh_token_value,
+            reason="Token rotated"
+        )
+        
+        # Create new tokens
+        access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})
+        plain_new_refresh_token, new_db_token = create_db_refresh_token(
+            db=sync_db,
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            parent_token_id=db_token.id
+        )
+        new_refresh_token = plain_new_refresh_token
+        
+    finally:
+        sync_db.close()
     
     # Calculate cookie expiration times
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

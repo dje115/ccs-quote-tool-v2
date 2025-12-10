@@ -33,6 +33,7 @@ from .support_contract import SupportContract, ContractRenewal, ContractTemplate
 from .contracts import Contract, EnhancedContractTemplate, ContractTemplateVersion, ContractType, ContractStatus
 from .opportunities import Opportunity, OpportunityStage
 from .helpdesk import Ticket, TicketComment, TicketAttachment, TicketHistory, TicketAgentChat, NPAHistory, SLAPolicy, TicketTemplate, QuickReplyTemplate, TicketMacro, TicketLink, TicketTimeEntry, TicketStatus, TicketPriority, TicketType
+from .auth import RefreshToken
 from .knowledge_base import KnowledgeBaseArticle
 from .sla_compliance import SLAComplianceRecord, SLABreachAlert
 
@@ -59,6 +60,7 @@ __all__ = [
     "Ticket", "TicketComment", "TicketAttachment", "TicketHistory", "TicketAgentChat", "NPAHistory", "SLAPolicy", "TicketTemplate", "QuickReplyTemplate", "TicketMacro", "TicketLink", "TicketTimeEntry",
     "TicketStatus", "TicketPriority", "TicketType",
     "SLAComplianceRecord", "SLABreachAlert",
-    "KnowledgeBaseArticle"
+    "KnowledgeBaseArticle",
+    "RefreshToken"
 ]
 

@@ -32,17 +32,37 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// Add auth token to requests
+// Add auth token and CSRF token to requests
 // SECURITY: HttpOnly cookies are sent automatically by the browser with withCredentials: true
 // We no longer use localStorage tokens to prevent XSS attacks
 apiClient.interceptors.request.use(
   (config) => {
     // HttpOnly cookies are sent automatically - no need to manually add Authorization header
     // The backend will read tokens from cookies first, then fall back to Authorization header
+    
+    // Add CSRF token for state-changing operations
+    if (config.method && ['post', 'put', 'delete', 'patch'].includes(config.method.toLowerCase())) {
+      // Get CSRF token from cookie (set by backend)
+      const csrfToken = getCookie('csrf_token');
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken;
+      }
+    }
+    
     return config;
   },
   (error) => Promise.reject(error)
 );
+
+// Helper function to get cookie value
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    return parts.pop()?.split(';').shift() || null;
+  }
+  return null;
+}
 
 // Handle token refresh
 apiClient.interceptors.response.use(
@@ -141,6 +161,7 @@ export default apiClient;
 
 // Auth API
 export const authAPI = {
+  getCsrfToken: () => apiClient.get('/auth/csrf-token'),
   login: (email: string, password: string) =>
     apiClient.post('/auth/login', new URLSearchParams({ username: email, password }), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }

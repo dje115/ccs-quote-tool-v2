@@ -24,7 +24,10 @@ export function sanitizeHTML(html: string, options?: DOMPurify.Config): string {
     ALLOW_DATA_ATTR: false,
   };
   
-  const config = { ...defaultOptions, ...options };
+  // Merge options, ensuring types are compatible
+  const config: DOMPurify.Config = options 
+    ? { ...defaultOptions, ...options } as DOMPurify.Config
+    : defaultOptions;
   
   return DOMPurify.sanitize(html, config);
 }

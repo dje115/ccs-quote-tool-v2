@@ -93,6 +93,19 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean | null>(null);
   
   React.useEffect(() => {
+    // Fetch CSRF token on app initialization
+    const fetchCsrfToken = async () => {
+      try {
+        const { authAPI } = await import('./services/api');
+        await authAPI.getCsrfToken();
+      } catch (error) {
+        // CSRF token fetch failure is not critical - will be set on first request
+        console.warn('Failed to fetch CSRF token:', error);
+      }
+    };
+    
+    fetchCsrfToken();
+    
     // SECURITY: Always validate auth via API call to check token validity
     // HttpOnly cookies can't be read by JavaScript, so we must verify via API
     // This ensures expired or invalid tokens don't grant access
