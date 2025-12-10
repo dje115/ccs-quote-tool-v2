@@ -199,7 +199,13 @@ export default {
     
     const loadSettings = async () => {
       try {
-        const response = await axios.get('/api/v1/admin/settings')
+        const token = localStorage.getItem('admin_token')
+        const response = await axios.get('http://localhost:8000/api/v1/admin/settings', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          withCredentials: true
+        })
         Object.assign(settings, response.data)
       } catch (error) {
         console.error('Failed to load settings:', error)
@@ -210,7 +216,13 @@ export default {
     const saveSettings = async () => {
       saving.value = true
       try {
-        await axios.post('/api/v1/admin/settings', settings)
+        const token = localStorage.getItem('admin_token')
+        await axios.post('http://localhost:8000/api/v1/admin/settings', settings, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          withCredentials: true
+        })
         ElMessage.success('Settings saved successfully!')
       } catch (error) {
         ElMessage.error('Failed to save settings')
@@ -225,7 +237,13 @@ export default {
     
     const createBackup = async () => {
       try {
-        await axios.post('/api/v1/admin/backup')
+        const token = localStorage.getItem('admin_token')
+        await axios.post('http://localhost:8000/api/v1/admin/backup', {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          withCredentials: true
+        })
         ElMessage.success('Backup created successfully!')
       } catch (error) {
         ElMessage.error('Failed to create backup')

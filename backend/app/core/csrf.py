@@ -115,8 +115,12 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return response
         
-        # Skip CSRF check for public endpoints
-        if any(request.url.path.startswith(endpoint) for endpoint in self.PUBLIC_ENDPOINTS):
+            # Skip CSRF check for public endpoints
+            # Check if path starts with any public endpoint OR if it's an admin endpoint
+            is_public = any(request.url.path.startswith(endpoint) for endpoint in self.PUBLIC_ENDPOINTS)
+            is_admin_endpoint = request.url.path.startswith("/api/v1/admin/")
+            
+            if is_public or is_admin_endpoint:
             response = await call_next(request)
             return response
         

@@ -710,7 +710,8 @@ export default {
         const response = await axios.post(`http://localhost:8000/api/v1/admin/test-${apiType}`, {}, {
           headers: {
             'Authorization': `Bearer ${token}`
-          }
+          },
+          withCredentials: true
         })
         
         // Remove existing result for this API
