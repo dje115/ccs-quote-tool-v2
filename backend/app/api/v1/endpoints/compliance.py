@@ -8,6 +8,7 @@ COMPLIANCE: Provides endpoints for GDPR, security monitoring, and compliance man
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -126,26 +127,16 @@ async def generate_gdpr_policy(
     
     SECURITY: Only accessible to super admins.
     """
-    from app.services.ai_service import AIService
     from datetime import datetime, timezone
     
     gdpr_service = GDPRService(db)
-    analysis = gdpr_service.analyze_data_collection()
+    analysis = gdpr_service.analyze_data_collection(tenant_id=current_user.tenant_id)
     
-    # Generate prompt
-    prompt = gdpr_service.generate_gdpr_policy_prompt(analysis)
-    
-    # Add ISO sections if requested
-    if request.include_iso_sections:
-        prompt += "\n\nAdditionally, include references to ISO 27001 (Information Security Management) and ISO 9001 (Quality Management) compliance where relevant."
-    
-    # Call AI service to generate policy
-    ai_service = AIService()
     try:
-        policy_text = await ai_service.generate_text(
-            system_prompt="You are a legal compliance expert specializing in GDPR and data protection regulations. Generate clear, comprehensive, and legally compliant privacy policies.",
-            user_prompt=prompt,
-            model="gpt-4"  # Use GPT-4 for better legal document generation
+        policy_text = await gdpr_service.generate_gdpr_policy(
+            data_analysis=analysis,
+            include_iso=request.include_iso_sections,
+            tenant_id=current_user.tenant_id
         )
     except Exception as e:
         raise HTTPException(
