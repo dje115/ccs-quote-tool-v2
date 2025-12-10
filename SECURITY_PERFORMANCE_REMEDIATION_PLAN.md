@@ -218,3 +218,19 @@
 - Async patterns: Tests verify async_bridge can safely run async code from sync contexts (Celery tasks)
 - Batch queries: Tests verify batch queries are used instead of N+1 queries
 
+### Security Monitoring Implementation ✅ COMPLETE
+- [x] Create SecurityEvent model for storing security events ✅ COMPLETED
+- [x] Create SecurityEventService for logging and querying events ✅ COMPLETED
+- [x] Add security monitoring API endpoints (events, statistics, resolve) ✅ COMPLETED
+- [x] Add migration for security_events table ✅ COMPLETED
+- [x] Integrate security event logging into authentication endpoints ✅ COMPLETED
+- [x] Integrate security event logging into rate limiting middleware ✅ COMPLETED
+
+**Completion Date:** December 10, 2025  
+**Status:** Security monitoring system fully implemented:
+- SecurityEvent model stores all security-related events (failed logins, lockouts, rate limits, 2FA, etc.)
+- SecurityEventService provides centralized logging and querying
+- API endpoints for viewing events, statistics, and resolving events (super admin only)
+- Events automatically logged for: failed logins, successful logins, account lockouts, rate limit violations, 2FA events, passwordless login, etc.
+- Statistics endpoint provides aggregated security metrics
+
