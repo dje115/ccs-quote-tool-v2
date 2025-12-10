@@ -194,6 +194,104 @@ class GDPRService:
         
         return analysis
     
+    def generate_sar_export_from_user(self, user_id: str, tenant_id: str) -> Dict[str, Any]:
+        """
+        Generate data export for a user (without requiring a SAR record)
+        
+        Args:
+            user_id: User ID to export data for
+            tenant_id: Tenant ID
+            
+        Returns:
+            Dictionary containing all user data
+        """
+        export = {
+            "export_date": datetime.now(timezone.utc).isoformat(),
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "data": {}
+        }
+        
+        # Get user data
+        user = self.db.query(User).filter(
+            and_(User.id == user_id, User.tenant_id == tenant_id)
+        ).first()
+        
+        if user:
+            export["data"]["user_profile"] = {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "role": user.role.value if user.role else None,
+                "is_active": user.is_active,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None
+            }
+        
+        # Get quotes created by user
+        quotes = self.db.query(Quote).filter(
+            and_(Quote.tenant_id == tenant_id, Quote.created_by == user_id)
+        ).all()
+        
+        export["data"]["quotes"] = [
+            {
+                "id": quote.id,
+                "quote_number": quote.quote_number,
+                "customer_id": quote.customer_id,
+                "status": quote.status.value if quote.status else None,
+                "total_amount": float(quote.total_amount) if quote.total_amount else None,
+                "created_at": quote.created_at.isoformat() if quote.created_at else None,
+                "updated_at": quote.updated_at.isoformat() if quote.updated_at else None
+            }
+            for quote in quotes
+        ]
+        
+        # Get tickets
+        tickets = []
+        if user_id:
+            tickets = self.db.query(Ticket).filter(
+                and_(
+                    Ticket.tenant_id == tenant_id,
+                    (Ticket.created_by == user_id) | (Ticket.assigned_to == user_id)
+                )
+            ).all()
+        
+        export["data"]["tickets"] = [
+            {
+                "id": ticket.id,
+                "ticket_number": ticket.ticket_number,
+                "subject": ticket.subject,
+                "status": ticket.status.value if ticket.status else None,
+                "priority": ticket.priority.value if ticket.priority else None,
+                "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+                "updated_at": ticket.updated_at.isoformat() if ticket.updated_at else None
+            }
+            for ticket in tickets
+        ]
+        
+        # Get sales activities
+        activities = []
+        if user_id:
+            activities = self.db.query(SalesActivity).filter(
+                and_(SalesActivity.tenant_id == tenant_id, SalesActivity.user_id == user_id)
+            ).all()
+        
+        export["data"]["sales_activities"] = [
+            {
+                "id": activity.id,
+                "customer_id": activity.customer_id,
+                "activity_type": activity.activity_type.value if activity.activity_type else None,
+                "notes": activity.notes,
+                "created_at": activity.created_at.isoformat() if activity.created_at else None
+            }
+            for activity in activities
+        ]
+        
+        return export
+    
     def generate_sar_export(self, sar_id: str) -> Dict[str, Any]:
         """
         Generate data export for a Subject Access Request

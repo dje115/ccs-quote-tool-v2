@@ -106,7 +106,7 @@ async def get_sar_export(
     target_user_id = user_id if user_id and current_user.role.value == "super_admin" else current_user.id
     
     gdpr_service = GDPRService(db)
-    export = gdpr_service.generate_sar_export(
+    export = gdpr_service.generate_sar_export_from_user(
         user_id=target_user_id,
         tenant_id=current_user.tenant_id
     )
