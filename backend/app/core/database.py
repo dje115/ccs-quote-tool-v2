@@ -226,9 +226,11 @@ async def create_system_tenant():
                     "multilingual": True
                 }
             },
-            openai_api_key=settings.OPENAI_API_KEY,
-            companies_house_api_key=settings.COMPANIES_HOUSE_API_KEY,
-            google_maps_api_key=settings.GOOGLE_MAPS_API_KEY,
+            # SECURITY: Encrypt API keys before storing in database
+            from app.core.encryption import encrypt_api_key
+            openai_api_key=encrypt_api_key(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None,
+            companies_house_api_key=encrypt_api_key(settings.COMPANIES_HOUSE_API_KEY) if settings.COMPANIES_HOUSE_API_KEY else None,
+            google_maps_api_key=encrypt_api_key(settings.GOOGLE_MAPS_API_KEY) if settings.GOOGLE_MAPS_API_KEY else None,
             api_limit_monthly=100000
         )
         

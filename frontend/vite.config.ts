@@ -27,7 +27,8 @@ export default defineConfig({
   },
   build: {
     outDir: 'build',
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV !== 'production',  // Disable source maps in production for security
+    minify: 'esbuild',
     rollupOptions: {
       output: {
         manualChunks: {

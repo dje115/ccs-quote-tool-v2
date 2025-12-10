@@ -208,12 +208,18 @@ async def update_tenant(
         tenant.primary_color = tenant_update.primary_color
     if tenant_update.secondary_color:
         tenant.secondary_color = tenant_update.secondary_color
-    if tenant_update.openai_api_key:
-        tenant.openai_api_key = tenant_update.openai_api_key
-    if tenant_update.companies_house_api_key:
-        tenant.companies_house_api_key = tenant_update.companies_house_api_key
-    if tenant_update.google_maps_api_key:
-        tenant.google_maps_api_key = tenant_update.google_maps_api_key
+    # SECURITY: Encrypt API keys before storing
+    from app.core.encryption import encrypt_api_key
+    
+    if tenant_update.openai_api_key is not None:
+        plain_key = tenant_update.openai_api_key.strip() or None
+        tenant.openai_api_key = encrypt_api_key(plain_key) if plain_key else None
+    if tenant_update.companies_house_api_key is not None:
+        plain_key = tenant_update.companies_house_api_key.strip() or None
+        tenant.companies_house_api_key = encrypt_api_key(plain_key) if plain_key else None
+    if tenant_update.google_maps_api_key is not None:
+        plain_key = tenant_update.google_maps_api_key.strip() or None
+        tenant.google_maps_api_key = encrypt_api_key(plain_key) if plain_key else None
     
     await db.commit()
     
