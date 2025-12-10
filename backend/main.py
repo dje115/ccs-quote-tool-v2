@@ -17,6 +17,7 @@ from app.core.database import init_db
 from app.core.redis import init_redis
 from app.core.celery import init_celery
 from app.core.middleware import TenantMiddleware, LoggingMiddleware, SecurityHeadersMiddleware
+from app.core.rate_limiting import RateLimitMiddleware
 from app.core.csrf import CSRFMiddleware
 from app.core.logging import setup_logging, get_logger
 from app.api.v1.api import api_router
