@@ -1,17 +1,181 @@
 # CCS Quote Tool v2 - Handover Document
 
-**Date:** December 8, 2025  
-**Session Focus:** Bug Fixes, Feature Additions, and System Improvements
+**Date:** December 10, 2025  
+**Version:** 3.5.0  
+**Session Focus:** Security Remediation - Phase 1 & 2 Complete
 
 ---
 
 ## Executive Summary
 
-This session focused on fixing critical bugs in the Knowledge Base, Opportunities, and Ticket systems, while also adding new management interfaces for Ticket Templates and Macros. Several database schema mismatches were resolved, and duplicate customer records were cleaned up.
+This session completed **Phase 1 and Phase 2** of the Security and Performance Remediation Plan. All critical and high-priority security vulnerabilities have been addressed, including:
+- Python-JOSE upgrade (CVE fixes)
+- XSS vulnerability fixes
+- Information disclosure prevention
+- Security headers implementation
+- CSRF protection
+- Database-backed refresh tokens with rotation
+- Frontend dependency updates
+
+The application is now significantly more secure with enterprise-grade security measures in place.
 
 ---
 
-## Key Changes Made
+## Security Fixes Completed (Version 3.5.0)
+
+### Phase 1: Critical Security Fixes ✅
+
+#### 1. Python-JOSE Upgrade (CRITICAL)
+**Problem:** CVE-2024-33663 and CVE-2024-33664 vulnerabilities in python-jose 3.3.0
+
+**Solution:**
+- Upgraded `python-jose[cryptography]` to `python-jose-cryptodome>=4.0.0`
+- Updated JWT error handling in `backend/app/core/security.py` (changed `PyJWTError` to `JWTError`)
+- Tested authentication flow - all working correctly
+
+**Files Modified:**
+- `backend/requirements.txt`
+- `backend/app/core/security.py`
+
+**Status:** ✅ Complete - No vulnerabilities remaining
+
+---
+
+#### 2. XSS Vulnerability Fixes (CRITICAL)
+**Problem:** `dangerouslySetInnerHTML` usage in CustomerDetail and LeadDetail pages
+
+**Solution:**
+- Installed `dompurify` and `@types/dompurify`
+- Created sanitization utility: `frontend/src/utils/sanitize.ts`
+- Replaced all `dangerouslySetInnerHTML` with `sanitizeMarkdownBold()`
+- Added HTML sanitization functions for safe rendering
+
+**Files Created:**
+- `frontend/src/utils/sanitize.ts`
+
+**Files Modified:**
+- `frontend/src/pages/CustomerDetail.tsx`
+- `frontend/src/pages/LeadDetail.tsx`
+- `frontend/package.json`
+
+**Status:** ✅ Complete - All XSS vectors eliminated
+
+---
+
+#### 3. Information Disclosure Fix (CRITICAL)
+**Problem:** Detailed error messages exposed in production responses
+
+**Solution:**
+- Created environment-aware error handler: `backend/app/core/error_handler.py`
+- Updated global exception handler in `backend/main.py`
+- Errors now show generic messages in production, detailed in development
+- Full error details logged for debugging
+
+**Files Created:**
+- `backend/app/core/error_handler.py`
+
+**Files Modified:**
+- `backend/main.py`
+- `backend/app/api/v1/endpoints/admin.py`
+
+**Status:** ✅ Complete - Production-safe error handling
+
+---
+
+#### 4. Security Headers Middleware (HIGH)
+**Problem:** Missing security headers (CSP, HSTS, X-Frame-Options, etc.)
+
+**Solution:**
+- Created `SecurityHeadersMiddleware` class in `backend/app/core/middleware.py`
+- Added headers:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `X-XSS-Protection: 1; mode=block`
+  - `Strict-Transport-Security` (production only)
+  - `Content-Security-Policy`
+  - `Referrer-Policy`
+  - `Permissions-Policy`
+- Integrated into middleware stack
+
+**Files Modified:**
+- `backend/app/core/middleware.py`
+- `backend/main.py`
+
+**Status:** ✅ Complete - All security headers active
+
+---
+
+### Phase 2: High Priority Security Fixes ✅
+
+#### 5. CSRF Protection (HIGH)
+**Problem:** No CSRF protection for state-changing operations
+
+**Solution:**
+- Created `CSRFMiddleware` and `CSRFProtection` utility in `backend/app/core/csrf.py`
+- Added CSRF token generation endpoint: `GET /api/v1/auth/csrf-token`
+- Middleware validates CSRF tokens for POST/PUT/DELETE/PATCH requests
+- Frontend automatically includes CSRF token in all state-changing requests
+- Tokens stored in cookies with `SameSite=strict`
+
+**Files Created:**
+- `backend/app/core/csrf.py`
+
+**Files Modified:**
+- `backend/app/api/v1/endpoints/auth.py`
+- `backend/main.py`
+- `frontend/src/services/api.ts`
+- `frontend/src/App.tsx`
+- `backend/requirements.txt` (added `fastapi-csrf-protect`)
+
+**Status:** ✅ Complete - CSRF protection active
+
+---
+
+#### 6. Database-Backed Refresh Tokens (HIGH)
+**Problem:** Refresh tokens not stored in database, no revocation capability
+
+**Solution:**
+- Created `RefreshToken` model in `backend/app/models/auth.py`
+- Implemented token hashing (SHA-256) for secure storage
+- Added token rotation (old token invalidated when new one issued)
+- Implemented token family detection (detects reuse attacks)
+- Created `RefreshTokenService` with full CRUD operations
+- Updated login and refresh endpoints to use database-backed tokens
+- Applied database migration: `add_refresh_tokens_table.sql`
+
+**Files Created:**
+- `backend/app/models/auth.py`
+- `backend/app/services/refresh_token_service.py`
+- `backend/migrations/add_refresh_tokens_table.sql`
+
+**Files Modified:**
+- `backend/app/api/v1/endpoints/auth.py`
+- `backend/app/models/__init__.py`
+
+**Status:** ✅ Complete - Token management fully implemented
+
+---
+
+#### 7. Frontend Dependency Updates (MEDIUM-HIGH)
+**Problem:** Vulnerable dependencies (esbuild <=0.24.2, js-yaml)
+
+**Solution:**
+- Updated `vite` from 5.4.11 to 7.2.7 (uses esbuild ^0.25.0 - safe)
+- Updated `@vitejs/plugin-react` from 4.3.4 to 5.1.2
+- Verified js-yaml already at safe version (4.1.1)
+- `npm audit` now reports 0 vulnerabilities
+
+**Files Modified:**
+- `frontend/package.json`
+- `frontend/package-lock.json`
+
+**Status:** ✅ Complete - All vulnerabilities resolved
+
+**Note:** TypeScript errors related to MUI v7 Grid API changes are non-security and can be addressed separately.
+
+---
+
+## Key Changes Made (Previous Sessions)
 
 ### 1. Knowledge Base System Fixes
 
@@ -356,26 +520,35 @@ frontend/src/components/Layout.tsx
 
 ## Git Status
 
-**Last Commit:** `3909851` - "Fix multiple issues: Knowledge Base, Opportunities, Ticket Templates/Macros, and duplicate customer cleanup"
+**Last Commit:** `2049e8c` - "Fix: Update frontend dependencies to resolve security vulnerabilities"
 
 **Branch:** `master`
 
 **Status:** All changes committed and pushed to GitHub
+
+**Version:** 3.5.0 (Security Remediation Release)
 
 ---
 
 ## Next Steps / Recommendations
 
 ### Immediate
-1. ✅ All critical bugs fixed
-2. ✅ New features deployed
-3. ✅ Database cleanup completed
+1. ✅ All critical security vulnerabilities fixed
+2. ✅ Phase 1 & 2 security remediation complete
+3. ✅ All changes committed and pushed to GitHub
+4. ✅ Version 3.5.0 released
 
-### Short-term Improvements
-1. **MUI Grid Migration:** Update components to use Grid v2 API to remove warnings
-2. **Error Handling:** Add more comprehensive error handling for template/macro operations
-3. **Validation:** Add frontend validation for macro JSON actions
-4. **Testing:** Add unit tests for new helper functions
+### Short-term Improvements (Phase 3)
+1. **Performance Optimization:**
+   - Fix N+1 query problems (use `selectinload()` for eager loading)
+   - Remove `asyncio.run()` from Celery tasks
+   - Implement strategic caching (Redis)
+2. **Security Hardening (Phase 4):**
+   - Enhanced rate limiting per endpoint type
+   - API key encryption at rest
+   - Password complexity policies and account lockout
+3. **MUI Grid Migration:** Update components to use Grid v2 API (non-security)
+4. **Testing:** Add comprehensive security and integration tests
 
 ### Long-term Enhancements
 1. **Template Variables:** Expand variable support (e.g., `{{ticket_number}}`, `{{agent_name}}`)
