@@ -679,6 +679,7 @@ frontend/src/components/Layout.tsx
    - Password complexity policies and account lockout
 3. **MUI Grid Migration:** Update components to use Grid v2 API (non-security)
 4. **Testing:** Add comprehensive security and integration tests
+5. **Admin Portal:** Gradually migrate views to use new `api.js` utility instead of direct axios calls
 
 ### Long-term Enhancements
 1. **Template Variables:** Expand variable support (e.g., `{{ticket_number}}`, `{{agent_name}}`)
