@@ -3,7 +3,7 @@
 Celery tasks for quote operations
 All long-running quote operations should be executed as Celery tasks
 """
-import asyncio
+from app.core.async_bridge import run_async_safe
 import json
 import logging
 from typing import Dict, Any, Optional, List

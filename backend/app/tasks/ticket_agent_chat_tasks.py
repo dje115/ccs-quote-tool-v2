@@ -75,8 +75,9 @@ def agent_chat_task(
         # Run AI chat
         service = TicketAgentAssistantService(db, tenant_id)
         
-        # Run async method in sync context
-        result = asyncio.run(service.chat(
+        # Run async method in sync context using async bridge
+        from app.core.async_bridge import run_async_safe
+        result = run_async_safe(service.chat(
             ticket_id,
             messages,
             attachments=attachments,

@@ -50,8 +50,9 @@ def analyze_ticket_task(self, ticket_id: str, tenant_id: str):
         # Run AI analysis
         service = HelpdeskService(db, tenant_id)
         
-        # Run async method in sync context
-        asyncio.run(service._analyze_ticket_with_full_history(ticket))
+        # Run async method in sync context using async bridge
+        from app.core.async_bridge import run_async_safe
+        run_async_safe(service._analyze_ticket_with_full_history(ticket))
         
         db.commit()
         db.refresh(ticket)

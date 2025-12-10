@@ -6,6 +6,7 @@ Customer management endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, case
+from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr
 import uuid
@@ -129,7 +130,12 @@ async def list_leads(
     from app.models.sales import SalesActivity
     from datetime import datetime, timezone
     
-    stmt = select(Customer).where(
+    # Use eager loading for relationships to prevent N+1 queries
+    # Note: We're not loading all relationships here since we use batch queries for next_contacts
+    # But if any code accesses customer.contacts or customer.sales_activities, they'll be loaded efficiently
+    stmt = select(Customer).options(
+        selectinload(Customer.contacts)
+    ).where(
         and_(
             Customer.tenant_id == current_tenant.id,
             Customer.status == CustomerStatus.LEAD,
@@ -230,7 +236,10 @@ async def list_customers(
     from sqlalchemy import select
     
     # Build query using SQLAlchemy 2.0 syntax
-    stmt = select(Customer).where(
+    # Use eager loading to prevent N+1 queries when relationships are accessed
+    stmt = select(Customer).options(
+        selectinload(Customer.contacts)
+    ).where(
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False
     )
@@ -466,10 +475,17 @@ async def get_customer(
     Get customer by ID
     
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
+    Uses eager loading to prevent N+1 queries when accessing relationships.
     """
     from sqlalchemy import select
     
-    stmt = select(Customer).where(
+    # Use eager loading to prevent N+1 queries when accessing relationships
+    stmt = select(Customer).options(
+        selectinload(Customer.contacts),
+        selectinload(Customer.sales_activities),
+        selectinload(Customer.sales_notes),
+        selectinload(Customer.interactions)
+    ).where(
         Customer.id == customer_id,
         Customer.tenant_id == current_user.tenant_id,
         Customer.is_deleted == False

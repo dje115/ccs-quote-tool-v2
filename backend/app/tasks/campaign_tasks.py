@@ -3,9 +3,9 @@
 Celery tasks for campaign processing
 All long-running campaign operations should be executed as Celery tasks
 """
-import asyncio
 from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
+from app.core.async_bridge import run_async_safe
 from app.models.leads import LeadGenerationCampaign
 from app.services.lead_generation_service import LeadGenerationService
 
@@ -72,9 +72,9 @@ def run_campaign_task(self, campaign_id: str, tenant_id: str):
         # Initialize lead generation service
         service = LeadGenerationService(db, tenant_id)
         
-        # Run lead generation (async function, so use asyncio.run)
+        # Run lead generation using async bridge (safe for Celery tasks)
         print(f"\n🔍 Starting lead generation process...")
-        result = asyncio.run(service.generate_leads(campaign))
+        result = run_async_safe(service.generate_leads(campaign))
         
         if result['success']:
             print(f"\n{'='*80}")

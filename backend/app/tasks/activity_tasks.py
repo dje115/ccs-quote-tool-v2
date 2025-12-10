@@ -210,13 +210,11 @@ def run_ai_analysis_task(self, customer_id: str, tenant_id: str, update_financia
             progress={"step": "starting", "message": "Beginning AI analysis"}
         )
         
-        # Run async analysis in sync context
-        # Use asyncio.run() which properly creates and manages a new event loop
-        # This is safer than get_event_loop() which can fail in Celery workers
-        import asyncio
+        # Run async analysis in sync context using async bridge
+        from app.core.async_bridge import run_async_safe
         
-        # Run the analysis using asyncio.run() which creates a fresh event loop
-        analysis_result = asyncio.run(
+        # Run the analysis using async bridge (safe for Celery tasks)
+        analysis_result = run_async_safe(
             ai_service.analyze_company(
                 company_name=customer.company_name,
                 company_number=customer.company_registration,

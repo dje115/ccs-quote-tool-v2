@@ -79,9 +79,10 @@ def run_planning_campaign_task(self, campaign_id: str, tenant_id: str):
         # Initialize planning service
         service = PlanningApplicationService(db, tenant_id)
         
-        # Run planning campaign (async function, so use asyncio.run)
+        # Run planning campaign using async bridge (safe for Celery tasks)
+        from app.core.async_bridge import run_async_safe
         print(f"\n🔍 Starting planning campaign process...")
-        result = asyncio.run(service.run_campaign(campaign_id))
+        result = run_async_safe(service.run_campaign(campaign_id))
         
         # The run_campaign method returns a dict with keys: total_found, new_applications, ai_analyzed
         # If it throws an exception, we catch it in the outer try/except block
