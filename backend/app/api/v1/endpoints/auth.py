@@ -99,7 +99,38 @@ async def login(
     result = await db.execute(stmt)
     user = result.scalars().first()
     
+    # Check account lockout before password verification
+    if user:
+        from app.core.database import SessionLocal
+        from app.services.password_security_service import PasswordSecurityService
+        
+        sync_db = SessionLocal()
+        try:
+            password_service = PasswordSecurityService(sync_db)
+            is_locked, lockout_reason = password_service.check_account_locked(user.id)
+            
+            if is_locked:
+                raise HTTPException(
+                    status_code=status.HTTP_423_LOCKED,
+                    detail=lockout_reason or "Account is locked due to multiple failed login attempts"
+                )
+        finally:
+            sync_db.close()
+    
+    # Verify password
     if not user or not verify_password(form_data.password, user.hashed_password):
+        # Record failed attempt if user exists
+        if user:
+            from app.core.database import SessionLocal
+            from app.services.password_security_service import PasswordSecurityService
+            
+            sync_db = SessionLocal()
+            try:
+                password_service = PasswordSecurityService(sync_db)
+                password_service.record_failed_attempt(user.id)
+            finally:
+                sync_db.close()
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email/username or password",
@@ -111,6 +142,17 @@ async def login(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
+    
+    # Clear failed attempts on successful login
+    from app.core.database import SessionLocal
+    from app.services.password_security_service import PasswordSecurityService
+    
+    sync_db = SessionLocal()
+    try:
+        password_service = PasswordSecurityService(sync_db)
+        password_service.clear_failed_attempts(user.id)
+    finally:
+        sync_db.close()
     
     # Create tokens
     access_token = create_access_token(data={"sub": user.id, "tenant_id": user.tenant_id})

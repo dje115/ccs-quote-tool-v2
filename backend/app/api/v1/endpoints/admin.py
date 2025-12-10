@@ -207,8 +207,35 @@ async def reset_user_password(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
+        # Validate password policy and history
+        from app.core.database import SessionLocal
+        from app.services.password_security_service import PasswordSecurityService
+        
+        sync_db = SessionLocal()
+        try:
+            password_service = PasswordSecurityService(sync_db)
+            is_valid, errors = password_service.validate_new_password(user, request.new_password)
+            
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Password validation failed: " + "; ".join(errors)
+                )
+        finally:
+            sync_db.close()
+        
         # Hash and update the password
-        user.hashed_password = get_password_hash(request.new_password)
+        new_password_hash = get_password_hash(request.new_password)
+        
+        # Save old password to history before updating
+        sync_db = SessionLocal()
+        try:
+            password_service = PasswordSecurityService(sync_db)
+            password_service.save_password_to_history(user.id, user.hashed_password)
+        finally:
+            sync_db.close()
+        
+        user.hashed_password = new_password_hash
         await db.commit()
         
         return {

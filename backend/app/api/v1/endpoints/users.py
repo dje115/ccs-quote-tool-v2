@@ -117,6 +117,21 @@ async def create_user(
         )
     
     try:
+        # Validate password policy
+        from app.core.password_policy import validate_password
+        
+        is_valid, errors = validate_password(
+            user_data.password,
+            username=user_data.username,
+            email=user_data.email
+        )
+        
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password validation failed: " + "; ".join(errors)
+            )
+        
         hashed_password = get_password_hash(user_data.password)
         
         # Use custom permissions if provided, otherwise use role defaults
