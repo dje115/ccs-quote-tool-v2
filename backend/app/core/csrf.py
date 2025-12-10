@@ -102,6 +102,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/register",
         "/api/v1/auth/refresh",
         "/api/v1/auth/csrf-token",
+        "/api/v1/auth/me",  # Allow checking current user (used by admin portal)
         "/health",
         "/docs",
         "/redoc",
