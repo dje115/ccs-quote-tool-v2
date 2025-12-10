@@ -717,10 +717,17 @@ export const complianceAPI = {
   resolveSecurityEvent: (eventId: string) => apiClient.post(`/compliance/security/events/${eventId}/resolve`),
   
   // GDPR
-  generatePrivacyPolicy: (useAI: boolean = true) => apiClient.post('/compliance/gdpr/generate-policy', null, { params: { use_ai: useAI } }),
+  getDataCollectionAnalysis: () => apiClient.get('/compliance/gdpr/data-analysis'),
+  generatePrivacyPolicy: (request?: { include_iso_sections?: boolean }) => apiClient.post('/compliance/gdpr/generate-policy', request || {}),
   listPrivacyPolicies: () => apiClient.get('/compliance/gdpr/policies'),
   createSAR: (data: any) => apiClient.post('/compliance/gdpr/sar', data),
-  getSARExport: (sarId: string, token?: string) => apiClient.get(`/compliance/gdpr/sar/${sarId}/export`, { params: { token } }),
+  getSARExport: (sarId?: string, token?: string) => {
+    if (sarId) {
+      return apiClient.get(`/compliance/gdpr/sar/${sarId}/export`, { params: { token } });
+    }
+    // Fallback to old endpoint that doesn't require sarId
+    return apiClient.get('/compliance/gdpr/sar-export');
+  },
   verifySAR: (sarId: string, token: string) => apiClient.post(`/compliance/gdpr/sar/${sarId}/verify`, null, { params: { token } }),
   
   // ISO (to be implemented)

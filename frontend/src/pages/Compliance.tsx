@@ -126,8 +126,8 @@ const Compliance: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const analysis = await complianceAPI.getDataCollectionAnalysis();
-      setDataAnalysis(analysis);
+      const response = await complianceAPI.getDataCollectionAnalysis();
+      setDataAnalysis(response?.data || null);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load data analysis');
     } finally {
@@ -140,8 +140,8 @@ const Compliance: React.FC = () => {
     setPolicyLoading(true);
     setError(null);
     try {
-      const response = await complianceAPI.generateGDPRPolicy({ include_iso_sections: includeISO });
-      setPolicyText(response.policy);
+      const response = await complianceAPI.generatePrivacyPolicy({ include_iso_sections: includeISO });
+      setPolicyText(response?.data?.policy || '');
       setPolicyDialogOpen(true);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to generate policy');
@@ -155,8 +155,8 @@ const Compliance: React.FC = () => {
     setSarLoading(true);
     setError(null);
     try {
-      const export_data = await complianceAPI.getSARExport();
-      setSarExport(export_data);
+      const response = await complianceAPI.getSARExport();
+      setSarExport(response?.data || null);
       setSarDialogOpen(true);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to generate SAR export');
