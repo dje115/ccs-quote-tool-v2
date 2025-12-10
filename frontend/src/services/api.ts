@@ -708,3 +708,50 @@ export const slaAPI = {
   listTemplates: () => apiClient.get('/sla/templates'),
   createFromTemplate: (templateId: string, name: string) => apiClient.post(`/sla/templates/${templateId}/create-policy`, { name }),
 };
+
+// Compliance API
+export const complianceAPI = {
+  // Security
+  getSecurityEvents: (params?: any) => apiClient.get('/compliance/security/events', { params }),
+  getSecurityStatistics: (params?: any) => apiClient.get('/compliance/security/statistics', { params }),
+  resolveSecurityEvent: (eventId: string) => apiClient.post(`/compliance/security/events/${eventId}/resolve`),
+  
+  // GDPR
+  generatePrivacyPolicy: (useAI: boolean = true) => apiClient.post('/compliance/gdpr/generate-policy', null, { params: { use_ai: useAI } }),
+  listPrivacyPolicies: () => apiClient.get('/compliance/gdpr/policies'),
+  createSAR: (data: any) => apiClient.post('/compliance/gdpr/sar', data),
+  getSARExport: (sarId: string, token?: string) => apiClient.get(`/compliance/gdpr/sar/${sarId}/export`, { params: { token } }),
+  verifySAR: (sarId: string, token: string) => apiClient.post(`/compliance/gdpr/sar/${sarId}/verify`, null, { params: { token } }),
+  
+  // ISO (to be implemented)
+  getISOControls: (standard: string, params?: any) => apiClient.get(`/compliance/iso/controls`, { params: { standard, ...params } }),
+  getISOAssessments: (params?: any) => apiClient.get('/compliance/iso/assessments', { params }),
+  getISOAudits: (standard: string, params?: any) => apiClient.get(`/compliance/iso/audits`, { params: { standard, ...params } }),
+};
+
+  getTicketCompliance: (ticketId: string) => apiClient.get(`/sla/tickets/${ticketId}/compliance`),
+  getContractCompliance: (contractId: string) => apiClient.get(`/sla/contracts/${contractId}/compliance`),
+  
+  // Breach Alerts
+  listBreachAlerts: (params?: any) => apiClient.get('/sla/breach-alerts', { params }),
+  acknowledgeBreachAlert: (alertId: string) => apiClient.post(`/sla/breach-alerts/${alertId}/acknowledge`),
+  
+  // Performance & Reports
+  getPerformanceByAgent: (params: any) => apiClient.get('/sla/performance/by-agent', { params }),
+  exportReport: (params: any) => apiClient.get('/sla/reports/export', { params, responseType: 'blob' }),
+  getTrends: (params: any) => apiClient.get('/sla/trends', { params }),
+  
+  // Notification Rules
+  getNotificationRules: () => apiClient.get('/sla/notification-rules'),
+  updateNotificationSettings: (policyId: string, data: any) => apiClient.put(`/sla/policies/${policyId}/notification-settings`, data),
+  
+  // Customer SLA
+  getCustomerSummary: (customerId: string) => apiClient.get(`/sla/customers/${customerId}/summary`),
+  getCustomerComplianceHistory: (customerId: string, params?: any) => apiClient.get(`/sla/customers/${customerId}/compliance-history`, { params }),
+  getCustomerReport: (customerId: string, startDate: string, endDate: string) => 
+    apiClient.get(`/sla/customers/${customerId}/report`, { params: { start_date: startDate, end_date: endDate } }),
+  
+  // Templates
+  listTemplates: () => apiClient.get('/sla/templates'),
+  createFromTemplate: (templateId: string, name: string) => apiClient.post(`/sla/templates/${templateId}/create-policy`, { name }),
+};

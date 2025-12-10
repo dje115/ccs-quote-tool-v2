@@ -60,6 +60,8 @@ const NPADashboard = lazy(() => import('./components/NPADashboard'));
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const TicketTemplates = lazy(() => import('./pages/TicketTemplates'));
 const TicketMacros = lazy(() => import('./pages/TicketMacros'));
+const Compliance = lazy(() => import('./pages/Compliance'));
+const Compliance = lazy(() => import('./pages/Compliance'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -394,6 +396,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/compliance"
+            element={
+              <ProtectedRoute>
+                <Compliance />
               </ProtectedRoute>
             }
           />

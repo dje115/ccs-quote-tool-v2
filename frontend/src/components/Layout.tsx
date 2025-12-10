@@ -29,6 +29,7 @@ import {
   AccountCircle,
   Group as GroupIcon,
   Business as CompetitorsIcon,
+  Security as SecurityIcon,
   Architecture as ArchitectureIcon,
   LocalShipping as LocalShippingIcon,
   Psychology as PsychologyIcon,
@@ -148,6 +149,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         { text: t('navigation.competitors'), icon: <CompetitorsIcon />, path: '/competitors' },
         { text: 'AI Prompts', icon: <PsychologyIcon />, path: '/prompts', adminOnly: true },
     { text: t('navigation.users'), icon: <GroupIcon />, path: '/users' },
+    { text: 'Compliance', icon: <SecurityIcon />, path: '/compliance', adminOnly: true },
     { text: t('navigation.settings'), icon: <SettingsIcon />, path: '/settings' },
   ];
 
@@ -319,4 +321,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 };
 
 export default Layout;
+
+
 
