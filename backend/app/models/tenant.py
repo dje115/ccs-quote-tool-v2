@@ -130,6 +130,9 @@ class User(Base, TimestampMixin):
     
     # Relationships
     tenant = relationship("Tenant", back_populates="users")
+    password_history = relationship("PasswordHistory", back_populates="user", cascade="all, delete-orphan")
+    account_lockout = relationship("AccountLockout", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    passwordless_tokens = relationship("PasswordlessLoginToken", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User {self.username} ({self.email})>"

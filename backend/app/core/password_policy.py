@@ -113,13 +113,8 @@ class PasswordPolicy:
                 if email_local and email_local in password.lower():
                     errors.append("Password cannot contain your email address")
         
-        # Check for repeated characters (e.g., "aaaaaa")
-        if re.search(r'(.)\1{3,}', password):
-            errors.append("Password cannot contain the same character repeated 4 or more times")
-        
-        # Check for sequential characters (e.g., "12345", "abcde")
-        if re.search(r'(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz)', password.lower()):
-            errors.append("Password cannot contain sequential characters (e.g., '12345', 'abcde')")
+        # Removed repeated character check (too strict)
+        # Removed sequential character check (too strict)
         
         return len(errors) == 0, errors
     
@@ -164,13 +159,13 @@ class PasswordPolicy:
         return max(0, min(100, score))
 
 
-# Default password policy instance
+# Default password policy instance (simplified)
 default_policy = PasswordPolicy(
-    min_length=12,
+    min_length=8,  # Reduced from 12 to 8
     require_uppercase=True,
     require_lowercase=True,
     require_digits=True,
-    require_special=True,
+    require_special=False,  # Made optional - not required
     max_length=128,
     prevent_common_passwords=True,
     prevent_user_info=True

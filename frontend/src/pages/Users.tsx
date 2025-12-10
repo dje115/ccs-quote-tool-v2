@@ -331,7 +331,7 @@ const Users: React.FC = () => {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
-                helperText="Minimum 12 characters, must include uppercase, lowercase, digit, and special character"
+                helperText="Minimum 8 characters, must include uppercase, lowercase, and digit"
               />
             </Grid>
             <Grid size={12}>

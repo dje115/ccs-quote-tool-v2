@@ -38,6 +38,7 @@ from .knowledge_base import KnowledgeBaseArticle
 from .sla_compliance import SLAComplianceRecord, SLABreachAlert
 from .password_history import PasswordHistory
 from .account_lockout import AccountLockout
+from .passwordless_login import PasswordlessLoginToken
 
 __all__ = [
     "Base",
@@ -65,6 +66,7 @@ __all__ = [
     "KnowledgeBaseArticle",
     "RefreshToken",
     "PasswordHistory",
-    "AccountLockout"
+    "AccountLockout",
+    "PasswordlessLoginToken"
 ]
 
