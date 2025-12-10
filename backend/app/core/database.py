@@ -193,6 +193,14 @@ async def create_default_tenant():
             print(f"   Admin Password: [REDACTED - Set via environment variable]")
 
 
+def _encrypt_if_present(api_key: str | None) -> str | None:
+    """Helper function to encrypt API key if present"""
+    if not api_key:
+        return None
+    from app.core.encryption import encrypt_api_key
+    return encrypt_api_key(api_key)
+
+
 async def create_system_tenant():
     """Ensure dedicated system tenant exists for storing global API keys and defaults"""
     async with AsyncSessionLocal() as session:
@@ -227,10 +235,9 @@ async def create_system_tenant():
                 }
             },
             # SECURITY: Encrypt API keys before storing in database
-            from app.core.encryption import encrypt_api_key
-            openai_api_key=encrypt_api_key(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None,
-            companies_house_api_key=encrypt_api_key(settings.COMPANIES_HOUSE_API_KEY) if settings.COMPANIES_HOUSE_API_KEY else None,
-            google_maps_api_key=encrypt_api_key(settings.GOOGLE_MAPS_API_KEY) if settings.GOOGLE_MAPS_API_KEY else None,
+            openai_api_key=_encrypt_if_present(settings.OPENAI_API_KEY),
+            companies_house_api_key=_encrypt_if_present(settings.COMPANIES_HOUSE_API_KEY),
+            google_maps_api_key=_encrypt_if_present(settings.GOOGLE_MAPS_API_KEY),
             api_limit_monthly=100000
         )
         
