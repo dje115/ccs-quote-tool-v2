@@ -52,7 +52,7 @@
     <div style="position: fixed; bottom: 8px; right: 16px; z-index: 1000;">
       <el-tooltip :content="versionTooltip" placement="top">
         <span style="font-size: 0.7rem; color: #909399; opacity: 0.6; cursor: help; font-family: monospace;">
-          v{{ versionInfo.version || '3.2.0' }}
+          v{{ versionInfo.version || '3.5.0' }}
         </span>
       </el-tooltip>
     </div>
@@ -66,8 +66,8 @@ import axios from 'axios'
 export default {
   name: 'App',
   setup() {
-    const versionInfo = ref({ version: '3.2.0' })
-    const versionTooltip = ref('Version: 3.2.0')
+    const versionInfo = ref({ version: '3.5.0' })
+    const versionTooltip = ref('Version: 3.5.0')
     
     const loadVersion = async () => {
       try {

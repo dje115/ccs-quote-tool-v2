@@ -102,7 +102,7 @@ export default {
               withCredentials: true  // Include cookies
             })
             csrfToken = csrfResponse.data.csrf_token
-            // Also read from cookie if available
+            // Also read from cookie if available (cookie takes precedence)
             const cookieToken = document.cookie.split('; ').find(row => row.startsWith('csrf_token='))
             if (cookieToken) {
               csrfToken = cookieToken.split('=')[1]
@@ -120,7 +120,7 @@ export default {
             'Content-Type': 'application/x-www-form-urlencoded'
           }
           
-          // Add CSRF token if available
+          // Add CSRF token if available (required for POST requests)
           if (csrfToken) {
             headers['X-CSRF-Token'] = csrfToken
           }
