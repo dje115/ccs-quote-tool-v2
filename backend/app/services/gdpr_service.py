@@ -340,7 +340,6 @@ class GDPRService:
         from app.services.ai_prompt_service import AIPromptService
         from app.services.ai_provider_service import AIProviderService
         from app.models.ai_prompt import PromptCategory
-        from app.core.async_bridge import run_async_safe
         
         # Get data collection analysis
         data_analysis = self.analyze_data_collection(tenant_id=tenant_id)
