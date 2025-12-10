@@ -71,13 +71,18 @@ async def save_api_keys(
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
-        # Update API keys if provided
+        # Update API keys if provided (encrypt before storing)
+        from app.core.encryption import encrypt_api_key
+        
         if request.openai_api_key is not None:
-            tenant.openai_api_key = request.openai_api_key
+            plain_key = request.openai_api_key.strip() or None
+            tenant.openai_api_key = encrypt_api_key(plain_key) if plain_key else None
         if request.companies_house_api_key is not None:
-            tenant.companies_house_api_key = request.companies_house_api_key
+            plain_key = request.companies_house_api_key.strip() or None
+            tenant.companies_house_api_key = encrypt_api_key(plain_key) if plain_key else None
         if request.google_maps_api_key is not None:
-            tenant.google_maps_api_key = request.google_maps_api_key
+            plain_key = request.google_maps_api_key.strip() or None
+            tenant.google_maps_api_key = encrypt_api_key(plain_key) if plain_key else None
         
         await db.commit()
         

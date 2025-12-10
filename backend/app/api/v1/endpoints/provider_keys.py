@@ -224,7 +224,11 @@ async def test_provider_key(
                     detail="No API key found to test"
                 )
             
+            # Decrypt key if encrypted
+            from app.core.encryption import decrypt_api_key, is_encrypted
             api_key = key_record.api_key
+            if api_key and is_encrypted(api_key):
+                api_key = decrypt_api_key(api_key)
         
         # Test the key (service uses sync db)
         sync_db = SessionLocal()
@@ -357,6 +361,11 @@ async def save_provider_key(
             existing_key.last_tested = datetime.now(timezone.utc) if request.test_on_save else existing_key.last_tested
             existing_key.updated_at = datetime.now(timezone.utc)
         else:
+            # Encrypt API key before storing
+            from app.core.encryption import encrypt_api_key
+            
+            encrypted_key = encrypt_api_key(request.api_key) if request.api_key else None
+            
             new_key = ProviderAPIKey(
                 id=str(uuid.uuid4()),
                 provider_id=provider_id,

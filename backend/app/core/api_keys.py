@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from app.models.tenant import Tenant
 from app.models.ai_provider import ProviderAPIKey, AIProvider
 from app.core.config import settings
+from app.core.encryption import decrypt_api_key, encrypt_api_key, is_encrypted
 
 # Cache TTL: 1 hour (keys don't change frequently)
 API_KEY_CACHE_TTL = 3600
@@ -83,17 +84,29 @@ def _get_api_keys_from_db(db: Session, tenant_id: str) -> APIKeys:
     if not openai_key and system_tenant:
         openai_key = system_tenant.openai_api_key
     
+    # Decrypt if encrypted
+    if openai_key and is_encrypted(openai_key):
+        openai_key = decrypt_api_key(openai_key)
+    
     # Resolve Companies House key: Check ProviderAPIKey table first, then legacy fields
     companies_house_key = None
     # TODO: Add ProviderAPIKey support for Companies House when provider is added
     # For now, use legacy fields with system tenant fallback
     companies_house_key = tenant.companies_house_api_key or (system_tenant.companies_house_api_key if system_tenant else None)
     
+    # Decrypt if encrypted
+    if companies_house_key and is_encrypted(companies_house_key):
+        companies_house_key = decrypt_api_key(companies_house_key)
+    
     # Resolve Google Maps key: Check ProviderAPIKey table first, then legacy fields
     google_maps_key = None
     # TODO: Add ProviderAPIKey support for Google Maps when provider is added
     # For now, use legacy fields with system tenant fallback
     google_maps_key = tenant.google_maps_api_key or (system_tenant.google_maps_api_key if system_tenant else None)
+    
+    # Decrypt if encrypted
+    if google_maps_key and is_encrypted(google_maps_key):
+        google_maps_key = decrypt_api_key(google_maps_key)
     
     # Determine source for logging/debugging
     # Check where we got the keys from (tenant-specific vs system fallback)
@@ -330,7 +343,11 @@ def get_provider_api_key(
         ).first()
         
         if tenant_key:
-            return tenant_key.api_key
+            # Decrypt if encrypted
+            key = tenant_key.api_key
+            if key and is_encrypted(key):
+                key = decrypt_api_key(key)
+            return key
         
         # Fallback to system-level key from ProviderAPIKey table
         system_key = db.query(ProviderAPIKey).filter(
@@ -340,17 +357,27 @@ def get_provider_api_key(
         ).first()
         
         if system_key:
-            return system_key.api_key
+            # Decrypt if encrypted
+            key = system_key.api_key
+            if key and is_encrypted(key):
+                key = decrypt_api_key(key)
+            return key
         
         # Final fallback: legacy fields (tenant-specific first, then system tenant)
         # This ensures system tenant is the fallback as expected
         if provider_slug == "openai":
             # Check tenant-specific legacy field
             if current_tenant.openai_api_key:
-                return current_tenant.openai_api_key
+                key = current_tenant.openai_api_key
+                if is_encrypted(key):
+                    key = decrypt_api_key(key)
+                return key
             # Then check system tenant (where admin portal stores system-wide keys)
             if system_tenant and system_tenant.openai_api_key:
-                return system_tenant.openai_api_key
+                key = system_tenant.openai_api_key
+                if is_encrypted(key):
+                    key = decrypt_api_key(key)
+                return key
         
         return None
     

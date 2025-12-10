@@ -854,11 +854,25 @@ async def get_global_api_keys(
         system_tenant = result.scalar_one_or_none()
         
         if system_tenant:
-            # Return keys from database
+            # Decrypt keys before returning (admin portal needs to see them for editing)
+            from app.core.encryption import decrypt_api_key, is_encrypted
+            
+            openai_key = system_tenant.openai_api_key or os.getenv("OPENAI_API_KEY", "")
+            if openai_key and is_encrypted(openai_key):
+                openai_key = decrypt_api_key(openai_key)
+            
+            companies_house_key = system_tenant.companies_house_api_key or os.getenv("COMPANIES_HOUSE_API_KEY", "")
+            if companies_house_key and is_encrypted(companies_house_key):
+                companies_house_key = decrypt_api_key(companies_house_key)
+            
+            google_maps_key = system_tenant.google_maps_api_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
+            if google_maps_key and is_encrypted(google_maps_key):
+                google_maps_key = decrypt_api_key(google_maps_key)
+            
             return GlobalAPIKeysResponse(
-                openai_api_key=system_tenant.openai_api_key or os.getenv("OPENAI_API_KEY", ""),
-                companies_house_api_key=system_tenant.companies_house_api_key or os.getenv("COMPANIES_HOUSE_API_KEY", ""),
-                google_maps_api_key=system_tenant.google_maps_api_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
+                openai_api_key=openai_key,
+                companies_house_api_key=companies_house_key,
+                google_maps_api_key=google_maps_key
             )
         else:
             # Fallback to environment variables if no tenant found
@@ -916,13 +930,18 @@ async def update_global_api_keys(
             db.add(system_tenant)
             await db.flush()
         
-        # Update API keys
+        # Update API keys (encrypt before storing)
+        from app.core.encryption import encrypt_api_key
+        
         if api_keys.openai_api_key is not None:
-            system_tenant.openai_api_key = api_keys.openai_api_key.strip() or None
+            plain_key = api_keys.openai_api_key.strip() or None
+            system_tenant.openai_api_key = encrypt_api_key(plain_key) if plain_key else None
         if api_keys.companies_house_api_key is not None:
-            system_tenant.companies_house_api_key = api_keys.companies_house_api_key.strip() or None
+            plain_key = api_keys.companies_house_api_key.strip() or None
+            system_tenant.companies_house_api_key = encrypt_api_key(plain_key) if plain_key else None
         if api_keys.google_maps_api_key is not None:
-            system_tenant.google_maps_api_key = api_keys.google_maps_api_key.strip() or None
+            plain_key = api_keys.google_maps_api_key.strip() or None
+            system_tenant.google_maps_api_key = encrypt_api_key(plain_key) if plain_key else None
         
         await db.commit()
         
