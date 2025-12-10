@@ -211,6 +211,8 @@ class AIAnalysisService:
         """
         Comprehensive company analysis using AI, Companies House, Google Maps, and web scraping
         
+        PERFORMANCE: Uses Redis caching to avoid re-analyzing the same company within 24 hours.
+        
         Args:
             company_name: Company name to analyze
             company_number: Optional Companies House company number
@@ -221,6 +223,18 @@ class AIAnalysisService:
             update_addresses: Whether to fetch/update Google Maps address data (default: True)
             customer_id: Optional customer ID for storing accounts documents in MinIO
         """
+        from app.core.caching import get_cached_ai_analysis, cache_ai_analysis
+        
+        # Create cache key from company identifier (prefer company_number if available)
+        cache_entity_id = company_number or company_name.lower().strip()
+        
+        # Try to get from cache first (unless forcing update)
+        if not update_financial_data and not update_addresses:
+            cached_analysis = await get_cached_ai_analysis(cache_entity_id, "company")
+            if cached_analysis:
+                print(f"[AI ANALYSIS] Cache hit for {company_name}")
+                return cached_analysis
+        
         try:
             # If no website provided, try to find it via Google search
             if not website:
@@ -293,7 +307,7 @@ class AIAnalysisService:
             # Perform AI analysis
             ai_analysis = await self._perform_ai_analysis(analysis_data)
             
-            return {
+            result = {
                 "success": True,
                 "company_name": company_name,
                 "analysis": ai_analysis,
@@ -303,6 +317,11 @@ class AIAnalysisService:
                     "web_scraping": web_scraping_data
                 }
             }
+            
+            # Cache the result (TTL: 24 hours)
+            await cache_ai_analysis(cache_entity_id, "company", result, ttl=86400)
+            
+            return result
             
         except Exception as e:
             return {

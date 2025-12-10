@@ -476,9 +476,18 @@ async def get_customer(
     
     PERFORMANCE: Uses AsyncSession to prevent blocking the event loop.
     Uses eager loading to prevent N+1 queries when accessing relationships.
+    Uses Redis caching to reduce database load.
     """
     from sqlalchemy import select
+    from app.core.caching import get_cached_customer_data, cache_customer_data
     
+    # Try to get from cache first
+    cached_data = await get_cached_customer_data(customer_id)
+    if cached_data:
+        # Return cached data (convert back to CustomerResponse)
+        return CustomerResponse(**cached_data)
+    
+    # Cache miss - query database
     # Use eager loading to prevent N+1 queries when accessing relationships
     stmt = select(Customer).options(
         selectinload(Customer.contacts),
@@ -499,6 +508,10 @@ async def get_customer(
     # Fix ai_analysis_raw field that might be a string instead of dict
     if hasattr(customer, 'ai_analysis_raw'):
         customer.ai_analysis_raw = _safe_parse_json_field(customer.ai_analysis_raw)
+    
+    # Convert to dict and cache (TTL: 15 minutes)
+    customer_dict = CustomerResponse.model_validate(customer).model_dump()
+    await cache_customer_data(customer_id, customer_dict, ttl=900)
     
     return customer
 
@@ -561,6 +574,10 @@ async def update_customer(
     
     await db.commit()
     await db.refresh(customer)
+    
+    # Invalidate customer cache
+    from app.core.caching import invalidate_customer_cache
+    await invalidate_customer_cache(customer_id)
     
     # Publish customer.updated event (async, non-blocking)
     from app.core.events import get_event_publisher
