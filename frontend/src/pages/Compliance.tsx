@@ -674,14 +674,19 @@ const Compliance: React.FC = () => {
                     color="primary"
                     startIcon={<DownloadIcon />}
                     onClick={async () => {
+                      if (!sarExport || !(sarExport as any).document_info) {
+                        setError('SAR document information not available');
+                        return;
+                      }
                       const sarId = (sarExport as any).document_info.sar_id;
+                      const filename = (sarExport as any).document_info.filename || `SAR-${sarId}.pdf`;
                       try {
                         const response = await complianceAPI.downloadSARDocument(sarId);
                         const blob = new Blob([response.data], { type: 'application/pdf' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = (sarExport as any).document_info.filename || `SAR-${sarId}.pdf`;
+                        a.download = filename;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
@@ -698,9 +703,15 @@ const Compliance: React.FC = () => {
                     color="primary"
                     startIcon={<DownloadIcon />}
                     onClick={() => {
+                      if (!sarExport || !(sarExport as any).document_info) {
+                        setError('SAR document information not available');
+                        return;
+                      }
                       const downloadUrl = (sarExport as any).document_info.download_url;
                       if (downloadUrl) {
                         window.open(downloadUrl, '_blank');
+                      } else {
+                        setError('Download URL not available');
                       }
                     }}
                   >
@@ -711,6 +722,10 @@ const Compliance: React.FC = () => {
                     color="secondary"
                     startIcon={<EmailIcon />}
                     onClick={async () => {
+                      if (!sarExport || !(sarExport as any).document_info) {
+                        setError('SAR document information not available');
+                        return;
+                      }
                       const sarId = (sarExport as any).document_info.sar_id;
                       const recipientEmail = (sarExport as any).data_subject?.email;
                       await sendSAREmail(sarId, recipientEmail);
