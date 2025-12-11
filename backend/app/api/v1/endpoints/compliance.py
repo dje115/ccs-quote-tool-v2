@@ -7,7 +7,7 @@ COMPLIANCE: Provides endpoints for GDPR, security monitoring, and compliance man
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, cast, String, text
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
@@ -34,11 +34,29 @@ class DataCollectionAnalysis(BaseModel):
 
 
 class SARExport(BaseModel):
-    """Subject Access Request export"""
-    export_date: str
-    user_id: str
-    tenant_id: str
+    """Subject Access Request export - GDPR-compliant report structure"""
+    # New GDPR-compliant structure
+    report_type: Optional[str] = None
+    company: Optional[str] = None
+    requesting_party: Optional[str] = None
+    date_of_response: Optional[str] = None
+    reference: Optional[str] = None
+    introduction: Optional[str] = None
+    data_subject: Optional[dict] = None
+    categories_of_personal_data: Optional[dict] = None
     data: dict
+    source_of_data: Optional[list] = None
+    purpose_and_lawful_basis: Optional[dict] = None
+    retention_periods: Optional[dict] = None
+    data_subject_rights: Optional[dict] = None
+    
+    # Legacy fields (for backward compatibility)
+    export_date: Optional[str] = None
+    user_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    
+    class Config:
+        extra = "allow"  # Allow additional fields from the report
 
 
 class GDPRPolicyRequest(BaseModel):
@@ -129,10 +147,9 @@ def get_sar_subjects(
         ]
         
         # Search in concatenated full name (PostgreSQL uses || for concatenation)
-        from sqlalchemy import cast, String
         conditions.append(
             func.lower(
-                cast(Contact.first_name, String) + ' ' + cast(Contact.last_name, String)
+                text("contacts.first_name || ' ' || contacts.last_name")
             ).like(search_term)
         )
         
@@ -182,10 +199,9 @@ def get_sar_subjects(
         ]
         
         # Search in concatenated full name (PostgreSQL uses || for concatenation)
-        from sqlalchemy import cast, String
         conditions.append(
             func.lower(
-                cast(User.first_name, String) + ' ' + cast(User.last_name, String)
+                text("users.first_name || ' ' || users.last_name")
             ).like(search_term)
         )
         

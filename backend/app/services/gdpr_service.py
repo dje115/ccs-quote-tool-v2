@@ -536,6 +536,11 @@ class GDPRService:
             "right_to_complain": "Complain to the ICO (Information Commissioner's Office)"
         }
         
+        # Add legacy fields for backward compatibility
+        report["export_date"] = export_date.isoformat()
+        report["user_id"] = user_id if user_id else None
+        report["tenant_id"] = tenant_id
+        
         return report
     
     def generate_sar_export_from_user(self, user_id: str, tenant_id: str) -> Dict[str, Any]:
