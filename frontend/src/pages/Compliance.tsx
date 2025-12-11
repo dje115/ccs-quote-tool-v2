@@ -652,7 +652,7 @@ const Compliance: React.FC = () => {
               </Typography>
               
               {/* Document Info */}
-              {(sarExport as any).document_info && (
+              {sarExport && (sarExport as any).document_info && (
                 <Alert severity="success" sx={{ mb: 2 }}>
                   <Typography variant="body2" gutterBottom>
                     <strong>PDF Document Generated</strong>
@@ -667,7 +667,7 @@ const Compliance: React.FC = () => {
               )}
               
               {/* Download and Email Actions */}
-              {(sarExport as any).document_info && (
+              {sarExport && (sarExport as any).document_info && (
                 <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <Button
                     variant="contained"
@@ -756,7 +756,7 @@ const Compliance: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          {(sarExport as any).document_info && (
+          {sarExport && (sarExport as any).document_info && (
             <Button
               onClick={() => sarExport && downloadJSON(sarExport, `sar-export-${Date.now()}.json`)}
             >
