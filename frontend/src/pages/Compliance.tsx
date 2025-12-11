@@ -697,14 +697,14 @@ const Compliance: React.FC = () => {
                       <ListItemText
                         primary={subject.name}
                         secondary={
-                          <Box>
+                          <Box component="span">
                             {subject.email && (
-                              <Typography variant="caption" display="block">
+                              <Typography variant="caption" display="block" component="span">
                                 {subject.email}
                               </Typography>
                             )}
                             {subject.company && (
-                              <Typography variant="caption" display="block" color="textSecondary">
+                              <Typography variant="caption" display="block" color="textSecondary" component="span">
                                 {subject.company}
                               </Typography>
                             )}
@@ -712,9 +712,11 @@ const Compliance: React.FC = () => {
                               label={subject.type === 'contact' ? 'Contact' : 'User'}
                               size="small"
                               sx={{ mt: 0.5 }}
+                              component="span"
                             />
                           </Box>
                         }
+                        secondaryTypographyProps={{ component: 'div' }}
                       />
                     </ListItemButton>
                     <Divider />
