@@ -745,7 +745,7 @@ const Compliance: React.FC = () => {
                 multiline
                 fullWidth
                 rows={10}
-                value={JSON.stringify(sarExport, null, 2)}
+                value={sarExport ? JSON.stringify(sarExport, null, 2) : ''}
                 variant="outlined"
                 InputProps={{
                   readOnly: true,
