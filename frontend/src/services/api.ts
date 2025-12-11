@@ -722,7 +722,9 @@ export const complianceAPI = {
   listPrivacyPolicies: () => apiClient.get('/compliance/gdpr/policies'),
   createSAR: (data: any) => apiClient.post('/compliance/gdpr/sar', data),
   getSARSubjects: (search?: string) => apiClient.get('/compliance/gdpr/sar-subjects', { params: { search } }),
-  getSARExport: (contactId?: string, userId?: string) => apiClient.get('/compliance/gdpr/sar-export', { params: { contact_id: contactId, user_id: userId } }),
+  getSARExport: (contactId?: string, userId?: string, generateDocument?: boolean) => apiClient.get('/compliance/gdpr/sar-export', { params: { contact_id: contactId, user_id: userId, generate_document: generateDocument } }),
+  sendSAREmail: (sarId: string, recipientEmail?: string) => apiClient.post(`/compliance/gdpr/sar-export/${sarId}/send-email`, null, { params: { recipient_email: recipientEmail } }),
+  downloadSARDocument: (sarId: string) => apiClient.get(`/compliance/gdpr/sar-export/${sarId}/download`, { responseType: 'blob' }),
   verifySAR: (sarId: string, token: string) => apiClient.post(`/compliance/gdpr/sar/${sarId}/verify`, null, { params: { token } }),
   
   // ISO (to be implemented)

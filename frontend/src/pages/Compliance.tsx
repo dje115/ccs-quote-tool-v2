@@ -8,6 +8,8 @@ import {
   Paper,
   Alert,
   CircularProgress,
+  FormControlLabel,
+  Checkbox,
   Button,
   TextField,
   Dialog,
@@ -44,6 +46,7 @@ import {
   Cancel as CancelIcon,
   Warning as WarningIcon,
   Info as InfoIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
 import { complianceAPI } from '../services/api';
 
@@ -113,6 +116,8 @@ const Compliance: React.FC = () => {
   const [sarSearchTerm, setSarSearchTerm] = useState('');
   const [selectedSarSubject, setSelectedSarSubject] = useState<any>(null);
   const [loadingSarSubjects, setLoadingSarSubjects] = useState(false);
+  const [generateDocument, setGenerateDocument] = useState(true);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   // Load security events
   const loadSecurityEvents = async () => {
@@ -194,7 +199,7 @@ const Compliance: React.FC = () => {
     try {
       const contactId = selectedSarSubject.type === 'contact' ? selectedSarSubject.id : undefined;
       const userId = selectedSarSubject.type === 'user' ? selectedSarSubject.id : undefined;
-      const response = await complianceAPI.getSARExport(contactId, userId);
+      const response = await complianceAPI.getSARExport(contactId, userId, generateDocument);
       setSarExport(response?.data || null);
       setSarDialogOpen(true);
       setSarSelectDialogOpen(false);
@@ -202,6 +207,22 @@ const Compliance: React.FC = () => {
       setError(err.response?.data?.detail || 'Failed to generate SAR export');
     } finally {
       setSarLoading(false);
+    }
+  };
+
+  // Send SAR via email
+  const sendSAREmail = async (sarId: string, recipientEmail?: string) => {
+    setSendingEmail(true);
+    setError(null);
+    try {
+      await complianceAPI.sendSAREmail(sarId, recipientEmail);
+      setError(null);
+      // Show success message
+      alert('SAR document sent via email successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to send email');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -614,23 +635,101 @@ const Compliance: React.FC = () => {
       >
         <DialogTitle>
           Subject Access Request Export
-          <IconButton
-            onClick={() => sarExport && copyToClipboard(JSON.stringify(sarExport, null, 2))}
-            sx={{ position: 'absolute', right: 8, top: 8 }}
-          >
-            <ContentCopyIcon />
-          </IconButton>
+          {sarExport && (sarExport as any).document_info && (
+            <IconButton
+              onClick={() => sarExport && copyToClipboard(JSON.stringify(sarExport, null, 2))}
+              sx={{ position: 'absolute', right: 8, top: 8 }}
+            >
+              <ContentCopyIcon />
+            </IconButton>
+          )}
         </DialogTitle>
         <DialogContent>
           {sarExport && (
             <Box>
               <Typography variant="body2" color="textSecondary" paragraph>
-                Export Date: {new Date(sarExport.export_date).toLocaleString()}
+                Export Date: {new Date((sarExport as any).date_of_response || (sarExport as any).export_date || new Date()).toLocaleString()}
+              </Typography>
+              
+              {/* Document Info */}
+              {(sarExport as any).document_info && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  <Typography variant="body2" gutterBottom>
+                    <strong>PDF Document Generated</strong>
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Reference: {(sarExport as any).document_info.reference}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    The document has been stored and is available for download or email delivery.
+                  </Typography>
+                </Alert>
+              )}
+              
+              {/* Download and Email Actions */}
+              {(sarExport as any).document_info && (
+                <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<DownloadIcon />}
+                    onClick={async () => {
+                      const sarId = (sarExport as any).document_info.sar_id;
+                      try {
+                        const response = await complianceAPI.downloadSARDocument(sarId);
+                        const blob = new Blob([response.data], { type: 'application/pdf' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = (sarExport as any).document_info.filename || `SAR-${sarId}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      } catch (err: any) {
+                        setError(err.response?.data?.detail || 'Failed to download document');
+                      }
+                    }}
+                  >
+                    Download PDF
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => {
+                      const downloadUrl = (sarExport as any).document_info.download_url;
+                      if (downloadUrl) {
+                        window.open(downloadUrl, '_blank');
+                      }
+                    }}
+                  >
+                    Open Download Link
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<EmailIcon />}
+                    onClick={async () => {
+                      const sarId = (sarExport as any).document_info.sar_id;
+                      const recipientEmail = (sarExport as any).data_subject?.email;
+                      await sendSAREmail(sarId, recipientEmail);
+                    }}
+                    disabled={sendingEmail}
+                  >
+                    {sendingEmail ? 'Sending...' : 'Send via Email'}
+                  </Button>
+                </Box>
+              )}
+              
+              {/* JSON Export (for reference) */}
+              <Typography variant="subtitle2" gutterBottom>
+                Export Data (JSON):
               </Typography>
               <TextField
                 multiline
                 fullWidth
-                rows={15}
+                rows={10}
                 value={JSON.stringify(sarExport, null, 2)}
                 variant="outlined"
                 InputProps={{
@@ -642,11 +741,13 @@ const Compliance: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => sarExport && downloadJSON(sarExport, `sar-export-${Date.now()}.json`)}
-          >
-            Download JSON
-          </Button>
+          {(sarExport as any).document_info && (
+            <Button
+              onClick={() => sarExport && downloadJSON(sarExport, `sar-export-${Date.now()}.json`)}
+            >
+              Download JSON
+            </Button>
+          )}
           <Button onClick={() => setSarDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
@@ -665,6 +766,16 @@ const Compliance: React.FC = () => {
             The export will include only AI-cleaned versions of communications and will redact internal notes
             and references to other people.
           </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={generateDocument}
+                onChange={(e) => setGenerateDocument(e.target.checked)}
+              />
+            }
+            label="Generate PDF document and store in MinIO (recommended for sending to requestor)"
+            sx={{ mb: 2, display: 'block' }}
+          />
           <TextField
             fullWidth
             label="Search by name, email, or company"

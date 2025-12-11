@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, cast, String, text
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -235,9 +235,10 @@ def get_sar_subjects(
 
 
 @router.get("/gdpr/sar-export", response_model=SARExport)
-async def get_sar_export(
+def get_sar_export(
     contact_id: Optional[str] = Query(None, description="Contact ID to export data for"),
     user_id: Optional[str] = Query(None, description="User ID to export (defaults to current user if no contact_id)"),
+    generate_document: bool = Query(False, description="Generate PDF document and store in MinIO"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -246,6 +247,8 @@ async def get_sar_export(
     
     COMPLIANCE: Allows users to export personal data as required by GDPR Article 15.
     Can export data for a specific contact or user.
+    
+    If generate_document=True, creates a PDF document, stores it in MinIO, and returns download link.
     
     SECURITY: Users can only export their own data unless they are super admins.
     Super admins can export data for any contact or user.
@@ -271,7 +274,149 @@ async def get_sar_export(
             user_id=target_user_id
         )
     
+    # If generate_document is True, create PDF and store in MinIO
+    if generate_document:
+        document_info = gdpr_service.generate_and_store_sar_document(
+            sar_data=export,
+            tenant_id=current_user.tenant_id,
+            contact_id=contact_id,
+            user_id=user_id if user_id else (current_user.id if not contact_id else None)
+        )
+        # Add document info to export
+        export["document_info"] = document_info
+        export["download_url"] = document_info["download_url"]
+        export["document_path"] = document_info["document_path"]
+        export["sar_id"] = document_info["sar_id"]
+    
     return export
+
+
+@router.post("/gdpr/sar-export/{sar_id}/send-email")
+def send_sar_email(
+    sar_id: str,
+    recipient_email: Optional[str] = Query(None, description="Override recipient email (defaults to requestor email)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Send SAR document via email
+    
+    COMPLIANCE: Sends the SAR document to the requestor or specified recipient.
+    """
+    from app.models.gdpr import SubjectAccessRequest
+    
+    # Get SAR record
+    sar = db.query(SubjectAccessRequest).filter(
+        SubjectAccessRequest.id == sar_id,
+        SubjectAccessRequest.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not sar:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SAR record not found"
+        )
+    
+    if not sar.data_export_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SAR document not found. Please generate the document first."
+        )
+    
+    # Get download URL
+    from app.services.storage_service import get_storage_service
+    storage_service = get_storage_service()
+    download_url = storage_service.get_presigned_url(
+        object_name=sar.data_export_path,
+        expires=timedelta(days=7)
+    )
+    
+    # Determine recipient
+    email = recipient_email or sar.requestor_email
+    name = sar.requestor_name or email.split('@')[0]
+    
+    # Send email
+    gdpr_service = GDPRService(db)
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    success = loop.run_until_complete(
+        gdpr_service.send_sar_email(
+            recipient_email=email,
+            recipient_name=name,
+            download_url=download_url,
+            reference=sar.id,
+            tenant_id=current_user.tenant_id
+        )
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send email"
+        )
+    
+    return {"message": "Email sent successfully", "recipient": email}
+
+
+@router.get("/gdpr/sar-export/{sar_id}/download")
+def download_sar_document(
+    sar_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Download SAR document from MinIO
+    
+    COMPLIANCE: Provides secure download of SAR documents.
+    """
+    from fastapi.responses import StreamingResponse
+    from app.models.gdpr import SubjectAccessRequest
+    from app.services.storage_service import get_storage_service
+    from io import BytesIO
+    
+    # Get SAR record
+    sar = db.query(SubjectAccessRequest).filter(
+        SubjectAccessRequest.id == sar_id,
+        SubjectAccessRequest.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not sar:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SAR record not found"
+        )
+    
+    if not sar.data_export_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SAR document not found"
+        )
+    
+    # Download from MinIO
+    storage_service = get_storage_service()
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    pdf_bytes = loop.run_until_complete(
+        storage_service.download_file(object_name=sar.data_export_path)
+    )
+    
+    # Return as downloadable file
+    filename = sar.data_export_path.split('/')[-1] or f"SAR-{sar_id}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @router.post("/gdpr/generate-policy", response_model=GDPRPolicyResponse)

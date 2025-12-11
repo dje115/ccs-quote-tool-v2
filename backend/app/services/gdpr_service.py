@@ -23,6 +23,8 @@ from app.models.sales import SalesActivity
 from app.models.leads import Lead
 from app.models.gdpr import DataCollectionRecord, PrivacyPolicy, SubjectAccessRequest, SARStatus
 from app.core.config import settings
+from app.services.sar_document_generator import SARDocumentGenerator
+from app.services.storage_service import get_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -542,6 +544,170 @@ class GDPRService:
         report["tenant_id"] = tenant_id
         
         return report
+    
+    def generate_and_store_sar_document(
+        self,
+        sar_data: Dict[str, Any],
+        tenant_id: str,
+        contact_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate PDF document for SAR and store it in MinIO
+        
+        Args:
+            sar_data: SAR report data dictionary
+            tenant_id: Tenant ID
+            contact_id: Contact ID (if applicable)
+            user_id: User ID (if applicable)
+            
+        Returns:
+            Dictionary with document_path, download_url, and sar_record_id
+        """
+        import uuid
+        
+        # Generate PDF document
+        doc_generator = SARDocumentGenerator()
+        pdf_buffer = doc_generator.generate_pdf(sar_data)
+        pdf_bytes = pdf_buffer.read()
+        
+        # Create SAR record in database
+        sar_id = str(uuid.uuid4())
+        sar_record = SubjectAccessRequest(
+            id=sar_id,
+            tenant_id=tenant_id,
+            requestor_email=sar_data.get('data_subject', {}).get('email') or 'unknown@example.com',
+            requestor_name=sar_data.get('data_subject', {}).get('name'),
+            requestor_id=user_id,
+            status=SARStatus.COMPLETED.value,
+            request_date=datetime.now(timezone.utc),
+            due_date=datetime.now(timezone.utc) + timedelta(days=30),
+            completed_date=datetime.now(timezone.utc),
+            verified=True,  # Auto-verified for internal requests
+            data_export_path=None  # Will be set after upload
+        )
+        
+        self.db.add(sar_record)
+        self.db.flush()  # Get the ID without committing
+        
+        # Store PDF in MinIO with tenant isolation
+        storage_service = get_storage_service()
+        reference = sar_data.get('reference', f'SAR-{sar_id}')
+        filename = f"{reference}.pdf"
+        object_name = f"sar/{tenant_id}/{sar_id}/{filename}"
+        
+        # Upload to MinIO (synchronous call, but storage service handles it)
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        uploaded_path = loop.run_until_complete(
+            storage_service.upload_file(
+                file_data=pdf_bytes,
+                object_name=object_name,
+                content_type='application/pdf',
+                metadata={
+                    'sar_id': sar_id,
+                    'tenant_id': tenant_id,
+                    'reference': reference,
+                    'generated_at': datetime.now(timezone.utc).isoformat()
+                }
+            )
+        )
+        
+        # Update SAR record with document path
+        sar_record.data_export_path = object_name
+        self.db.commit()
+        
+        # Generate presigned download URL (valid for 7 days)
+        download_url = storage_service.get_presigned_url(
+            object_name=object_name,
+            expires=timedelta(days=7)
+        )
+        
+        return {
+            "sar_id": sar_id,
+            "document_path": object_name,
+            "download_url": download_url,
+            "filename": filename,
+            "reference": reference
+        }
+    
+    async def send_sar_email(
+        self,
+        recipient_email: str,
+        recipient_name: str,
+        download_url: str,
+        reference: str,
+        tenant_id: str
+    ) -> bool:
+        """
+        Send SAR document via email
+        
+        Args:
+            recipient_email: Email address to send to
+            recipient_name: Name of recipient
+            download_url: Presigned URL to download the document
+            reference: SAR reference number
+            tenant_id: Tenant ID
+            
+        Returns:
+            True if email sent successfully
+        """
+        try:
+            from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+            from app.core.config import settings
+            
+            # Configure email
+            conf = ConnectionConfig(
+                MAIL_USERNAME=settings.SMTP_USERNAME,
+                MAIL_PASSWORD=settings.SMTP_PASSWORD,
+                MAIL_FROM=settings.SMTP_FROM_EMAIL,
+                MAIL_PORT=settings.SMTP_PORT,
+                MAIL_SERVER=settings.SMTP_HOST,
+                MAIL_FROM_NAME=settings.SMTP_FROM_NAME,
+                MAIL_STARTTLS=settings.SMTP_TLS,
+                MAIL_SSL_TLS=False,
+                USE_CREDENTIALS=True if settings.SMTP_USERNAME else False,
+                VALIDATE_CERTS=False
+            )
+            
+            fm = FastMail(conf)
+            
+            # Create email message
+            message = MessageSchema(
+                subject=f"Your Subject Access Request - {reference}",
+                recipients=[recipient_email],
+                body=f"""
+Dear {recipient_name},
+
+Your Subject Access Request (SAR) has been processed and is now available for download.
+
+Reference: {reference}
+
+You can download your SAR document using the following link (valid for 7 days):
+{download_url}
+
+This document contains all personal data we hold about you, in compliance with GDPR Article 15.
+
+If you have any questions, please contact us using the details provided in the document.
+
+Best regards,
+{settings.SMTP_FROM_NAME}
+                """,
+                subtype="plain"
+            )
+            
+            await fm.send_message(message)
+            logger.info(f"SAR email sent to {recipient_email} for reference {reference}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error sending SAR email: {e}", exc_info=True)
+            return False
     
     def generate_sar_export_from_user(self, user_id: str, tenant_id: str) -> Dict[str, Any]:
         """
